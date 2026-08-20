@@ -1,0 +1,13 @@
+[package]
+name = "st-tracker-linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+st-core.workspace = true
+tracing.workspace = true
+
+# x11rb is added in the M0 spike (see src/lib.rs). Deliberately absent for now
+# so the workspace has no unused dependency and no build cost on Windows.

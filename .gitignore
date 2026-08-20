@@ -1,0 +1,26 @@
+# Rust
+/target/
+**/target/
+*.pdb
+
+# Node
+node_modules/
+dist/
+.vite/
+*.tsbuildinfo
+
+# Local data / secrets
+*.db
+*.db-wal
+*.db-shm
+/local/
+.env
+.env.*
+
+# Editors / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+desktop.ini
+*.swp

@@ -1,0 +1,12 @@
+[package]
+name = "st-enforce-linux"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+st-core.workspace = true
+tracing.workspace = true
+
+# `nix` is added in the M0 spike alongside the cgroup-v2 freezer implementation.
