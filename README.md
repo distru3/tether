@@ -3,8 +3,9 @@
 Cross-platform screen-time tracker and limiter for Windows and (secondarily)
 Linux/X11. Rust workspace, three binaries, Tauri 2 dashboard.
 
-> Status: **M0 spike**. Tracking works on Windows in principle but has not been
-> run yet on this machine; see the checklist below.
+> Status: **M1 in progress**. The M0 spike is complete on Windows: live
+> tracking validated end-to-end (see the checklist below). Next up is the M1
+> insight alpha — auto-classification, IPC, and the real dashboard.
 
 ## Repository layout
 
@@ -80,10 +81,12 @@ eBPF/fanotify, kernel driver.
 
 ## Verification checklist (M0)
 
-- [ ] `cargo build --workspace` on Windows with MSVC Build Tools installed
-- [ ] `cargo test --workspace` all green
-- [ ] `cargo run -p st-agent` writes intervals to `.\local\data\screentime.db`
-- [ ] `ui: npm install && npm run tauri dev` opens the dashboard and shows
+- [x] `cargo build --workspace` on Windows with MSVC Build Tools installed
+- [x] `cargo test --workspace` all green (67 tests)
+- [x] `cargo run -p st-agent` writes intervals to `.\local\data\screentime.db`
+      (validated 2026-08-21: Brave / Telegram / VS Code tracked, correct
+      `day_key`, clean app-switch boundaries)
+- [x] `ui: npm install && npm run tauri dev` opens the dashboard and shows
       "tracker_backend: win32"
 - [ ] Manual smoke: verify `NtSuspendProcess` freezes and thaws a Notepad PID
       taken from Task Manager (throwaway script, not committed)
