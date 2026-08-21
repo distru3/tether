@@ -47,6 +47,13 @@ header h1 {
     color: #94a3b8;
 }
 
+.updated {
+    margin-left: 10px;
+    color: #475569;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
 .hero {
     margin-bottom: 36px;
 }

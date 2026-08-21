@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
+// Refresh the dashboard this often. The agent writes usage in the background;
+// without polling the window freezes at whatever it first fetched.
+const REFRESH_MS = 3000;
+
 // Shapes mirror the Rust types in ui/src-tauri/src/lib.rs; hand-kept in sync
 // until we generate these from the Rust types.
 interface AgentStatus {
@@ -51,17 +55,35 @@ export function App() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        invoke<AgentStatus>("get_status")
-            .then(setStatus)
-            .catch((e: unknown) => setError(String(e)));
+        // Refresh on an interval so the dashboard tracks live usage. A failed
+        // fetch keeps the last good data on screen; only a failed *first* load
+        // surfaces an error, so the agent starting late isn't treated as fatal.
+        let first = true;
 
-        invoke<DaySummary>("get_day_summary", { day: todayKey() })
-            .then(setSummary)
-            .catch((e: unknown) => setError(String(e)));
+        const refresh = () => {
+            invoke<AgentStatus>("get_status")
+                .then(setStatus)
+                .catch((e: unknown) => {
+                    if (first) setError(String(e));
+                });
+
+            invoke<DaySummary>("get_day_summary", { day: todayKey() })
+                .then(setSummary)
+                .catch((e: unknown) => {
+                    if (first) setError(String(e));
+                });
+
+            first = false;
+        };
+
+        refresh();
+        const timer = setInterval(refresh, REFRESH_MS);
+        return () => clearInterval(timer);
     }, []);
 
     const connected = status?.agent_connected ?? false;
     const total = summary?.totalSeconds ?? 0;
+    const updated = summary ? new Date().toLocaleTimeString() : null;
 
     return (
         <main className="app">
@@ -77,7 +99,10 @@ export function App() {
             {error && <p className="error">Command failed: {error}</p>}
 
             <section className="hero" aria-label="Today's screen time">
-                <p className="eyebrow">Today</p>
+                <p className="eyebrow">
+                    Today
+                    {updated && <span className="updated">updated {updated}</span>}
+                </p>
                 <p className="hero-total">{formatDuration(total)}</p>
                 <div className="day-bar" aria-hidden="true">
                     {summary?.categories.length ? (
