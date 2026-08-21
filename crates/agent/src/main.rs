@@ -11,10 +11,12 @@
 //! not yet verified is how you end up locking yourself out of your own machine.
 
 mod classify;
+mod ipc_server;
 mod platform;
 mod sampler;
 
 use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
@@ -41,14 +43,22 @@ fn main() -> Result<()> {
         .with_context(|| format!("creating data directory {}", data_dir.display()))?;
 
     let db_path = data_dir.join("screentime.db");
-    let mut db =
-        Db::open(&db_path).with_context(|| format!("opening database {}", db_path.display()))?;
+    let db =
+        Arc::new(Mutex::new(Db::open(&db_path).with_context(|| {
+            format!("opening database {}", db_path.display())
+        })?));
     tracing::info!(path = %db_path.display(), "database ready");
 
     let clock = SystemClock::new();
-    let day_start_minutes = db.setting_i64("day_start_minutes", 0);
-    let idle_threshold = db.setting_i64("idle_threshold_secs", 60).max(1) as u64;
+    let day_start_minutes = db.lock().unwrap().setting_i64("day_start_minutes", 0);
+    let idle_threshold = db
+        .lock()
+        .unwrap()
+        .setting_i64("idle_threshold_secs", 60)
+        .max(1) as u64;
     let capture_titles = db
+        .lock()
+        .unwrap()
         .setting("capture_window_titles")?
         .map(|v| v == "true")
         .unwrap_or(false);
@@ -63,8 +73,23 @@ fn main() -> Result<()> {
     );
 
     let uncategorized = db
+        .lock()
+        .unwrap()
         .category_id(UNCATEGORIZED_SLUG)
         .context("uncategorized category missing; database seed failed")?;
+
+    // Answer the UI on a background thread; the sampler keeps the main loop.
+    let status = ipc_server::StatusInfo {
+        agent_version: env!("CARGO_PKG_VERSION").to_string(),
+        tracker_backend: backends.tracker.backend().to_string(),
+        enforcement_backend: backends.processes.backend().to_string(),
+        filter_backend: backends.filter.backend().to_string(),
+        // Hosts-file filtering cannot intercept DoH/DoT; be honest about it.
+        tracking_available: true,
+        blocks_encrypted_dns: false,
+    };
+    let _ipc_thread = ipc_server::spawn(db.clone(), status);
+    tracing::info!(pipe = ipc_server::PIPE_NAME, "IPC server listening");
 
     let mut sampler = Sampler::new(day_start_minutes);
     let mut guard = ClockGuard::new(&clock, Duration::seconds(CLOCK_TOLERANCE_SECS));
@@ -80,7 +105,7 @@ fn main() -> Result<()> {
 
         if let ClockVerdict::Backward { by } = verdict {
             tracing::warn!(seconds = by.num_seconds(), "system clock moved backwards");
-            let _ = db.audit(
+            let _ = db.lock().unwrap().audit(
                 now,
                 "clock_backward",
                 Some(&format!("{} seconds", by.num_seconds())),
@@ -101,7 +126,7 @@ fn main() -> Result<()> {
         };
 
         for pending in sampler.observe(now, tz_offset, window.as_ref(), idle, verdict) {
-            if let Err(e) = persist(&mut db, &pending, uncategorized, now) {
+            if let Err(e) = persist(&mut db.lock().unwrap(), &pending, uncategorized, now) {
                 tracing::error!(error = %e, app = %pending.key, "failed to persist interval");
             }
         }
@@ -109,7 +134,7 @@ fn main() -> Result<()> {
         ticks = ticks.wrapping_add(1);
         if ticks % EVALUATE_EVERY_TICKS == 0 {
             let today = DayKey::from_utc(now, tz_offset, day_start_minutes);
-            if let Err(e) = report_limits(&db, today) {
+            if let Err(e) = report_limits(&db.lock().unwrap(), today) {
                 tracing::error!(error = %e, "limit evaluation failed");
             }
         }

@@ -23,6 +23,8 @@ use serde::{Deserialize, Serialize};
 use st_core::daykey::DayKey;
 use thiserror::Error;
 
+pub mod transport;
+
 /// Rejects oversized frames before allocating, so a malformed or hostile length
 /// prefix cannot exhaust memory.
 pub const MAX_FRAME_BYTES: u32 = 8 * 1024 * 1024;

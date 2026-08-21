@@ -3142,6 +3142,7 @@ dependencies = [
  "serde_json",
  "st-core",
  "thiserror 2.0.20",
+ "windows 0.58.0",
 ]
 
 [[package]]
