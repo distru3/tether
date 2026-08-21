@@ -88,10 +88,12 @@ eBPF/fanotify, kernel driver.
       `day_key`, clean app-switch boundaries)
 - [x] `ui: npm install && npm run tauri dev` opens the dashboard and shows
       "tracker_backend: win32"
-- [ ] Manual smoke: verify `NtSuspendProcess` freezes and thaws a Notepad PID
-      taken from Task Manager (throwaway script, not committed)
-- [ ] Manual smoke: verify hosts writer round-trips a rule without disturbing
+- [x] Manual smoke: verify `NtSuspendProcess` freezes and thaws a process
+      (validated 2026-08-21: a plain single-process Win32 window app froze —
+      heartbeat stopped — and resumed on thaw)
+- [x] Manual smoke: verify hosts writer round-trips a rule without disturbing
       an existing `127.0.0.1 localhost` line
+      (validated 2026-08-21 against a throwaway temp hosts file)
 
 ## License
 
