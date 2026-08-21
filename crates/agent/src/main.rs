@@ -40,8 +40,8 @@ fn main() -> Result<()> {
         .with_context(|| format!("creating data directory {}", data_dir.display()))?;
 
     let db_path = data_dir.join("screentime.db");
-    let mut db = Db::open(&db_path)
-        .with_context(|| format!("opening database {}", db_path.display()))?;
+    let mut db =
+        Db::open(&db_path).with_context(|| format!("opening database {}", db_path.display()))?;
     tracing::info!(path = %db_path.display(), "database ready");
 
     let clock = SystemClock::new();

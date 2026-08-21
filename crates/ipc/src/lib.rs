@@ -91,8 +91,13 @@ pub enum Response {
     Status(StatusDto),
     /// Accepted, with the instant the change actually takes effect. Equal to
     /// "now" for tightening, up to 24 hours out for loosening.
-    Accepted { effective_utc: String },
-    Error { code: ErrorCode, message: String },
+    Accepted {
+        effective_utc: String,
+    },
+    Error {
+        code: ErrorCode,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -157,9 +162,8 @@ pub struct StatusDto {
 /// Write one length-prefixed JSON frame.
 pub fn write_message<W: Write, T: Serialize>(writer: &mut W, message: &T) -> Result<()> {
     let payload = serde_json::to_vec(message)?;
-    let size = u32::try_from(payload.len()).map_err(|_| IpcError::FrameTooLarge {
-        size: u32::MAX,
-    })?;
+    let size =
+        u32::try_from(payload.len()).map_err(|_| IpcError::FrameTooLarge { size: u32::MAX })?;
     if size > MAX_FRAME_BYTES {
         return Err(IpcError::FrameTooLarge { size });
     }
@@ -196,7 +200,13 @@ mod tests {
     #[test]
     fn request_round_trips() {
         let mut buf = Vec::new();
-        write_message(&mut buf, &Request::DaySummary { day: DayKey(20260820) }).expect("write");
+        write_message(
+            &mut buf,
+            &Request::DaySummary {
+                day: DayKey(20260820),
+            },
+        )
+        .expect("write");
 
         let mut cursor = Cursor::new(buf);
         let decoded: Request = read_message(&mut cursor).expect("read");
@@ -213,8 +223,14 @@ mod tests {
         write_message(&mut buf, &Request::Status).expect("w2");
 
         let mut cursor = Cursor::new(buf);
-        assert!(matches!(read_message::<_, Request>(&mut cursor), Ok(Request::Ping)));
-        assert!(matches!(read_message::<_, Request>(&mut cursor), Ok(Request::Status)));
+        assert!(matches!(
+            read_message::<_, Request>(&mut cursor),
+            Ok(Request::Ping)
+        ));
+        assert!(matches!(
+            read_message::<_, Request>(&mut cursor),
+            Ok(Request::Status)
+        ));
     }
 
     #[test]

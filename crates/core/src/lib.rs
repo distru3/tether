@@ -26,6 +26,6 @@ pub use daykey::DayKey;
 pub use limits::{Budget, Decision, Limit, LimitEngine, LimitTarget, UsageSnapshot};
 pub use model::{AppKey, AppRecord, SubjectRef, UsageInterval};
 pub use platform::{
-    ActiveWindow, BlockRule, IdleMonitor, IdleState, NetworkFilter, PlatformError,
-    PlatformResult, ProcessController, WindowTracker,
+    ActiveWindow, BlockRule, IdleMonitor, IdleState, NetworkFilter, PlatformError, PlatformResult,
+    ProcessController, WindowTracker,
 };

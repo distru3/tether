@@ -105,8 +105,14 @@ mod tests {
 
     #[test]
     fn utc_midnight_rollover() {
-        assert_eq!(DayKey::from_utc(at("2026-08-20T23:59:59Z"), 0, 0), DayKey(20260820));
-        assert_eq!(DayKey::from_utc(at("2026-08-21T00:00:00Z"), 0, 0), DayKey(20260821));
+        assert_eq!(
+            DayKey::from_utc(at("2026-08-20T23:59:59Z"), 0, 0),
+            DayKey(20260820)
+        );
+        assert_eq!(
+            DayKey::from_utc(at("2026-08-21T00:00:00Z"), 0, 0),
+            DayKey(20260821)
+        );
     }
 
     #[test]
@@ -128,7 +134,7 @@ mod tests {
     #[test]
     fn four_am_day_start_keeps_late_nights_on_the_previous_day() {
         let day_start = 240; // 04:00
-        // 01:30 local on the 21st still belongs to the 20th.
+                             // 01:30 local on the 21st still belongs to the 20th.
         assert_eq!(
             DayKey::from_utc(at("2026-08-21T01:30:00Z"), 0, day_start),
             DayKey(20260820)
@@ -142,9 +148,7 @@ mod tests {
 
     #[test]
     fn day_end_is_the_next_rollover_instant() {
-        let end = DayKey(20260820)
-            .end_utc(0, 0)
-            .expect("valid boundary");
+        let end = DayKey(20260820).end_utc(0, 0).expect("valid boundary");
         assert_eq!(end, at("2026-08-21T00:00:00Z"));
 
         // With a 04:00 day start in UTC+2, the 20th ends at 02:00Z on the 21st.

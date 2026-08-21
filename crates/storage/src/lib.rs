@@ -163,9 +163,8 @@ impl Db {
         )?;
         tx.execute("DELETE FROM app_tags WHERE app_id = ?1", params![app_id])?;
         {
-            let mut stmt = tx.prepare(
-                "INSERT OR IGNORE INTO app_tags (app_id, category_id) VALUES (?1, ?2)",
-            )?;
+            let mut stmt =
+                tx.prepare("INSERT OR IGNORE INTO app_tags (app_id, category_id) VALUES (?1, ?2)")?;
             for tag in tags {
                 if *tag != primary {
                     stmt.execute(params![app_id, tag])?;
@@ -361,11 +360,7 @@ impl Db {
             }
         }
 
-        Ok(DaySnapshot {
-            day,
-            used,
-            granted,
-        })
+        Ok(DaySnapshot { day, used, granted })
     }
 
     pub fn setting(&self, key: &str) -> Result<Option<String>> {
@@ -502,7 +497,8 @@ mod tests {
         let id = db
             .upsert_app(&key, "Steam", None, uncat, now())
             .expect("insert");
-        db.set_app_categories(id, games, &[], true).expect("classify");
+        db.set_app_categories(id, games, &[], true)
+            .expect("classify");
 
         // Seeing the app again must not reset the category.
         let same = db
@@ -528,10 +524,22 @@ mod tests {
         let uncat = db.category_id("uncategorized").expect("uncategorized");
 
         let a = db
-            .upsert_app(&AppKey::windows_exe("C:/Apps/Foo.exe"), "Foo", None, uncat, now())
+            .upsert_app(
+                &AppKey::windows_exe("C:/Apps/Foo.exe"),
+                "Foo",
+                None,
+                uncat,
+                now(),
+            )
             .expect("a");
         let b = db
-            .upsert_app(&AppKey::windows_exe("c:\\apps\\foo.exe"), "Foo", None, uncat, now())
+            .upsert_app(
+                &AppKey::windows_exe("c:\\apps\\foo.exe"),
+                "Foo",
+                None,
+                uncat,
+                now(),
+            )
             .expect("b");
         assert_eq!(a, b, "case and separator differences must collapse");
     }
@@ -545,7 +553,13 @@ mod tests {
         let uncat = db.category_id("uncategorized").expect("uncat");
 
         let tiktok = db
-            .upsert_app(&AppKey::windows_exe("C:\\tiktok.exe"), "TikTok", None, uncat, now())
+            .upsert_app(
+                &AppKey::windows_exe("C:\\tiktok.exe"),
+                "TikTok",
+                None,
+                uncat,
+                now(),
+            )
             .expect("app");
         db.set_app_categories(tiktok, social, &[shortform], true)
             .expect("classify");
@@ -569,9 +583,16 @@ mod tests {
         let uncat = db.category_id("uncategorized").expect("uncat");
 
         let term = db
-            .upsert_app(&AppKey::windows_exe("C:\\wt.exe"), "Terminal", None, uncat, now())
+            .upsert_app(
+                &AppKey::windows_exe("C:\\wt.exe"),
+                "Terminal",
+                None,
+                uncat,
+                now(),
+            )
             .expect("app");
-        db.set_app_categories(term, dev, &[], true).expect("classify");
+        db.set_app_categories(term, dev, &[], true)
+            .expect("classify");
         db.record_interval(&interval(term, 3600, day)).expect("i1");
 
         let snap = db.day_snapshot(day).expect("snapshot");
@@ -590,10 +611,16 @@ mod tests {
 
         db.record_interval(&interval(app, 120, day)).expect("i1");
         db.record_interval(&interval(app, 240, day)).expect("i2");
-        let before = db.day_snapshot(day).expect("snap").seconds_used(&LimitTarget::App(app));
+        let before = db
+            .day_snapshot(day)
+            .expect("snap")
+            .seconds_used(&LimitTarget::App(app));
 
         db.rollup_day(day).expect("rebuild");
-        let after = db.day_snapshot(day).expect("snap").seconds_used(&LimitTarget::App(app));
+        let after = db
+            .day_snapshot(day)
+            .expect("snap")
+            .seconds_used(&LimitTarget::App(app));
 
         assert_eq!(before, 360);
         assert_eq!(after, before);
@@ -623,10 +650,18 @@ mod tests {
         let uncat = db.category_id("uncategorized").expect("uncat");
 
         let app = db
-            .upsert_app(&AppKey::windows_exe("C:\\tiktok.exe"), "TikTok", None, uncat, now())
+            .upsert_app(
+                &AppKey::windows_exe("C:\\tiktok.exe"),
+                "TikTok",
+                None,
+                uncat,
+                now(),
+            )
             .expect("app");
-        db.set_app_categories(app, shortform, &[], true).expect("classify");
-        db.record_interval(&interval(app, 20 * 60, day)).expect("usage");
+        db.set_app_categories(app, shortform, &[], true)
+            .expect("classify");
+        db.record_interval(&interval(app, 20 * 60, day))
+            .expect("usage");
         db.upsert_limit(&Limit::new(0, LimitTarget::Category(shortform), 15), now())
             .expect("limit");
 
@@ -634,14 +669,22 @@ mod tests {
         let snap = db.day_snapshot(day).expect("snapshot");
         let weekday = day.weekday_index().expect("weekday");
 
-        assert!(engine.evaluate(app, &[shortform], true, weekday, &snap).is_blocked());
+        assert!(engine
+            .evaluate(app, &[shortform], true, weekday, &snap)
+            .is_blocked());
     }
 
     #[test]
     fn defaults_are_present_and_privacy_preserving() {
         let db = Db::open_in_memory().expect("open");
-        assert_eq!(db.setting("capture_window_titles").expect("get").as_deref(), Some("false"));
-        assert_eq!(db.setting("telemetry_enabled").expect("get").as_deref(), Some("false"));
+        assert_eq!(
+            db.setting("capture_window_titles").expect("get").as_deref(),
+            Some("false")
+        );
+        assert_eq!(
+            db.setting("telemetry_enabled").expect("get").as_deref(),
+            Some("false")
+        );
         assert_eq!(db.setting_i64("idle_threshold_secs", 0), 60);
     }
 }

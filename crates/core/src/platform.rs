@@ -70,7 +70,9 @@ pub enum IdleState {
     /// Input seen recently, or a media-playback heuristic says the user is
     /// watching something.
     Active,
-    Idle { for_secs: u64 },
+    Idle {
+        for_secs: u64,
+    },
     /// Session locked, or the screen is off.
     Locked,
 }

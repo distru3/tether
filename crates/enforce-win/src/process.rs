@@ -60,7 +60,9 @@ impl Win32ProcessController {
 
     fn call(&self, f: Option<NtProcessFn>, pid: u32, access_terminate: bool) -> PlatformResult<()> {
         let Some(f) = f else {
-            return Err(PlatformError::Unsupported("NtSuspendProcess/NtResumeProcess"));
+            return Err(PlatformError::Unsupported(
+                "NtSuspendProcess/NtResumeProcess",
+            ));
         };
         let access = if access_terminate {
             PROCESS_TERMINATE
@@ -177,8 +179,12 @@ unsafe fn image_path(pid: u32) -> PlatformResult<String> {
         .map_err(|_| PlatformError::ProcessGone(pid))?;
     let mut buf = vec![0u16; 32_768];
     let mut len = buf.len() as u32;
-    let result =
-        QueryFullProcessImageNameW(handle, PROCESS_NAME_WIN32, PWSTR(buf.as_mut_ptr()), &mut len);
+    let result = QueryFullProcessImageNameW(
+        handle,
+        PROCESS_NAME_WIN32,
+        PWSTR(buf.as_mut_ptr()),
+        &mut len,
+    );
     let _ = CloseHandle(handle);
     result.map_err(|_| PlatformError::ProcessGone(pid))?;
     buf.truncate(len as usize);

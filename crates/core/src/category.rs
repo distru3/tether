@@ -52,26 +52,116 @@ pub struct Category {
 /// single most common thing people actually want. The overlap is handled by an
 /// app having one primary category and any number of tags.
 pub const BUILTIN_CATEGORIES: &[BuiltinCategory] = &[
-    BuiltinCategory { slug: "games",            name: "Games",                  kind: CategoryKind::Limitable, color: "#8b5cf6" },
-    BuiltinCategory { slug: "social-media",     name: "Social Media",           kind: CategoryKind::Limitable, color: "#3b82f6" },
-    BuiltinCategory { slug: "short-form-video", name: "Short-Form Video",       kind: CategoryKind::Limitable, color: "#ec4899" },
-    BuiltinCategory { slug: "video-streaming",  name: "Video & Streaming",      kind: CategoryKind::Limitable, color: "#ef4444" },
-    BuiltinCategory { slug: "music-audio",      name: "Music & Audio",          kind: CategoryKind::Limitable, color: "#22c55e" },
-    BuiltinCategory { slug: "news",             name: "News",                   kind: CategoryKind::Limitable, color: "#f97316" },
-    BuiltinCategory { slug: "shopping",         name: "Shopping",               kind: CategoryKind::Limitable, color: "#eab308" },
-    BuiltinCategory { slug: "communication",    name: "Communication",          kind: CategoryKind::Limitable, color: "#06b6d4" },
-    BuiltinCategory { slug: "productivity",     name: "Productivity & Office",  kind: CategoryKind::Limitable, color: "#0ea5e9" },
-    BuiltinCategory { slug: "creativity",       name: "Creativity & Design",    kind: CategoryKind::Limitable, color: "#a855f7" },
-    BuiltinCategory { slug: "education",        name: "Education & Reading",    kind: CategoryKind::Limitable, color: "#14b8a6" },
-    BuiltinCategory { slug: "finance",          name: "Finance",                kind: CategoryKind::Limitable, color: "#65a30d" },
-    BuiltinCategory { slug: "ai-chatbots",      name: "AI Assistants",          kind: CategoryKind::Limitable, color: "#7c3aed" },
-    BuiltinCategory { slug: "uncategorized",    name: "Uncategorized",          kind: CategoryKind::Limitable, color: "#94a3b8" },
+    BuiltinCategory {
+        slug: "games",
+        name: "Games",
+        kind: CategoryKind::Limitable,
+        color: "#8b5cf6",
+    },
+    BuiltinCategory {
+        slug: "social-media",
+        name: "Social Media",
+        kind: CategoryKind::Limitable,
+        color: "#3b82f6",
+    },
+    BuiltinCategory {
+        slug: "short-form-video",
+        name: "Short-Form Video",
+        kind: CategoryKind::Limitable,
+        color: "#ec4899",
+    },
+    BuiltinCategory {
+        slug: "video-streaming",
+        name: "Video & Streaming",
+        kind: CategoryKind::Limitable,
+        color: "#ef4444",
+    },
+    BuiltinCategory {
+        slug: "music-audio",
+        name: "Music & Audio",
+        kind: CategoryKind::Limitable,
+        color: "#22c55e",
+    },
+    BuiltinCategory {
+        slug: "news",
+        name: "News",
+        kind: CategoryKind::Limitable,
+        color: "#f97316",
+    },
+    BuiltinCategory {
+        slug: "shopping",
+        name: "Shopping",
+        kind: CategoryKind::Limitable,
+        color: "#eab308",
+    },
+    BuiltinCategory {
+        slug: "communication",
+        name: "Communication",
+        kind: CategoryKind::Limitable,
+        color: "#06b6d4",
+    },
+    BuiltinCategory {
+        slug: "productivity",
+        name: "Productivity & Office",
+        kind: CategoryKind::Limitable,
+        color: "#0ea5e9",
+    },
+    BuiltinCategory {
+        slug: "creativity",
+        name: "Creativity & Design",
+        kind: CategoryKind::Limitable,
+        color: "#a855f7",
+    },
+    BuiltinCategory {
+        slug: "education",
+        name: "Education & Reading",
+        kind: CategoryKind::Limitable,
+        color: "#14b8a6",
+    },
+    BuiltinCategory {
+        slug: "finance",
+        name: "Finance",
+        kind: CategoryKind::Limitable,
+        color: "#65a30d",
+    },
+    BuiltinCategory {
+        slug: "ai-chatbots",
+        name: "AI Assistants",
+        kind: CategoryKind::Limitable,
+        color: "#7c3aed",
+    },
+    BuiltinCategory {
+        slug: "uncategorized",
+        name: "Uncategorized",
+        kind: CategoryKind::Limitable,
+        color: "#94a3b8",
+    },
     // Deliberately never blockable.
-    BuiltinCategory { slug: "development",      name: "Development & Tools",    kind: CategoryKind::NeverBlock, color: "#64748b" },
-    BuiltinCategory { slug: "utilities-system", name: "Utilities & System",     kind: CategoryKind::NeverBlock, color: "#475569" },
+    BuiltinCategory {
+        slug: "development",
+        name: "Development & Tools",
+        kind: CategoryKind::NeverBlock,
+        color: "#64748b",
+    },
+    BuiltinCategory {
+        slug: "utilities-system",
+        name: "Utilities & System",
+        kind: CategoryKind::NeverBlock,
+        color: "#475569",
+    },
     // Filter-only.
-    BuiltinCategory { slug: "adult-content",    name: "Adult Content",          kind: CategoryKind::BlockOnly, color: "#be123c" },
-    BuiltinCategory { slug: "gambling",         name: "Gambling & Betting",     kind: CategoryKind::BlockOnly, color: "#9f1239" },
+    BuiltinCategory {
+        slug: "adult-content",
+        name: "Adult Content",
+        kind: CategoryKind::BlockOnly,
+        color: "#be123c",
+    },
+    BuiltinCategory {
+        slug: "gambling",
+        name: "Gambling & Betting",
+        kind: CategoryKind::BlockOnly,
+        color: "#9f1239",
+    },
 ];
 
 /// Slug assigned to anything the classifier cannot place.
@@ -115,7 +205,11 @@ mod tests {
     fn system_and_dev_categories_cannot_be_blocked() {
         for slug in ["development", "utilities-system"] {
             let c = builtin_by_slug(slug).expect("category present");
-            assert_eq!(c.kind, CategoryKind::NeverBlock, "{slug} must not be blockable");
+            assert_eq!(
+                c.kind,
+                CategoryKind::NeverBlock,
+                "{slug} must not be blockable"
+            );
         }
     }
 
@@ -130,7 +224,11 @@ mod tests {
     #[test]
     fn colors_are_hex() {
         for c in BUILTIN_CATEGORIES {
-            assert!(c.color.starts_with('#') && c.color.len() == 7, "bad color on {}", c.slug);
+            assert!(
+                c.color.starts_with('#') && c.color.len() == 7,
+                "bad color on {}",
+                c.slug
+            );
         }
     }
 }

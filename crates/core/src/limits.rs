@@ -166,7 +166,7 @@ impl LimitEngine {
     }
 
     /// Every applicable budget for an app, tightest first. Used by the UI to
-        /// explain *why* something is blocked.
+    /// explain *why* something is blocked.
     pub fn budgets_for(
         &self,
         app: AppId,
@@ -352,7 +352,8 @@ mod tests {
 
     #[test]
     fn total_budget_applies_to_every_blockable_app() {
-        let engine = LimitEngine::with_default_warnings(vec![Limit::new(1, LimitTarget::Total, 120)]);
+        let engine =
+            LimitEngine::with_default_warnings(vec![Limit::new(1, LimitTarget::Total, 120)]);
         let usage = FakeUsage::default().used(LimitTarget::Total, 120 * 60);
 
         assert_eq!(
@@ -365,13 +366,12 @@ mod tests {
 
     #[test]
     fn never_blockable_apps_survive_an_exhausted_total_budget() {
-        let engine = LimitEngine::with_default_warnings(vec![Limit::new(1, LimitTarget::Total, 120)]);
+        let engine =
+            LimitEngine::with_default_warnings(vec![Limit::new(1, LimitTarget::Total, 120)]);
         let usage = FakeUsage::default().used(LimitTarget::Total, 500 * 60);
 
         // e.g. the terminal, the file manager, or this app itself.
-        assert!(!engine
-            .evaluate(42, &[], false, MONDAY, &usage)
-            .is_blocked());
+        assert!(!engine.evaluate(42, &[], false, MONDAY, &usage).is_blocked());
     }
 
     #[test]
@@ -385,7 +385,11 @@ mod tests {
         // 4 minutes left -> the 5-minute warning, not the 10-minute one.
         let usage = FakeUsage::default().used(LimitTarget::Category(SOCIAL), 26 * 60);
         match engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage) {
-            Decision::Warn { threshold_secs, remaining_secs, .. } => {
+            Decision::Warn {
+                threshold_secs,
+                remaining_secs,
+                ..
+            } => {
                 assert_eq!(threshold_secs, 300);
                 assert_eq!(remaining_secs, 4 * 60);
             }
@@ -408,9 +412,13 @@ mod tests {
         let usage = FakeUsage::default().used(LimitTarget::Category(SOCIAL), 45 * 60);
 
         // Blocked on a Monday...
-        assert!(engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage).is_blocked());
+        assert!(engine
+            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage)
+            .is_blocked());
         // ...but fine on a Sunday.
-        assert!(!engine.evaluate(TIKTOK, &[SOCIAL], true, SUNDAY, &usage).is_blocked());
+        assert!(!engine
+            .evaluate(TIKTOK, &[SOCIAL], true, SUNDAY, &usage)
+            .is_blocked());
     }
 
     #[test]
@@ -423,11 +431,17 @@ mod tests {
         let target = LimitTarget::Category(SOCIAL);
 
         let usage = FakeUsage::default().used(target, 31 * 60);
-        assert!(engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage).is_blocked());
+        assert!(engine
+            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage)
+            .is_blocked());
 
         // "+15 minutes", PIN approved.
-        let usage = FakeUsage::default().used(target, 31 * 60).granted(target, 15 * 60);
-        assert!(!engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage).is_blocked());
+        let usage = FakeUsage::default()
+            .used(target, 31 * 60)
+            .granted(target, 15 * 60);
+        assert!(!engine
+            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage)
+            .is_blocked());
     }
 
     #[test]
@@ -437,7 +451,9 @@ mod tests {
         let engine = LimitEngine::with_default_warnings(vec![limit]);
         let usage = FakeUsage::default().used(LimitTarget::Category(SOCIAL), 99 * 60);
 
-        assert!(!engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage).is_blocked());
+        assert!(!engine
+            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage)
+            .is_blocked());
     }
 
     #[test]
@@ -459,7 +475,8 @@ mod tests {
             Limit::new(2, LimitTarget::Category(SHORTFORM), 15),
             Limit::new(3, LimitTarget::Total, 300),
         ]);
-        let budgets = engine.budgets_for(TIKTOK, &[SOCIAL, SHORTFORM], MONDAY, &FakeUsage::default());
+        let budgets =
+            engine.budgets_for(TIKTOK, &[SOCIAL, SHORTFORM], MONDAY, &FakeUsage::default());
 
         assert_eq!(budgets.len(), 3);
         assert_eq!(budgets[0].target, LimitTarget::Category(SHORTFORM));

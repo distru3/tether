@@ -13,7 +13,7 @@
 use std::sync::Mutex;
 use std::time::{Duration as StdDuration, Instant};
 
-use chrono::{DateTime, Duration, FixedOffset, TimeZone, Utc};
+use chrono::{DateTime, Duration, FixedOffset, Utc};
 
 /// Source of truth for time. Inject a [`TestClock`] in unit tests.
 pub trait Clock: Send + Sync {
@@ -96,15 +96,14 @@ impl TestClock {
     pub fn advance(&self, by: StdDuration) {
         let mut s = self.inner.lock().expect("test clock poisoned");
         s.mono += by;
-        s.wall = s.wall
-            + Duration::try_seconds(by.as_secs() as i64).expect("duration in range");
+        s.wall += Duration::try_seconds(by.as_secs() as i64).expect("duration in range");
     }
 
     /// Move wall time only, leaving monotonic time untouched: this is what a
     /// user fiddling with the system clock looks like.
     pub fn skew_wall(&self, by: Duration) {
         let mut s = self.inner.lock().expect("test clock poisoned");
-        s.wall = s.wall + by;
+        s.wall += by;
     }
 
     /// Advance monotonic time only: simulates a stalled or lying wall clock.
@@ -184,8 +183,8 @@ impl ClockGuard {
         let mono_delta = mono.saturating_sub(self.last_mono);
         let wall_delta = wall - self.last_wall;
 
-        let mono_delta_chrono = Duration::try_seconds(mono_delta.as_secs() as i64)
-            .unwrap_or_else(Duration::zero);
+        let mono_delta_chrono =
+            Duration::try_seconds(mono_delta.as_secs() as i64).unwrap_or_else(Duration::zero);
         let drift = wall_delta - mono_delta_chrono;
 
         self.last_wall = wall;
@@ -269,9 +268,6 @@ mod tests {
         clock.advance(StdDuration::from_secs(30));
         clock.skew_wall(Duration::seconds(-1));
 
-        assert!(matches!(
-            guard.check(&clock),
-            ClockVerdict::Normal { .. }
-        ));
+        assert!(matches!(guard.check(&clock), ClockVerdict::Normal { .. }));
     }
 }

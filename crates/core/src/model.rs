@@ -71,10 +71,9 @@ impl AppKey {
     /// display-name fallback.
     pub fn basename(&self) -> &str {
         match self {
-            AppKey::WindowsExe(v) | AppKey::LinuxExe(v) => v
-                .rsplit(['\\', '/'])
-                .next()
-                .unwrap_or(v.as_str()),
+            AppKey::WindowsExe(v) | AppKey::LinuxExe(v) => {
+                v.rsplit(['\\', '/']).next().unwrap_or(v.as_str())
+            }
             AppKey::WindowsAumid(v) | AppKey::LinuxDesktop(v) | AppKey::Sandboxed(v) => v.as_str(),
         }
     }

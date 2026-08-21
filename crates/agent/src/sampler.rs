@@ -54,6 +54,7 @@ impl Sampler {
         }
     }
 
+    #[allow(dead_code)] // wired to the UI/CLI reporting surface in M2
     pub fn day_start_minutes(&self) -> i64 {
         self.day_start_minutes
     }
@@ -109,6 +110,7 @@ impl Sampler {
 
     /// Close any open interval, e.g. on shutdown. Must be called before exit or
     /// the final session is lost.
+    #[allow(dead_code)] // wired to the shutdown handler in M2
     pub fn flush(&mut self) -> Option<PendingInterval> {
         self.close()
     }
@@ -172,7 +174,13 @@ mod tests {
         let start = at("2026-08-20T10:00:00Z");
 
         for i in 0..60 {
-            let closed = s.observe(start + Duration::seconds(i), 0, Some(&w), IdleState::Active, NORMAL);
+            let closed = s.observe(
+                start + Duration::seconds(i),
+                0,
+                Some(&w),
+                IdleState::Active,
+                NORMAL,
+            );
             assert!(closed.is_empty(), "nothing should close mid-session");
         }
 
@@ -189,8 +197,20 @@ mod tests {
         let t = at("2026-08-20T10:00:00Z");
 
         s.observe(t, 0, Some(&a), IdleState::Active, NORMAL);
-        s.observe(t + Duration::seconds(30), 0, Some(&a), IdleState::Active, NORMAL);
-        let closed = s.observe(t + Duration::seconds(31), 0, Some(&b), IdleState::Active, NORMAL);
+        s.observe(
+            t + Duration::seconds(30),
+            0,
+            Some(&a),
+            IdleState::Active,
+            NORMAL,
+        );
+        let closed = s.observe(
+            t + Duration::seconds(31),
+            0,
+            Some(&b),
+            IdleState::Active,
+            NORMAL,
+        );
 
         assert_eq!(closed.len(), 1);
         assert_eq!(closed[0].key, a.key);
@@ -204,7 +224,13 @@ mod tests {
         let t = at("2026-08-20T10:00:00Z");
 
         s.observe(t, 0, Some(&w), IdleState::Active, NORMAL);
-        s.observe(t + Duration::seconds(10), 0, Some(&w), IdleState::Active, NORMAL);
+        s.observe(
+            t + Duration::seconds(10),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
         let closed = s.observe(
             t + Duration::seconds(11),
             0,
@@ -214,7 +240,11 @@ mod tests {
         );
 
         assert_eq!(closed.len(), 1);
-        assert_eq!(closed[0].duration_secs(), 10, "idle time must not be credited");
+        assert_eq!(
+            closed[0].duration_secs(),
+            10,
+            "idle time must not be credited"
+        );
 
         // Staying idle emits nothing further.
         assert!(s
@@ -235,8 +265,20 @@ mod tests {
         let t = at("2026-08-20T10:00:00Z");
 
         s.observe(t, 0, Some(&w), IdleState::Active, NORMAL);
-        s.observe(t + Duration::seconds(5), 0, Some(&w), IdleState::Active, NORMAL);
-        let closed = s.observe(t + Duration::seconds(6), 0, Some(&w), IdleState::Locked, NORMAL);
+        s.observe(
+            t + Duration::seconds(5),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
+        let closed = s.observe(
+            t + Duration::seconds(6),
+            0,
+            Some(&w),
+            IdleState::Locked,
+            NORMAL,
+        );
 
         assert_eq!(closed.len(), 1);
         assert_eq!(closed[0].duration_secs(), 5);
@@ -247,16 +289,40 @@ mod tests {
         let mut s = Sampler::new(0);
         let w = window("C:\\a.exe");
 
-        s.observe(at("2026-08-20T23:59:00Z"), 0, Some(&w), IdleState::Active, NORMAL);
-        s.observe(at("2026-08-20T23:59:59Z"), 0, Some(&w), IdleState::Active, NORMAL);
-        let closed = s.observe(at("2026-08-21T00:00:00Z"), 0, Some(&w), IdleState::Active, NORMAL);
+        s.observe(
+            at("2026-08-20T23:59:00Z"),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
+        s.observe(
+            at("2026-08-20T23:59:59Z"),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
+        let closed = s.observe(
+            at("2026-08-21T00:00:00Z"),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
 
         assert_eq!(closed.len(), 1, "the previous day must be closed off");
         assert_eq!(closed[0].day, DayKey(20260820));
         assert_eq!(closed[0].duration_secs(), 59);
 
         // Usage continues on the new day.
-        s.observe(at("2026-08-21T00:01:00Z"), 0, Some(&w), IdleState::Active, NORMAL);
+        s.observe(
+            at("2026-08-21T00:01:00Z"),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
         let next = s.flush().expect("second interval");
         assert_eq!(next.day, DayKey(20260821));
     }
@@ -267,15 +333,39 @@ mod tests {
         let w = window("C:\\a.exe");
 
         // 01:00 still belongs to the 20th.
-        s.observe(at("2026-08-21T01:00:00Z"), 0, Some(&w), IdleState::Active, NORMAL);
-        s.observe(at("2026-08-21T01:30:00Z"), 0, Some(&w), IdleState::Active, NORMAL);
+        s.observe(
+            at("2026-08-21T01:00:00Z"),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
+        s.observe(
+            at("2026-08-21T01:30:00Z"),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
         assert!(
-            s.observe(at("2026-08-21T02:00:00Z"), 0, Some(&w), IdleState::Active, NORMAL)
-                .is_empty(),
+            s.observe(
+                at("2026-08-21T02:00:00Z"),
+                0,
+                Some(&w),
+                IdleState::Active,
+                NORMAL
+            )
+            .is_empty(),
             "midnight is not the boundary when day_start is 04:00"
         );
 
-        let closed = s.observe(at("2026-08-21T04:00:00Z"), 0, Some(&w), IdleState::Active, NORMAL);
+        let closed = s.observe(
+            at("2026-08-21T04:00:00Z"),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
         assert_eq!(closed.len(), 1);
         assert_eq!(closed[0].day, DayKey(20260820));
     }
@@ -287,14 +377,22 @@ mod tests {
         let t = at("2026-08-20T10:00:00Z");
 
         s.observe(t, 0, Some(&w), IdleState::Active, NORMAL);
-        s.observe(t + Duration::seconds(20), 0, Some(&w), IdleState::Active, NORMAL);
+        s.observe(
+            t + Duration::seconds(20),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
 
         let closed = s.observe(
             t + Duration::seconds(21),
             0,
             Some(&w),
             IdleState::Active,
-            ClockVerdict::Backward { by: Duration::hours(1) },
+            ClockVerdict::Backward {
+                by: Duration::hours(1),
+            },
         );
 
         // Credited only up to the last trustworthy observation.
@@ -310,7 +408,13 @@ mod tests {
         let t = at("2026-08-20T10:00:00Z");
 
         s.observe(t, 0, Some(&w), IdleState::Active, NORMAL);
-        s.observe(t + Duration::seconds(15), 0, Some(&w), IdleState::Active, NORMAL);
+        s.observe(
+            t + Duration::seconds(15),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
 
         // Laptop lid closed for eight hours.
         let closed = s.observe(
@@ -318,7 +422,9 @@ mod tests {
             0,
             Some(&w),
             IdleState::Active,
-            ClockVerdict::Forward { by: Duration::hours(8) },
+            ClockVerdict::Forward {
+                by: Duration::hours(8),
+            },
         );
         assert_eq!(closed[0].duration_secs(), 15, "sleeping is not screen time");
     }
@@ -330,8 +436,20 @@ mod tests {
         let t = at("2026-08-20T10:00:00Z");
 
         s.observe(t, 0, Some(&w), IdleState::Active, NORMAL);
-        s.observe(t + Duration::seconds(9), 0, Some(&w), IdleState::Active, NORMAL);
-        let closed = s.observe(t + Duration::seconds(10), 0, None, IdleState::Active, NORMAL);
+        s.observe(
+            t + Duration::seconds(9),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
+        let closed = s.observe(
+            t + Duration::seconds(10),
+            0,
+            None,
+            IdleState::Active,
+            NORMAL,
+        );
 
         assert_eq!(closed.len(), 1);
         assert_eq!(closed[0].duration_secs(), 9);
@@ -341,7 +459,13 @@ mod tests {
     fn a_single_sample_produces_no_interval() {
         let mut s = Sampler::new(0);
         let w = window("C:\\a.exe");
-        s.observe(at("2026-08-20T10:00:00Z"), 0, Some(&w), IdleState::Active, NORMAL);
+        s.observe(
+            at("2026-08-20T10:00:00Z"),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
         assert!(s.flush().is_none(), "zero-length intervals are noise");
     }
 
@@ -351,8 +475,20 @@ mod tests {
         let w = window("C:\\a.exe");
 
         // 23:30 UTC, user in UTC+0 -> the 20th.
-        s.observe(at("2026-08-20T23:30:00Z"), 0, Some(&w), IdleState::Active, NORMAL);
-        s.observe(at("2026-08-20T23:40:00Z"), 0, Some(&w), IdleState::Active, NORMAL);
+        s.observe(
+            at("2026-08-20T23:30:00Z"),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
+        s.observe(
+            at("2026-08-20T23:40:00Z"),
+            0,
+            Some(&w),
+            IdleState::Active,
+            NORMAL,
+        );
 
         // User flies east; offset becomes UTC+2, so local time is now the 21st.
         let closed = s.observe(

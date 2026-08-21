@@ -31,8 +31,7 @@ use windows::core::PWSTR;
 use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND};
 use windows::Win32::System::SystemInformation::GetTickCount;
 use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION,
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
 };
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetLastInputInfo, LASTINPUTINFO};
 use windows::Win32::UI::WindowsAndMessaging::{
@@ -135,7 +134,9 @@ unsafe fn process_image_path(pid: u32) -> PlatformResult<String> {
     let _ = CloseHandle(handle);
 
     result.map_err(|e| {
-        PlatformError::Other(format!("QueryFullProcessImageNameW failed for pid {pid}: {e}"))
+        PlatformError::Other(format!(
+            "QueryFullProcessImageNameW failed for pid {pid}: {e}"
+        ))
     })?;
 
     buf.truncate(len as usize);
@@ -194,7 +195,9 @@ impl IdleMonitor for Win32IdleMonitor {
             let idle_secs = u64::from(idle_ms) / 1000;
 
             Ok(if idle_secs >= self.threshold_secs {
-                IdleState::Idle { for_secs: idle_secs }
+                IdleState::Idle {
+                    for_secs: idle_secs,
+                }
             } else {
                 IdleState::Active
             })
