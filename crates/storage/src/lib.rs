@@ -29,6 +29,8 @@ pub enum StorageError {
     },
     #[error("unknown category slug: {0}")]
     UnknownCategory(String),
+    #[error("app not found: {0}")]
+    AppNotFound(i64),
 }
 
 /// Ordered migrations. Append only; never edit a shipped migration.
@@ -147,6 +149,20 @@ impl Db {
             |row| row.get(0),
         )?;
         Ok(id)
+    }
+
+    /// Current classification of an app: its primary category and whether a
+    /// human chose it. Lets the classifier skip rows it already owns, so it
+    /// never rewrites the same verdict on every interval.
+    pub fn app_category_state(&self, app_id: i64) -> Result<(CategoryId, bool)> {
+        self.conn
+            .query_row(
+                "SELECT primary_category_id, user_classified FROM apps WHERE id = ?1",
+                params![app_id],
+                |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
+            )
+            .optional()?
+            .ok_or_else(|| StorageError::AppNotFound(app_id))
     }
 
     pub fn set_app_categories(

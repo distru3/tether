@@ -10,6 +10,7 @@
 //! been dogfooded long enough to trust. Blocking apps based on numbers you have
 //! not yet verified is how you end up locking yourself out of your own machine.
 
+mod classify;
 mod platform;
 mod sampler;
 
@@ -130,6 +131,26 @@ fn persist(
         default_category,
         now,
     )?;
+
+    // Auto-classify an app the first time it is seen: only when it still sits in
+    // the default (uncategorized) bucket and no human has overridden it. The
+    // check is cheap and idempotent, so already-classified apps are untouched.
+    let (primary, user_classified) = db.app_category_state(app_id)?;
+    if !user_classified && primary == default_category {
+        if let Some(classification) = classify::classify(&pending.key) {
+            let primary_id = db.category_id(classification.primary)?;
+            let mut tags = Vec::with_capacity(classification.tags.len());
+            for tag in classification.tags {
+                tags.push(db.category_id(tag)?);
+            }
+            db.set_app_categories(app_id, primary_id, &tags, false)?;
+            tracing::debug!(
+                app = %pending.key,
+                primary = classification.primary,
+                "auto-classified app"
+            );
+        }
+    }
 
     db.record_interval(&UsageInterval {
         subject: SubjectRef::App(app_id),
