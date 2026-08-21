@@ -9,10 +9,10 @@ use std::path::Path;
 
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
-use st_core::category::{CategoryKind, BUILTIN_CATEGORIES};
+use st_core::category::{Category, CategoryKind, BUILTIN_CATEGORIES};
 use st_core::daykey::DayKey;
 use st_core::limits::{Limit, LimitTarget, UsageSnapshot};
-use st_core::model::{AppKey, CategoryId, SubjectRef, UsageInterval};
+use st_core::model::{AppKey, AppRecord, CategoryId, SubjectRef, UsageInterval};
 use thiserror::Error;
 
 pub type Result<T> = std::result::Result<T, StorageError>;
@@ -34,7 +34,22 @@ pub enum StorageError {
 }
 
 /// Ordered migrations. Append only; never edit a shipped migration.
-const MIGRATIONS: &[(i64, &str)] = &[(1, include_str!("../migrations/0001_init.sql"))];
+const MIGRATIONS: &[(i64, &str)] = &[
+    (1, include_str!("../migrations/0001_init.sql")),
+    (2, include_str!("../migrations/0002_pending_limits.sql")),
+];
+
+/// One row of `pending_limits`: id, target_type, target_id, action,
+/// default_minutes, weekday_minutes (JSON), enabled.
+type PendingRow = (
+    i64,
+    String,
+    Option<i64>,
+    String,
+    Option<i64>,
+    Option<String>,
+    Option<i64>,
+);
 
 pub struct Db {
     conn: Connection,
@@ -115,6 +130,19 @@ impl Db {
             )
             .optional()?
             .ok_or_else(|| StorageError::UnknownCategory(slug.to_string()))
+    }
+
+    /// The `kind` of a category, used to decide whether a limit may be attached.
+    pub fn category_kind(&self, id: i64) -> Result<Option<CategoryKind>> {
+        let kind_s: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT kind FROM categories WHERE id = ?1",
+                params![id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        Ok(kind_s.and_then(|s| kind_from_str(&s)))
     }
 
     /// Record that an app was seen, returning its id.
@@ -307,6 +335,429 @@ impl Db {
             ],
         )?;
         Ok(())
+    }
+
+    /// Delete a limit immediately. Deleting is a *loosening* action, so the
+    /// caller is responsible for honouring the anti-impulse cooldown before
+    /// calling this.
+    pub fn delete_limit(&self, id: i64) -> Result<()> {
+        self.conn
+            .execute("DELETE FROM limits WHERE id = ?1", params![id])?;
+        Ok(())
+    }
+
+    /// Delete a limit by its target, used when the cooldown has already elapsed
+    /// (so the delete can apply immediately without knowing the row's id).
+    pub fn delete_limit_by_target(&self, target: &LimitTarget) -> Result<()> {
+        let (target_type, target_id) = target_to_row(target);
+        let sql = match target_id {
+            Some(tid) => format!(
+                "DELETE FROM limits WHERE target_type = '{target_type}' AND target_id = {tid}"
+            ),
+            None => format!(
+                "DELETE FROM limits WHERE target_type = '{target_type}' AND target_id IS NULL"
+            ),
+        };
+        self.conn.execute(&sql, [])?;
+        Ok(())
+    }
+
+    /// Queue a loosened limit change that takes effect only at
+    /// `effective_from_utc`. The current `limits` row is left untouched, so the
+    /// old (tighter) value keeps being enforced until the cooldown elapses.
+    pub fn queue_pending_update(
+        &self,
+        target: &LimitTarget,
+        default_minutes: u32,
+        weekday_minutes: [Option<u32>; 7],
+        enabled: bool,
+        effective_from_utc: DateTime<Utc>,
+    ) -> Result<()> {
+        let (target_type, target_id) = target_to_row(target);
+        let weekday_json = serde_json::to_string(&weekday_minutes.to_vec())
+            .expect("array of options always serialises");
+        self.conn.execute(
+            "INSERT INTO pending_limits
+                 (target_type, target_id, action, default_minutes, weekday_minutes,
+                  enabled, effective_from_utc)
+             VALUES (?1, ?2, 'update', ?3, ?4, ?5, ?6)
+             ON CONFLICT(target_type, target_id) DO UPDATE SET
+                 action             = 'update',
+                 default_minutes    = excluded.default_minutes,
+                 weekday_minutes    = excluded.weekday_minutes,
+                 enabled            = excluded.enabled,
+                 effective_from_utc = excluded.effective_from_utc",
+            params![
+                target_type,
+                target_id,
+                default_minutes,
+                weekday_json,
+                enabled as i64,
+                effective_from_utc.to_rfc3339()
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Queue a limit removal that takes effect at `effective_from_utc`.
+    pub fn queue_pending_delete(
+        &self,
+        target: &LimitTarget,
+        effective_from_utc: DateTime<Utc>,
+    ) -> Result<()> {
+        let (target_type, target_id) = target_to_row(target);
+        self.conn.execute(
+            "INSERT INTO pending_limits
+                 (target_type, target_id, action, effective_from_utc)
+             VALUES (?1, ?2, 'delete', ?3)
+             ON CONFLICT(target_type, target_id) DO UPDATE SET
+                 action             = 'delete',
+                 default_minutes    = NULL,
+                 weekday_minutes    = NULL,
+                 enabled            = NULL,
+                 effective_from_utc = excluded.effective_from_utc",
+            params![target_type, target_id, effective_from_utc.to_rfc3339()],
+        )?;
+        Ok(())
+    }
+
+    /// Move any pending change whose time has come into the live `limits` table.
+    /// Called by the enforcement loop every tick so a loosened limit starts
+    /// applying the instant its cooldown elapses.
+    pub fn promote_pending_limits(&mut self, now: DateTime<Utc>) -> Result<()> {
+        let rows: Vec<PendingRow> = self
+            .conn
+            .prepare(
+                "SELECT id, target_type, target_id, action, default_minutes, weekday_minutes, enabled
+                 FROM pending_limits WHERE effective_from_utc <= ?1",
+            )?
+            .query_map(params![now.to_rfc3339()], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get::<_, Option<i64>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, Option<i64>>(6)?,
+                ))
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        tracing::debug!(pending = rows.len(), "promoting pending limits");
+
+        let tx = self.conn.transaction()?;
+        for (id, target_type, target_id, action, default_minutes, weekday_json, enabled) in rows {
+            let Some(target) = row_to_target(&target_type, target_id) else {
+                tracing::warn!(
+                    id,
+                    target_type,
+                    "skipping pending limit with unknown target"
+                );
+                tx.execute("DELETE FROM pending_limits WHERE id = ?1", params![id])?;
+                continue;
+            };
+            let (tt, tid) = target_to_row(&target);
+            let scope = |tt: &str, tid: Option<i64>| -> String {
+                match tid {
+                    Some(tid) => format!("target_type = '{tt}' AND target_id = {tid}"),
+                    // SQL `= NULL` never matches; the total budget has a NULL
+                    // target_id and must use `IS NULL` instead.
+                    None => format!("target_type = '{tt}' AND target_id IS NULL"),
+                }
+            };
+            match action.as_str() {
+                "delete" => {
+                    let sql = format!("DELETE FROM limits WHERE {}", scope(tt, tid));
+                    tx.execute(&sql, [])?;
+                }
+                "update" => {
+                    let weekday_json = weekday_json.unwrap_or_default();
+                    let weekday: Vec<Option<u32>> =
+                        serde_json::from_str(&weekday_json).map_err(|source| {
+                            StorageError::Json {
+                                column: "pending_limits.weekday_minutes",
+                                source,
+                            }
+                        })?;
+                    if weekday.len() != 7 {
+                        tracing::warn!(id, "pending limit with malformed weekday array");
+                    } else {
+                        let sql = format!(
+                            "UPDATE limits SET
+                                 default_minutes = ?1, weekday_minutes = ?2, enabled = ?3
+                             WHERE {}",
+                            scope(tt, tid)
+                        );
+                        tx.execute(&sql, params![default_minutes, weekday_json, enabled])?;
+                    }
+                }
+                _ => {
+                    tracing::warn!(id, action, "skipping malformed pending limit");
+                }
+            }
+            tx.execute("DELETE FROM pending_limits WHERE id = ?1", params![id])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// All apps known to the system, with their current classification.
+    pub fn list_apps(&self) -> Result<Vec<AppRecord>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT a.id, a.app_key, a.display_name, a.publisher,
+                    a.primary_category_id, a.user_classified
+             FROM apps a
+             ORDER BY a.display_name",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, Option<String>>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, i64>(5)? != 0,
+            ))
+        })?;
+
+        let mut out = Vec::new();
+        for row in rows {
+            let (id, key_s, display_name, publisher, primary_category, user_classified) = row?;
+            let Some(key) = AppKey::parse_db_string(&key_s) else {
+                tracing::warn!(app_key = %key_s, "skipping app with unparsable key");
+                continue;
+            };
+            let tags = self.app_tags(id)?;
+            out.push(AppRecord {
+                id,
+                key,
+                display_name,
+                publisher,
+                primary_category,
+                tags,
+                user_classified,
+            });
+        }
+        Ok(out)
+    }
+
+    /// A single app record, for the enforcement loop and the categoriser.
+    pub fn app_record(&self, app_id: i64) -> Result<Option<AppRecord>> {
+        let row = self.conn.query_row(
+            "SELECT a.id, a.app_key, a.display_name, a.publisher,
+                    a.primary_category_id, a.user_classified
+             FROM apps a WHERE a.id = ?1",
+            params![app_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, i64>(4)?,
+                    row.get::<_, i64>(5)? != 0,
+                ))
+            },
+        );
+        let Ok((id, key_s, display_name, publisher, primary_category, user_classified)) = row
+        else {
+            return Ok(None);
+        };
+        let Some(key) = AppKey::parse_db_string(&key_s) else {
+            return Ok(None);
+        };
+        Ok(Some(AppRecord {
+            id,
+            key,
+            display_name,
+            publisher,
+            primary_category,
+            tags: self.app_tags(id)?,
+            user_classified,
+        }))
+    }
+
+    fn app_tags(&self, app_id: i64) -> Result<Vec<CategoryId>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT category_id FROM app_tags WHERE app_id = ?1 ORDER BY category_id")?;
+        let rows = stmt.query_map(params![app_id], |row| row.get(0))?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    /// All categories, so the UI can render the editor without hard-coding ids.
+    pub fn list_categories(&self) -> Result<Vec<Category>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, slug, name, kind, color, builtin FROM categories ORDER BY id")?;
+        let rows = stmt.query_map([], |row| {
+            let kind_s: String = row.get(3)?;
+            Ok(Category {
+                id: row.get(0)?,
+                slug: row.get(1)?,
+                name: row.get(2)?,
+                kind: kind_from_str(&kind_s)
+                    .unwrap_or(CategoryKind::Limitable)
+                    .to_owned(),
+                color: row.get(4)?,
+                builtin: row.get::<_, i64>(5)? != 0,
+            })
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    /// Dashboard-shaped limits with human-readable labels, for the editor.
+    pub fn list_limit_rows(&self) -> Result<Vec<LimitRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT l.id, l.target_type, l.target_id, l.default_minutes,
+                    l.weekday_minutes, l.enabled,
+                    COALESCE(a.display_name, c.name, 'Total')
+             FROM limits l
+             LEFT JOIN apps a ON a.id = l.target_id AND l.target_type = 'app'
+             LEFT JOIN categories c ON c.id = l.target_id AND l.target_type = 'category'
+             ORDER BY l.id",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            let target_type: String = row.get(1)?;
+            let target_id: Option<i64> = row.get(2)?;
+            let target = match (target_type.as_str(), target_id) {
+                ("app", Some(id)) => Some(LimitTarget::App(id)),
+                ("category", Some(id)) => Some(LimitTarget::Category(id)),
+                ("total", _) => Some(LimitTarget::Total),
+                _ => None,
+            };
+            let weekday_json: String = row.get(4)?;
+            Ok(LimitRow {
+                id: row.get(0)?,
+                target,
+                default_minutes: row.get(3)?,
+                weekday_json,
+                weekday_minutes: [None; 7],
+                enabled: row.get::<_, i64>(5)? != 0,
+                label: row.get(6)?,
+            })
+        })?;
+        let mut out = Vec::new();
+        for row in rows {
+            let mut r = row?;
+            if r.target.is_none() {
+                tracing::warn!(id = r.id, "skipping limit with unknown target type");
+                continue;
+            }
+            // Normalise weekday json into the same array shape as `load_limits`.
+            let parsed: Vec<Option<u32>> =
+                serde_json::from_str(&r.weekday_json).map_err(|source| StorageError::Json {
+                    column: "limits.weekday_minutes",
+                    source,
+                })?;
+            let mut weekday_minutes = [None; 7];
+            for (slot, value) in weekday_minutes.iter_mut().zip(parsed) {
+                *slot = value;
+            }
+            r.weekday_minutes = weekday_minutes;
+            out.push(r);
+        }
+        Ok(out)
+    }
+
+    /// PIN hash, if one has been set. `None` means "no PIN configured", which
+    /// in M2 lets limit edits happen without one (see the plan decision).
+    pub fn pin_hash(&self) -> Result<Option<String>> {
+        self.setting("pin_hash")
+    }
+
+    pub fn set_pin_hash(&self, hash: &str) -> Result<()> {
+        self.set_setting("pin_hash", hash)
+    }
+
+    /// Record a PIN-approved extension, additive for the given day.
+    pub fn grant_override(
+        &self,
+        target: &LimitTarget,
+        day: DayKey,
+        seconds: i64,
+        now: DateTime<Utc>,
+        reason: Option<&str>,
+    ) -> Result<()> {
+        let (target_type, target_id) = target_to_row(target);
+        self.conn.execute(
+            "INSERT INTO overrides (target_type, target_id, day_key, granted_secs, granted_utc, reason)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![target_type, target_id, day.0, seconds, now.to_rfc3339(), reason],
+        )?;
+        self.audit(now, "override_granted", reason)
+    }
+
+    /// Freeze an app until `expires_utc` (typically the day boundary). Replaces
+    /// any existing block so a re-block updates the deadline.
+    pub fn set_block(
+        &self,
+        subject: SubjectRef,
+        reason: &str,
+        now: DateTime<Utc>,
+        expires_utc: Option<DateTime<Utc>>,
+    ) -> Result<()> {
+        let (subject_type, subject_id) = subject_to_row(subject);
+        self.conn.execute(
+            "INSERT INTO block_state (subject_type, subject_id, reason, blocked_since_utc, expires_utc)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(subject_type, subject_id) DO UPDATE SET
+                 reason            = excluded.reason,
+                 blocked_since_utc = excluded.blocked_since_utc,
+                 expires_utc       = excluded.expires_utc",
+            params![
+                subject_type,
+                subject_id,
+                reason,
+                now.to_rfc3339(),
+                expires_utc.map(|t| t.to_rfc3339())
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_block(&self, subject: SubjectRef) -> Result<()> {
+        let (subject_type, subject_id) = subject_to_row(subject);
+        self.conn.execute(
+            "DELETE FROM block_state WHERE subject_type = ?1 AND subject_id = ?2",
+            params![subject_type, subject_id],
+        )?;
+        Ok(())
+    }
+
+    /// Which apps are currently blocked, for the dashboard's blocked flag and
+    /// for day-rollover thawing.
+    pub fn blocked_subjects(&self) -> Result<Vec<(SubjectRef, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT subject_type, subject_id, reason FROM block_state")?;
+        let rows = stmt.query_map([], |row| {
+            let st: String = row.get(0)?;
+            let subject = match st.as_str() {
+                "app" => SubjectRef::App(row.get(1)?),
+                "site" => SubjectRef::Site(row.get(1)?),
+                other => {
+                    tracing::warn!(subject_type = other, "unknown subject type in block_state");
+                    return Err(rusqlite::Error::InvalidQuery);
+                }
+            };
+            Ok((subject, row.get::<_, String>(2)?))
+        })?;
+        rows.collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(Into::into)
+    }
+
+    /// Whether an app is currently blocked.
+    pub fn is_blocked(&self, subject: SubjectRef) -> Result<bool> {
+        let (subject_type, subject_id) = subject_to_row(subject);
+        let n: i64 = self.conn.query_row(
+            "SELECT COUNT(*) FROM block_state WHERE subject_type = ?1 AND subject_id = ?2",
+            params![subject_type, subject_id],
+            |row| row.get(0),
+        )?;
+        Ok(n > 0)
     }
 
     /// Everything the limits engine needs for one day, in three queries.
@@ -516,6 +967,30 @@ pub struct CategoryRow {
     pub seconds: i64,
 }
 
+/// A limit plus its human-readable label, for the editor UI.
+pub struct LimitRow {
+    pub id: i64,
+    pub target: Option<LimitTarget>,
+    pub default_minutes: i64,
+    pub weekday_minutes: [Option<u32>; 7],
+    /// Raw JSON, kept only for parsing; the normalised array is authoritative.
+    weekday_json: String,
+    pub enabled: bool,
+    pub label: String,
+}
+
+impl LimitRow {
+    pub fn to_limit(&self) -> Option<Limit> {
+        Some(Limit {
+            id: self.id,
+            target: self.target?,
+            default_minutes: self.default_minutes.max(0) as u32,
+            weekday_minutes: self.weekday_minutes,
+            enabled: self.enabled,
+        })
+    }
+}
+
 impl UsageSnapshot for DaySnapshot {
     fn seconds_used(&self, target: &LimitTarget) -> i64 {
         self.used.get(target).copied().unwrap_or(0)
@@ -531,6 +1006,15 @@ fn kind_to_str(kind: CategoryKind) -> &'static str {
         CategoryKind::Limitable => "limitable",
         CategoryKind::BlockOnly => "block_only",
         CategoryKind::NeverBlock => "never_block",
+    }
+}
+
+fn kind_from_str(s: &str) -> Option<CategoryKind> {
+    match s {
+        "limitable" => Some(CategoryKind::Limitable),
+        "block_only" => Some(CategoryKind::BlockOnly),
+        "never_block" => Some(CategoryKind::NeverBlock),
+        _ => None,
     }
 }
 
@@ -831,6 +1315,144 @@ mod tests {
         assert_eq!(summary.total_seconds, 0);
         assert!(summary.apps.is_empty());
         assert!(summary.categories.is_empty());
+    }
+
+    #[test]
+    fn pending_loosening_stays_out_of_limits_until_it_promotes() {
+        let mut db = Db::open_in_memory().expect("open");
+        let social = db.category_id("social-media").expect("social");
+        let target = LimitTarget::Category(social);
+        let t0 = now();
+        db.upsert_limit(&Limit::new(1, target, 30), t0)
+            .expect("initial");
+
+        let later = t0 + chrono::Duration::hours(25);
+        db.queue_pending_update(&target, 120, [None; 7], true, later)
+            .expect("queue loosening");
+
+        // Before the effective time the old limit is still what loads.
+        let before = db.load_limits().expect("load");
+        assert_eq!(before.len(), 1);
+        assert_eq!(before[0].default_minutes, 30);
+
+        db.promote_pending_limits(later).expect("promote");
+        let after = db.load_limits().expect("load");
+        assert_eq!(after.len(), 1);
+        assert_eq!(after[0].default_minutes, 120);
+    }
+
+    #[test]
+    fn pending_delete_removes_the_limit_when_it_promotes() {
+        let mut db = Db::open_in_memory().expect("open");
+        let target = LimitTarget::Total;
+        let t0 = now();
+        db.upsert_limit(&Limit::new(1, target, 60), t0)
+            .expect("initial");
+
+        let later = t0 + chrono::Duration::hours(25);
+        db.queue_pending_delete(&target, later).expect("queue");
+
+        // Still present before the delete takes effect.
+        assert_eq!(db.load_limits().expect("load").len(), 1);
+        let pending: i64 = db
+            .conn()
+            .query_row("SELECT COUNT(*) FROM pending_limits", [], |r| r.get(0))
+            .expect("pending count");
+        assert_eq!(pending, 1, "pending delete should be queued");
+        db.promote_pending_limits(later).expect("promote");
+        let after = db.load_limits().expect("load");
+        let pending_after: i64 = db
+            .conn()
+            .query_row("SELECT COUNT(*) FROM pending_limits", [], |r| r.get(0))
+            .expect("pending after count");
+        assert_eq!(pending_after, 0, "pending row should be consumed");
+        assert!(
+            after.is_empty(),
+            "expected no limits after promote, got {after:?}"
+        );
+    }
+
+    #[test]
+    fn grant_override_is_recorded_and_read_back_by_the_snapshot() {
+        let db = Db::open_in_memory().expect("open");
+        let social = db.category_id("social-media").expect("social");
+        let target = LimitTarget::Category(social);
+        let day = DayKey(20260820);
+
+        db.grant_override(&target, day, 15 * 60, now(), Some("test"))
+            .expect("grant");
+        let snap = db.day_snapshot(day).expect("snapshot");
+        assert_eq!(snap.granted_extra_secs(&target), 15 * 60);
+    }
+
+    #[test]
+    fn block_state_set_clear_and_list_round_trip() {
+        let db = Db::open_in_memory().expect("open");
+        let app = 7;
+        let subject = SubjectRef::App(app);
+        let expires = now() + chrono::Duration::hours(4);
+
+        assert!(!db.is_blocked(subject).expect("not blocked"));
+        db.set_block(subject, "limit", now(), Some(expires))
+            .expect("set");
+        assert!(db.is_blocked(subject).expect("blocked"));
+
+        let blocked = db.blocked_subjects().expect("list");
+        assert_eq!(blocked.len(), 1);
+        assert_eq!(blocked[0].0, subject);
+        assert_eq!(blocked[0].1, "limit");
+
+        db.clear_block(subject).expect("clear");
+        assert!(!db.is_blocked(subject).expect("cleared"));
+    }
+
+    #[test]
+    fn pin_hash_round_trips_through_settings() {
+        let db = Db::open_in_memory().expect("open");
+        assert_eq!(db.pin_hash().expect("none"), None);
+        db.set_pin_hash("$argon2id$v=19$m=19456,t=2,p=1$fake")
+            .expect("set");
+        assert_eq!(
+            db.pin_hash().expect("some").as_deref(),
+            Some("$argon2id$v=19$m=19456,t=2,p=1$fake")
+        );
+    }
+
+    #[test]
+    fn app_record_returns_tags_and_classification() {
+        let mut db = Db::open_in_memory().expect("open");
+        let social = db.category_id("social-media").expect("social");
+        let shortform = db.category_id("short-form-video").expect("shortform");
+        let uncat = db.category_id("uncategorized").expect("uncat");
+
+        let id = db
+            .upsert_app(
+                &AppKey::windows_exe("C:\\tiktok.exe"),
+                "TikTok",
+                None,
+                uncat,
+                now(),
+            )
+            .expect("app");
+        db.set_app_categories(id, social, &[shortform], false)
+            .expect("classify");
+
+        let record = db.app_record(id).expect("record").expect("some");
+        assert_eq!(record.primary_category, social);
+        assert_eq!(record.tags, vec![shortform]);
+        assert!(!record.user_classified);
+
+        assert!(db.app_record(9999).expect("none").is_none());
+    }
+
+    #[test]
+    fn list_categories_exposes_kinds_for_the_editor() {
+        let db = Db::open_in_memory().expect("open");
+        let cats = db.list_categories().expect("list");
+        let dev = cats.iter().find(|c| c.slug == "development").expect("dev");
+        assert_eq!(dev.kind, CategoryKind::NeverBlock);
+        let games = cats.iter().find(|c| c.slug == "games").expect("games");
+        assert_eq!(games.kind, CategoryKind::Limitable);
     }
 
     #[test]

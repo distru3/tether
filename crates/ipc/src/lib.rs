@@ -59,6 +59,9 @@ pub enum Request {
         primary: i64,
         tags: Vec<i64>,
     },
+    /// Everything the limit editor needs in one round trip: apps, categories
+    /// and current limits.
+    Catalog,
     /// Create or update a limit. Tightening applies at once; loosening is
     /// subject to the cooldown, which is why the response carries an effective
     /// time rather than just success.
@@ -69,11 +72,19 @@ pub enum Request {
         enabled: bool,
         pin: String,
     },
+    /// Remove a limit. Loosening, so always subject to the cooldown.
+    DeleteLimit { target: LimitTargetDto, pin: String },
     /// "+15 minutes", PIN gated, refused outright in strict mode.
     GrantOverride {
         target: LimitTargetDto,
         seconds: i64,
         pin: String,
+    },
+    /// Set or change the PIN. `current_pin` must match the existing PIN once
+    /// one is configured; the first set (no PIN yet) can pass `None`.
+    SetPin {
+        new_pin: String,
+        current_pin: Option<String>,
     },
     /// Usage reported by the session helper, which is the only component able to
     /// see the focused window.
@@ -91,6 +102,7 @@ pub enum Response {
     Pong,
     DaySummary(DaySummaryDto),
     Status(StatusDto),
+    Catalog(CatalogDto),
     /// Accepted, with the instant the change actually takes effect. Equal to
     /// "now" for tightening, up to 24 hours out for loosening.
     Accepted {
@@ -159,6 +171,44 @@ pub struct StatusDto {
     pub blocks_encrypted_dns: bool,
     pub strict_mode: bool,
     pub pin_configured: bool,
+}
+
+/// Everything the limit editor needs, in one round trip.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CatalogDto {
+    pub apps: Vec<AppDto>,
+    pub categories: Vec<CategoryDto>,
+    pub limits: Vec<LimitDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AppDto {
+    pub id: i64,
+    pub key: String,
+    pub display_name: String,
+    pub primary_category: i64,
+    pub tags: Vec<i64>,
+    pub user_classified: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CategoryDto {
+    pub id: i64,
+    pub slug: String,
+    pub name: String,
+    /// `limitable` | `block_only` | `never_block`.
+    pub kind: String,
+    pub color: String,
+    pub builtin: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LimitDto {
+    pub id: i64,
+    pub target: LimitTargetDto,
+    pub default_minutes: u32,
+    pub weekday_minutes: [Option<u32>; 7],
+    pub enabled: bool,
 }
 
 /// Write one length-prefixed JSON frame.

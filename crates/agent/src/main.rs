@@ -88,7 +88,21 @@ fn main() -> Result<()> {
         tracking_available: true,
         blocks_encrypted_dns: false,
     };
-    let _ipc_thread = ipc_server::spawn(db.clone(), status);
+    let _ipc_thread = ipc_server::spawn(
+        db.clone(),
+        status,
+        ipc_server::Policy {
+            limit_cooldown_hours: db.lock().unwrap().setting_i64("limit_cooldown_hours", 24),
+            strict_mode: db
+                .lock()
+                .unwrap()
+                .setting("strict_mode")
+                .ok()
+                .flatten()
+                .map(|v| v == "true")
+                .unwrap_or(false),
+        },
+    );
     tracing::info!(pipe = ipc_server::PIPE_NAME, "IPC server listening");
 
     let mut sampler = Sampler::new(day_start_minutes);

@@ -18,6 +18,7 @@ pub mod clock;
 pub mod daykey;
 pub mod limits;
 pub mod model;
+pub mod pin;
 pub mod platform;
 
 pub use category::{BuiltinCategory, Category, CategoryKind, BUILTIN_CATEGORIES};
