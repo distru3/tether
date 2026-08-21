@@ -12,7 +12,7 @@
 use std::sync::{Arc, Mutex};
 
 use st_core::daykey::DayKey;
-use st_ipc::{transport, Request, Response, StatusDto};
+use st_ipc::{transport, Request, Response, StatusDto, UsageRowDto};
 use st_storage::Db;
 
 /// The name of the agent's pipe. The UI and any future session helper connect
@@ -89,12 +89,47 @@ fn status_response(status: &StatusInfo) -> Response {
 }
 
 fn day_summary(db: &Mutex<Db>, day: DayKey) -> Response {
-    // The storage query behind this lands with the dashboard workstream; until
-    // then the request is answered honestly as "not yet".
-    let _ = day;
-    let _ = db;
-    Response::Error {
-        code: st_ipc::ErrorCode::Internal,
-        message: "dashboard query not implemented yet".into(),
+    let summary = match db.lock() {
+        Ok(db) => db.day_summary(day),
+        Err(_) => {
+            return Response::Error {
+                code: st_ipc::ErrorCode::Internal,
+                message: "database lock poisoned".into(),
+            }
+        }
+    };
+    match summary {
+        Ok(summary) => Response::DaySummary(st_ipc::DaySummaryDto {
+            day: summary.day,
+            total_seconds: summary.total_seconds,
+            apps: summary
+                .apps
+                .into_iter()
+                .map(|a| UsageRowDto {
+                    id: a.id,
+                    label: a.label,
+                    seconds: a.seconds,
+                    color: Some(a.category_color),
+                    limit_seconds: None,
+                    blocked: false,
+                })
+                .collect(),
+            categories: summary
+                .categories
+                .into_iter()
+                .map(|c| UsageRowDto {
+                    id: c.id,
+                    label: c.name,
+                    seconds: c.seconds,
+                    color: Some(c.color),
+                    limit_seconds: None,
+                    blocked: false,
+                })
+                .collect(),
+        }),
+        Err(e) => Response::Error {
+            code: st_ipc::ErrorCode::Internal,
+            message: format!("dashboard query failed: {e}"),
+        },
     }
 }

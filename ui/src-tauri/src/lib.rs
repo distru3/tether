@@ -19,6 +19,41 @@ pub struct AgentStatus {
     pub tracking_available: bool,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DaySummary {
+    pub day: i32,
+    pub total_seconds: i64,
+    pub apps: Vec<UsageRow>,
+    pub categories: Vec<UsageRow>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UsageRow {
+    pub id: i64,
+    pub label: String,
+    pub seconds: i64,
+    pub color: Option<String>,
+}
+
+impl From<st_ipc::DaySummaryDto> for DaySummary {
+    fn from(dto: st_ipc::DaySummaryDto) -> Self {
+        let map = |row: st_ipc::UsageRowDto| UsageRow {
+            id: row.id,
+            label: row.label,
+            seconds: row.seconds,
+            color: row.color,
+        };
+        Self {
+            day: dto.day.0,
+            total_seconds: dto.total_seconds,
+            apps: dto.apps.into_iter().map(map).collect(),
+            categories: dto.categories.into_iter().map(map).collect(),
+        }
+    }
+}
+
 /// Snapshot of what the UI should show in its header.
 ///
 /// This is intentionally a *description* of the current situation rather than a
@@ -54,6 +89,21 @@ fn get_status() -> AgentStatus {
     }
 }
 
+/// Dashboard payload for one local day, fetched from the agent.
+#[tauri::command]
+fn get_day_summary(day: i32) -> Result<DaySummary, String> {
+    match ipc_client::request(st_ipc::Request::DaySummary {
+        day: st_core::daykey::DayKey(day),
+    }) {
+        Ok(Response::DaySummary(dto)) => Ok(dto.into()),
+        Ok(Response::Error { code, message }) => {
+            Err(format!("agent refused ({code:?}): {message}"))
+        }
+        Ok(_) => Err("unexpected agent response".into()),
+        Err(e) => Err(format!("agent unreachable: {e}")),
+    }
+}
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -64,7 +114,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![get_status])
+        .invoke_handler(tauri::generate_handler![get_status, get_day_summary])
         .run(tauri::generate_context!())
         .expect("failed to launch Tauri application");
 }

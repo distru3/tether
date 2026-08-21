@@ -1,10 +1,8 @@
 import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
-// Shape must match the Rust `AgentStatus` struct in `ui/src-tauri/src/lib.rs`.
-// The two definitions are hand-kept in sync for now; before the dashboard grows
-// beyond a handful of fields, generate this from the Rust types with `ts-rs`
-// or `specta` so drift becomes impossible.
+// Shapes mirror the Rust types in ui/src-tauri/src/lib.rs; hand-kept in sync
+// until we generate these from the Rust types.
 interface AgentStatus {
     version: string;
     agent_connected: boolean;
@@ -13,53 +11,134 @@ interface AgentStatus {
     tracking_available: boolean;
 }
 
+interface UsageRow {
+    id: number;
+    label: string;
+    seconds: number;
+    color: string | null;
+}
+
+interface DaySummary {
+    day: number;
+    totalSeconds: number;
+    apps: UsageRow[];
+    categories: UsageRow[];
+}
+
+function todayKey(): number {
+    const now = new Date();
+    return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+}
+
+function formatDuration(total: number): string {
+    if (total >= 3600) {
+        const h = Math.floor(total / 3600);
+        const m = Math.round((total % 3600) / 60);
+        return `${h}h ${m}m`;
+    }
+    if (total >= 60) return `${Math.round(total / 60)}m`;
+    return `${total}s`;
+}
+
+function percent(seconds: number, total: number): string {
+    if (total <= 0) return "0";
+    return Math.round((seconds / total) * 100).toString();
+}
+
 export function App() {
     const [status, setStatus] = useState<AgentStatus | null>(null);
+    const [summary, setSummary] = useState<DaySummary | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        // `get_status` is a #[tauri::command] defined in src-tauri/src/lib.rs.
-        // Every UI-to-Rust call is invoked this way; it is Tauri's replacement
-        // for Electron's IPC and it works over a WebSocket-like channel inside
-        // the app's own process.
         invoke<AgentStatus>("get_status")
             .then(setStatus)
             .catch((e: unknown) => setError(String(e)));
+
+        invoke<DaySummary>("get_day_summary", { day: todayKey() })
+            .then(setSummary)
+            .catch((e: unknown) => setError(String(e)));
     }, []);
+
+    const connected = status?.agent_connected ?? false;
+    const total = summary?.totalSeconds ?? 0;
 
     return (
         <main className="app">
             <header>
                 <h1>Screentime</h1>
                 <p className="subtitle">
-                    Development shell. The dashboard is a stub until M1 wires it to the agent.
+                    {connected && status
+                        ? `Connected · ${status.tracker_backend} · v${status.version}`
+                        : "Agent not running — start screentime-agent to see live data"}
                 </p>
             </header>
 
             {error && <p className="error">Command failed: {error}</p>}
 
-            {status ? (
-                <section className="status-card">
-                    <h2>Agent status</h2>
-                    <dl>
-                        <dt>Version</dt>
-                        <dd>{status.version}</dd>
+            <section className="hero" aria-label="Today's screen time">
+                <p className="eyebrow">Today</p>
+                <p className="hero-total">{formatDuration(total)}</p>
+                <div className="day-bar" aria-hidden="true">
+                    {summary?.categories.length ? (
+                        summary.categories.map((c) => (
+                            <span
+                                key={c.id}
+                                className="day-bar-seg"
+                                style={{
+                                    background: c.color ?? "#94a3b8",
+                                    flexGrow: c.seconds,
+                                }}
+                            />
+                        ))
+                    ) : (
+                        <span className="day-bar-seg day-bar-empty" />
+                    )}
+                </div>
+            </section>
 
-                        <dt>Agent connected</dt>
-                        <dd>{status.agent_connected ? "yes" : "no (M2)"}</dd>
+            {!connected && !error && <p className="hint">Waiting for the agent…</p>}
 
-                        <dt>Tracker backend</dt>
-                        <dd>{status.tracker_backend}</dd>
-
-                        <dt>Filter backend</dt>
-                        <dd>{status.filter_backend}</dd>
-
-                        <dt>Tracking available</dt>
-                        <dd>{status.tracking_available ? "yes" : "no"}</dd>
-                    </dl>
+            {summary && summary.categories.length > 0 && (
+                <section className="panel" aria-label="By category">
+                    <h2 className="eyebrow">By category</h2>
+                    <ul className="rows">
+                        {summary.categories.map((c) => (
+                            <li key={c.id} className="row">
+                                <span
+                                    className="dot"
+                                    style={{ background: c.color ?? "#94a3b8" }}
+                                />
+                                <span className="row-label">{c.label}</span>
+                                <span className="row-time">{formatDuration(c.seconds)}</span>
+                                <span className="row-pct">{percent(c.seconds, total)}%</span>
+                            </li>
+                        ))}
+                    </ul>
                 </section>
-            ) : (
-                !error && <p>Loading…</p>
+            )}
+
+            {summary && summary.apps.length > 0 && (
+                <section className="panel" aria-label="By app">
+                    <h2 className="eyebrow">By app</h2>
+                    <ul className="rows">
+                        {summary.apps.map((a) => (
+                            <li key={a.id} className="row">
+                                <span
+                                    className="dot"
+                                    style={{ background: a.color ?? "#94a3b8" }}
+                                />
+                                <span className="row-label">{a.label}</span>
+                                <span className="row-time">{formatDuration(a.seconds)}</span>
+                                <span className="row-pct">{percent(a.seconds, total)}%</span>
+                            </li>
+                        ))}
+                    </ul>
+                </section>
+            )}
+
+            {connected && summary && total === 0 && (
+                <p className="hint">No screen time recorded yet today.</p>
             )}
         </main>
     );
