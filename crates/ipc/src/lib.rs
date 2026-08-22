@@ -111,7 +111,7 @@ pub enum Response {
     DaySummary(DaySummaryDto),
     Status(StatusDto),
     Catalog(CatalogDto),
-    BlockedApps(Vec<BlockedAppDto>),
+    BlockedApps(BlockedAppsDto),
     /// Accepted, with the instant the change actually takes effect. Equal to
     /// "now" for tightening, up to 24 hours out for loosening.
     Accepted {
@@ -228,6 +228,14 @@ pub struct BlockedAppDto {
     /// Canonical `kind:value` app key, so the session helper can match the
     /// focused window to the blocked app.
     pub app_key: String,
+}
+
+/// The payload of `Response::BlockedApps`. Wrapped in a struct (not a bare
+/// `Vec`) because `Response` is internally tagged: Serde cannot tag a newtype
+/// variant that is a sequence.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockedAppsDto {
+    pub blocked: Vec<BlockedAppDto>,
 }
 
 /// Write one length-prefixed JSON frame.
@@ -383,5 +391,24 @@ mod tests {
         assert!(json.contains("\"app_id\":6"));
         assert!(json.contains("Elden Ring"));
         assert!(json.contains("win-exe:"));
+    }
+
+    #[test]
+    fn blocked_apps_response_serialises_with_the_type_tag() {
+        // Regression: `Response` is internally tagged, so the payload must be a
+        // struct (wrapping the Vec), not a bare sequence.
+        let response = Response::BlockedApps(BlockedAppsDto {
+            blocked: vec![BlockedAppDto {
+                app_id: 6,
+                label: "Elden Ring".into(),
+                app_key: "win-exe:eldenring.exe".into(),
+            }],
+        });
+        let json = serde_json::to_string(&response).expect("serialise");
+        assert!(
+            json.contains("\"type\":\"blocked_apps\""),
+            "tag missing: {json}"
+        );
+        assert!(json.contains("Elden Ring"));
     }
 }

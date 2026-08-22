@@ -310,7 +310,7 @@ fn blocked_apps(db: &Mutex<Db>) -> Response {
             app_key: record.key.to_db_string(),
         });
     }
-    Response::BlockedApps(out)
+    Response::BlockedApps(st_ipc::BlockedAppsDto { blocked: out })
 }
 
 /// "Quit" from the block overlay: terminate the app's process tree. This is a

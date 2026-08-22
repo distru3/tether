@@ -67,7 +67,7 @@ fn read_blocked(
     stream: &mut (impl std::io::Read + std::io::Write),
 ) -> Option<Vec<st_ipc::BlockedAppDto>> {
     match st_ipc::read_message::<_, Response>(stream) {
-        Ok(Response::BlockedApps(apps)) => Some(apps),
+        Ok(Response::BlockedApps(dto)) => Some(dto.blocked),
         Ok(other) => {
             tracing::warn!(?other, "unexpected response to BlockedApps");
             None
