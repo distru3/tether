@@ -157,6 +157,151 @@ header h1 {
     color: #fca5a5;
 }
 
+.notice {
+    color: #86efac;
+    font-size: 14px;
+}
+
+button {
+    font: inherit;
+    color: #e2e8f0;
+    background: #334155;
+    border: 1px solid #475569;
+    border-radius: 8px;
+    padding: 5px 12px;
+    cursor: pointer;
+}
+
+button:hover {
+    background: #475569;
+}
+
+button.ghost {
+    background: transparent;
+    border-color: #334155;
+    color: #94a3b8;
+    font-size: 13px;
+    padding: 3px 10px;
+}
+
+button.ghost:hover {
+    color: #e2e8f0;
+    border-color: #475569;
+}
+
+input,
+select {
+    font: inherit;
+    color: #e2e8f0;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 8px;
+    padding: 6px 10px;
+}
+
+input:focus,
+select:focus {
+    outline: 2px solid #3b82f6;
+    outline-offset: 1px;
+}
+
+input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+}
+
+.checkbox {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.limit-badge {
+    font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px;
+    color: #64748b;
+    border: 1px solid #334155;
+    border-radius: 6px;
+    padding: 1px 8px;
+    white-space: nowrap;
+}
+
+.blocked-tag {
+    margin-left: 8px;
+    font-family: ui-monospace, SFMono-Regular, "Cascadia Mono", Consolas, monospace;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #fca5a5;
+    border: 1px solid #7f1d1d;
+    border-radius: 6px;
+    padding: 1px 6px;
+}
+
+.blocked-banner {
+    border: 1px solid #7f1d1d;
+    border-radius: 12px;
+    padding: 16px 20px;
+    background: #450a0a;
+}
+
+.blocked-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 6px 0;
+}
+
+.pin-setup,
+.limit-editor {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 23, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+.modal {
+    background: #1e293b;
+    border: 1px solid #334155;
+    border-radius: 12px;
+    padding: 24px;
+    width: min(420px, calc(100vw - 48px));
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.modal h3 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.modal label {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 13px;
+    color: #94a3b8;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    margin-top: 8px;
+}
+
 @media (max-width: 480px) {
     .hero-total {
         font-size: 44px;

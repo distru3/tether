@@ -7,7 +7,7 @@
 
 mod ipc_client;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use st_ipc::Response;
 
 #[derive(Debug, Clone, Serialize)]
@@ -17,6 +17,8 @@ pub struct AgentStatus {
     pub tracker_backend: String,
     pub filter_backend: String,
     pub tracking_available: bool,
+    pub pin_configured: bool,
+    pub strict_mode: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -35,6 +37,8 @@ pub struct UsageRow {
     pub label: String,
     pub seconds: i64,
     pub color: Option<String>,
+    pub limit_seconds: Option<i64>,
+    pub blocked: bool,
 }
 
 impl From<st_ipc::DaySummaryDto> for DaySummary {
@@ -44,12 +48,124 @@ impl From<st_ipc::DaySummaryDto> for DaySummary {
             label: row.label,
             seconds: row.seconds,
             color: row.color,
+            limit_seconds: row.limit_seconds,
+            blocked: row.blocked,
         };
         Self {
             day: dto.day.0,
             total_seconds: dto.total_seconds,
             apps: dto.apps.into_iter().map(map).collect(),
             categories: dto.categories.into_iter().map(map).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Catalog {
+    pub apps: Vec<AppInfo>,
+    pub categories: Vec<CategoryInfo>,
+    pub limits: Vec<LimitInfo>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppInfo {
+    pub id: i64,
+    pub key: String,
+    pub display_name: String,
+    pub primary_category: i64,
+    pub tags: Vec<i64>,
+    pub user_classified: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CategoryInfo {
+    pub id: i64,
+    pub slug: String,
+    pub name: String,
+    pub kind: String,
+    pub color: String,
+    pub builtin: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LimitInfo {
+    pub id: i64,
+    pub target: LimitTarget,
+    pub default_minutes: u32,
+    pub weekday_minutes: [Option<u32>; 7],
+    pub enabled: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum LimitTarget {
+    App { id: i64 },
+    Category { id: i64 },
+    Total,
+}
+
+impl From<st_ipc::LimitTargetDto> for LimitTarget {
+    fn from(dto: st_ipc::LimitTargetDto) -> Self {
+        match dto {
+            st_ipc::LimitTargetDto::App { id } => LimitTarget::App { id },
+            st_ipc::LimitTargetDto::Category { id } => LimitTarget::Category { id },
+            st_ipc::LimitTargetDto::Total => LimitTarget::Total,
+        }
+    }
+}
+
+impl From<&LimitTarget> for st_ipc::LimitTargetDto {
+    fn from(t: &LimitTarget) -> Self {
+        match t {
+            LimitTarget::App { id } => st_ipc::LimitTargetDto::App { id: *id },
+            LimitTarget::Category { id } => st_ipc::LimitTargetDto::Category { id: *id },
+            LimitTarget::Total => st_ipc::LimitTargetDto::Total,
+        }
+    }
+}
+
+impl From<st_ipc::CatalogDto> for Catalog {
+    fn from(dto: st_ipc::CatalogDto) -> Self {
+        Self {
+            apps: dto
+                .apps
+                .into_iter()
+                .map(|a| AppInfo {
+                    id: a.id,
+                    key: a.key,
+                    display_name: a.display_name,
+                    primary_category: a.primary_category,
+                    tags: a.tags,
+                    user_classified: a.user_classified,
+                })
+                .collect(),
+            categories: dto
+                .categories
+                .into_iter()
+                .map(|c| CategoryInfo {
+                    id: c.id,
+                    slug: c.slug,
+                    name: c.name,
+                    kind: c.kind,
+                    color: c.color,
+                    builtin: c.builtin,
+                })
+                .collect(),
+            limits: dto
+                .limits
+                .into_iter()
+                .map(|l| LimitInfo {
+                    id: l.id,
+                    target: l.target.into(),
+                    default_minutes: l.default_minutes,
+                    weekday_minutes: l.weekday_minutes,
+                    enabled: l.enabled,
+                })
+                .collect(),
         }
     }
 }
@@ -73,6 +189,8 @@ fn get_status() -> AgentStatus {
             tracker_backend: dto.tracker_backend,
             filter_backend: dto.filter_backend,
             tracking_available: dto.tracking_available,
+            pin_configured: dto.pin_configured,
+            strict_mode: dto.strict_mode,
         },
         Ok(_) | Err(_) => AgentStatus {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -85,6 +203,8 @@ fn get_status() -> AgentStatus {
             }
             .into(),
             tracking_available: false,
+            pin_configured: false,
+            strict_mode: false,
         },
     }
 }
@@ -104,6 +224,88 @@ fn get_day_summary(day: i32) -> Result<DaySummary, String> {
     }
 }
 
+/// Everything the limit editor needs: apps, categories and current limits.
+#[tauri::command]
+fn get_catalog() -> Result<Catalog, String> {
+    match ipc_client::request(st_ipc::Request::Catalog) {
+        Ok(Response::Catalog(dto)) => Ok(dto.into()),
+        Ok(Response::Error { code, message }) => {
+            Err(format!("agent refused ({code:?}): {message}"))
+        }
+        Ok(_) => Err("unexpected agent response".into()),
+        Err(e) => Err(format!("agent unreachable: {e}")),
+    }
+}
+
+#[tauri::command]
+fn set_pin(new_pin: String, current_pin: Option<String>) -> Result<String, String> {
+    match ipc_client::request(st_ipc::Request::SetPin {
+        new_pin,
+        current_pin,
+    }) {
+        Ok(Response::Accepted { effective_utc }) => Ok(effective_utc),
+        Ok(Response::Error { code, message }) => {
+            Err(format!("agent refused ({code:?}): {message}"))
+        }
+        Ok(_) => Err("unexpected agent response".into()),
+        Err(e) => Err(format!("agent unreachable: {e}")),
+    }
+}
+
+#[tauri::command]
+fn set_limit(
+    target: LimitTarget,
+    default_minutes: u32,
+    enabled: bool,
+    pin: String,
+) -> Result<String, String> {
+    match ipc_client::request(st_ipc::Request::SetLimit {
+        target: (&target).into(),
+        default_minutes,
+        weekday_minutes: [None; 7],
+        enabled,
+        pin,
+    }) {
+        Ok(Response::Accepted { effective_utc }) => Ok(effective_utc),
+        Ok(Response::Error { code, message }) => {
+            Err(format!("agent refused ({code:?}): {message}"))
+        }
+        Ok(_) => Err("unexpected agent response".into()),
+        Err(e) => Err(format!("agent unreachable: {e}")),
+    }
+}
+
+#[tauri::command]
+fn delete_limit(target: LimitTarget, pin: String) -> Result<String, String> {
+    match ipc_client::request(st_ipc::Request::DeleteLimit {
+        target: (&target).into(),
+        pin,
+    }) {
+        Ok(Response::Accepted { effective_utc }) => Ok(effective_utc),
+        Ok(Response::Error { code, message }) => {
+            Err(format!("agent refused ({code:?}): {message}"))
+        }
+        Ok(_) => Err("unexpected agent response".into()),
+        Err(e) => Err(format!("agent unreachable: {e}")),
+    }
+}
+
+#[tauri::command]
+fn grant_override(target: LimitTarget, seconds: i64, pin: String) -> Result<(), String> {
+    match ipc_client::request(st_ipc::Request::GrantOverride {
+        target: (&target).into(),
+        seconds,
+        pin,
+    }) {
+        Ok(Response::Accepted { .. }) => Ok(()),
+        Ok(Response::Error { code, message }) => {
+            Err(format!("agent refused ({code:?}): {message}"))
+        }
+        Ok(_) => Err("unexpected agent response".into()),
+        Err(e) => Err(format!("agent unreachable: {e}")),
+    }
+}
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -114,7 +316,15 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![get_status, get_day_summary])
+        .invoke_handler(tauri::generate_handler![
+            get_status,
+            get_day_summary,
+            get_catalog,
+            set_pin,
+            set_limit,
+            delete_limit,
+            grant_override
+        ])
         .run(tauri::generate_context!())
         .expect("failed to launch Tauri application");
 }
