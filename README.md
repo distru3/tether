@@ -3,9 +3,11 @@
 Cross-platform screen-time tracker and limiter for Windows and (secondarily)
 Linux/X11. Rust workspace, three binaries, Tauri 2 dashboard.
 
-> Status: **M1 in progress**. The M0 spike is complete on Windows: live
-> tracking validated end-to-end (see the checklist below). Next up is the M1
-> insight alpha — auto-classification, IPC, and the real dashboard.
+> Status: **M2 in progress**. M1 insight alpha is complete: auto-classification,
+> real named-pipe IPC, and the live dashboard (see the checklist below). M2
+> adds limits and app blocking: PIN vault, limit CRUD over IPC, and the
+> enforcer that freezes exhausted apps. The limit editor, PIN setup and
+> "+15 minutes" override are live in the UI.
 
 ## Repository layout
 
@@ -94,6 +96,27 @@ eBPF/fanotify, kernel driver.
 - [x] Manual smoke: verify hosts writer round-trips a rule without disturbing
       an existing `127.0.0.1 localhost` line
       (validated 2026-08-21 against a throwaway temp hosts file)
+
+## Verification checklist (M1)
+
+- [x] Apps auto-classify into categories on first sight (curated signature
+      table; never overwrites a user decision)
+- [x] Named-pipe transport: UI talks to the agent over `\\.\pipe\screentime`;
+      `agent_connected` reflects reality
+- [x] Dashboard shows per-app and per-category usage for today, polling every 3s
+- [x] Live `DaySummary` round trip validated against a seeded database
+
+## Verification checklist (M2)
+
+- [x] PIN vault: Argon2id hashing; limit changes allowed before a PIN is set,
+      PIN required once configured
+- [x] Limit CRUD over IPC: `Catalog`, `SetLimit`, `DeleteLimit`, `GrantOverride`
+- [x] Anti-impulse cooldown: loosening applies after `limit_cooldown_hours`
+      (default 24h), tightening immediately; pending changes promote on time
+- [x] Enforcer: exhausted limits freeze the process tree; overrides thaw live;
+      day rollover thaws everything; NeverBlock categories never freeze
+      (covered by unit tests with a fake `ProcessController`)
+- [x] UI: limit editor, PIN setup, "+15 minutes" override, blocked banner
 
 ## License
 
