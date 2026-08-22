@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 
 // Refresh the dashboard this often. The agent writes usage in the background;
 // without polling the window freezes at whatever it first fetched.
 const REFRESH_MS = 3000;
+const TOAST_MS = 4500;
 
 // Shapes mirror the Rust types in ui/src-tauri/src/lib.rs; hand-kept in sync
 // until we generate these from the Rust types.
@@ -33,7 +34,10 @@ interface DaySummary {
     categories: UsageRow[];
 }
 
-type LimitTarget = { kind: "app"; id: number } | { kind: "category"; id: number } | { kind: "total" };
+type LimitTarget =
+    | { kind: "app"; id: number }
+    | { kind: "category"; id: number }
+    | { kind: "total" };
 
 interface AppInfo {
     id: number;
@@ -67,6 +71,13 @@ interface Catalog {
     limits: LimitInfo[];
 }
 
+type ToastKind = "success" | "error" | "info";
+interface Toast {
+    id: number;
+    kind: ToastKind;
+    message: string;
+}
+
 function todayKey(): number {
     const now = new Date();
     return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
@@ -98,11 +109,13 @@ function targetLabel(t: LimitTarget, catalog: Catalog | null): string {
     }
 }
 
+let toastSeq = 0;
+
 export function App() {
     const [status, setStatus] = useState<AgentStatus | null>(null);
     const [summary, setSummary] = useState<DaySummary | null>(null);
     const [catalog, setCatalog] = useState<Catalog | null>(null);
-    const [error, setError] = useState<string | null>(null);
+    const [toasts, setToasts] = useState<Toast[]>([]);
 
     // Limit editor state.
     const [editingTarget, setEditingTarget] = useState<LimitTarget | null>(null);
@@ -118,52 +131,56 @@ export function App() {
         target?: LimitTarget;
         minutes?: number;
         enabled?: boolean;
-        seconds?: number;
     } | null>(null);
     const [pinInput, setPinInput] = useState("");
     const [pinError, setPinError] = useState<string | null>(null);
-    const [notice, setNotice] = useState<string | null>(null);
+
+    const pushToast = useCallback((kind: ToastKind, message: string) => {
+        const id = ++toastSeq;
+        setToasts((t) => [...t, { id, kind, message }]);
+        window.setTimeout(() => {
+            setToasts((t) => t.filter((x) => x.id !== id));
+        }, TOAST_MS);
+    }, []);
+
+    const first = useRef(true);
 
     useEffect(() => {
-        let first = true;
-
         const refresh = () => {
             invoke<AgentStatus>("get_status")
                 .then(setStatus)
                 .catch((e: unknown) => {
-                    if (first) setError(String(e));
+                    if (first.current) {
+                        pushToast("error", `Agent unreachable: ${String(e)}`);
+                        first.current = false;
+                    }
                 });
 
             invoke<DaySummary>("get_day_summary", { day: todayKey() })
                 .then(setSummary)
                 .catch((e: unknown) => {
-                    if (first) setError(String(e));
+                    if (first.current) {
+                        pushToast("error", `Dashboard failed: ${String(e)}`);
+                        first.current = false;
+                    }
                 });
 
             invoke<Catalog>("get_catalog")
                 .then(setCatalog)
                 .catch(() => {});
-            first = false;
         };
 
         refresh();
         const timer = setInterval(refresh, REFRESH_MS);
         return () => clearInterval(timer);
-    }, []);
+    }, [pushToast]);
 
     const connected = status?.agent_connected ?? false;
     const total = summary?.totalSeconds ?? 0;
-    const updated = summary ? new Date().toLocaleTimeString() : null;
     const pinConfigured = status?.pin_configured ?? false;
-
     const blockedApps = summary?.apps.filter((a) => a.blocked) ?? [];
 
     // --- Actions ---
-
-    function clearNotice() {
-        setNotice(null);
-        setPinError(null);
-    }
 
     async function handlePinSetup() {
         if (!pinNew) {
@@ -178,7 +195,7 @@ export function App() {
             setPinNew("");
             setPinCurrent("");
             setShowPinSetup(false);
-            setNotice("PIN saved.");
+            pushToast("success", "PIN saved.");
             setStatus((s) => (s ? { ...s, pin_configured: true } : s));
         } catch (e) {
             setPinError(String(e));
@@ -194,7 +211,6 @@ export function App() {
     function confirmEdit() {
         if (!editingTarget) return;
         const minutes = Math.max(0, parseInt(editMinutes, 10) || 0);
-        clearNotice();
         if (pinConfigured) {
             setPinPromptFor({ kind: "set_limit", target: editingTarget, minutes, enabled: editEnabled });
             setPinInput("");
@@ -211,8 +227,8 @@ export function App() {
                 enabled,
                 pin,
             });
-            const when = effective ? ` (takes effect ${new Date(effective).toLocaleString()})` : "";
-            setNotice(`Limit saved${when}.`);
+            const when = effective ? ` Takes effect ${new Date(effective).toLocaleString()}.` : "";
+            pushToast("success", `Limit saved.${when}`);
             setEditingTarget(null);
             setPinPromptFor(null);
         } catch (e) {
@@ -221,7 +237,6 @@ export function App() {
     }
 
     function startDelete(target: LimitTarget) {
-        clearNotice();
         if (pinConfigured) {
             setPinPromptFor({ kind: "delete_limit", target });
             setPinInput("");
@@ -233,8 +248,8 @@ export function App() {
     async function doDelete(target: LimitTarget, pin: string) {
         try {
             const effective = await invoke<string>("delete_limit", { target, pin });
-            const when = effective ? ` (takes effect ${new Date(effective).toLocaleString()})` : "";
-            setNotice(`Limit removed${when}.`);
+            const when = effective ? ` Takes effect ${new Date(effective).toLocaleString()}.` : "";
+            pushToast("info", `Limit removed.${when}`);
             setPinPromptFor(null);
         } catch (e) {
             setPinError(String(e));
@@ -242,19 +257,18 @@ export function App() {
     }
 
     function startOverride(target: LimitTarget) {
-        clearNotice();
         if (pinConfigured) {
-            setPinPromptFor({ kind: "override", target, seconds: 15 * 60 });
+            setPinPromptFor({ kind: "override", target });
             setPinInput("");
         } else {
-            doOverride(target, 15 * 60, "");
+            doOverride(target, "");
         }
     }
 
-    async function doOverride(target: LimitTarget, seconds: number, pin: string) {
+    async function doOverride(target: LimitTarget, pin: string) {
         try {
-            await invoke("grant_override", { target, seconds, pin });
-            setNotice("+15 minutes granted.");
+            await invoke("grant_override", { target, seconds: 15 * 60, pin });
+            pushToast("success", "+15 minutes granted.");
             setPinPromptFor(null);
         } catch (e) {
             setPinError(String(e));
@@ -278,36 +292,46 @@ export function App() {
                 if (pinPromptFor.target) doDelete(pinPromptFor.target, pin);
                 break;
             case "override":
-                if (pinPromptFor.target)
-                    doOverride(pinPromptFor.target, pinPromptFor.seconds ?? 900, pin);
+                if (pinPromptFor.target) doOverride(pinPromptFor.target, pin);
                 break;
         }
     }
 
     return (
         <main className="app">
-            <header>
-                <h1>Screentime</h1>
-                <p className="subtitle">
-                    {connected && status
-                        ? `Connected · ${status.tracker_backend} · v${status.version}`
-                        : "Agent not running — start screentime-agent to see live data"}
-                </p>
+            {/* Toasts */}
+            <div className="toasts" aria-live="polite">
+                {toasts.map((t) => (
+                    <div key={t.id} className={`toast toast-${t.kind}`}>
+                        {t.message}
+                    </div>
+                ))}
+            </div>
+
+            <header className="masthead">
+                <div>
+                    <h1>Screentime</h1>
+                    <p className="subtitle">
+                        {connected && status
+                            ? `${status.tracker_backend} tracking · v${status.version}`
+                            : "Agent not running — start screentime-agent"}
+                    </p>
+                </div>
+                <span className={`live-dot ${connected ? "on" : ""}`} title={connected ? "connected" : "disconnected"} />
             </header>
 
-            {error && <p className="error">Command failed: {error}</p>}
-            {notice && <p className="notice">{notice}</p>}
-
             {!pinConfigured && connected && (
-                <section className="panel">
-                    <h2 className="eyebrow">Set a PIN</h2>
+                <section className="panel card">
+                    <div className="card-head">
+                        <h2 className="eyebrow">Set a PIN</h2>
+                        <button className="ghost" onClick={() => setShowPinSetup((v) => !v)}>
+                            {showPinSetup ? "Cancel" : "Set PIN"}
+                        </button>
+                    </div>
                     <p className="hint">
-                        A PIN is required to change limits or grant overrides. It is optional until
-                        you set one, so you can try limits first.
+                        A PIN gates limit changes and overrides. Optional until you set one.
                     </p>
-                    {!showPinSetup ? (
-                        <button onClick={() => setShowPinSetup(true)}>Set PIN</button>
-                    ) : (
+                    {showPinSetup && (
                         <div className="pin-setup">
                             {pinConfigured && (
                                 <input
@@ -324,44 +348,48 @@ export function App() {
                                 onChange={(e) => setPinNew(e.target.value)}
                             />
                             <button onClick={handlePinSetup}>Save PIN</button>
-                            <button className="ghost" onClick={() => setShowPinSetup(false)}>
-                                Cancel
-                            </button>
+                            {pinError && <p className="error-text">{pinError}</p>}
                         </div>
                     )}
-                    {pinError && <p className="error">{pinError}</p>}
                 </section>
             )}
 
+            {/* The day as one horizon line. */}
             <section className="hero" aria-label="Today's screen time">
-                <p className="eyebrow">
-                    Today
-                    {updated && <span className="updated">updated {updated}</span>}
-                </p>
+                <div className="hero-meta">
+                    <span className="eyebrow">Today</span>
+                    <span className="hero-clock">
+                        {summary ? new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}
+                    </span>
+                </div>
                 <p className="hero-total">{formatDuration(total)}</p>
-                <div className="day-bar" aria-hidden="true">
-                    {summary?.categories.length ? (
-                        summary.categories.map((c) => (
-                            <span
-                                key={c.id}
-                                className="day-bar-seg"
-                                style={{
-                                    background: c.color ?? "#94a3b8",
-                                    flexGrow: c.seconds,
-                                }}
-                            />
-                        ))
-                    ) : (
-                        <span className="day-bar-seg day-bar-empty" />
-                    )}
+                <div className="horizon" aria-hidden="true">
+                    <div className="horizon-track">
+                        {summary?.categories.length ? (
+                            summary.categories.map((c) => (
+                                <span
+                                    key={c.id}
+                                    className="horizon-seg"
+                                    style={{
+                                        background: c.color ?? "#94a3b8",
+                                        flexGrow: c.seconds,
+                                    }}
+                                />
+                            ))
+                        ) : (
+                            <span className="horizon-seg horizon-empty" />
+                        )}
+                    </div>
                 </div>
             </section>
 
-            {!connected && !error && <p className="hint">Waiting for the agent…</p>}
+            {!connected && <p className="hint">Waiting for the agent…</p>}
 
             {blockedApps.length > 0 && (
-                <section className="panel blocked-banner" aria-label="Blocked apps">
-                    <h2 className="eyebrow">Blocked right now</h2>
+                <section className="panel card card-blocked" aria-label="Blocked apps">
+                    <div className="card-head">
+                        <h2 className="eyebrow">Blocked right now</h2>
+                    </div>
                     {blockedApps.map((a) => (
                         <div key={a.id} className="blocked-row">
                             <span className="row-label">{a.label}</span>
@@ -374,7 +402,7 @@ export function App() {
             )}
 
             {summary && summary.categories.length > 0 && (
-                <section className="panel" aria-label="By category">
+                <section className="panel">
                     <h2 className="eyebrow">By category</h2>
                     <ul className="rows">
                         {summary.categories.map((c) => {
@@ -383,25 +411,27 @@ export function App() {
                             );
                             return (
                                 <li key={c.id} className="row">
-                                    <span
-                                        className="dot"
-                                        style={{ background: c.color ?? "#94a3b8" }}
-                                    />
+                                    <span className="dot" style={{ background: c.color ?? "#94a3b8" }} />
                                     <span className="row-label">{c.label}</span>
+                                    <span className="row-bar">
+                                        <span
+                                            className="row-bar-fill"
+                                            style={{
+                                                background: c.color ?? "#94a3b8",
+                                                width: `${percent(c.seconds, total)}%`,
+                                            }}
+                                        />
+                                    </span>
                                     <span className="row-time">{formatDuration(c.seconds)}</span>
                                     <span className="row-pct">{percent(c.seconds, total)}%</span>
                                     {limit && (
-                                        <span className="limit-badge">
+                                        <button
+                                            className="ghost badge-btn"
+                                            onClick={() => startSetLimit({ kind: "category", id: c.id }, limit)}
+                                        >
                                             {formatDuration(limit.defaultMinutes * 60)}/day
-                                        </span>
+                                        </button>
                                     )}
-                                    <button
-                                        className="ghost"
-                                        onClick={() => startSetLimit({ kind: "category", id: c.id }, limit)}
-                                        title="Set a limit for this category"
-                                    >
-                                        limit
-                                    </button>
                                 </li>
                             );
                         })}
@@ -410,7 +440,7 @@ export function App() {
             )}
 
             {summary && summary.apps.length > 0 && (
-                <section className="panel" aria-label="By app">
+                <section className="panel">
                     <h2 className="eyebrow">By app</h2>
                     <ul className="rows">
                         {summary.apps.map((a) => {
@@ -419,28 +449,30 @@ export function App() {
                             );
                             return (
                                 <li key={a.id} className="row">
-                                    <span
-                                        className="dot"
-                                        style={{ background: a.color ?? "#94a3b8" }}
-                                    />
+                                    <span className="dot" style={{ background: a.color ?? "#94a3b8" }} />
                                     <span className="row-label">
                                         {a.label}
                                         {a.blocked && <span className="blocked-tag">blocked</span>}
                                     </span>
+                                    <span className="row-bar">
+                                        <span
+                                            className="row-bar-fill"
+                                            style={{
+                                                background: a.color ?? "#94a3b8",
+                                                width: `${percent(a.seconds, total)}%`,
+                                            }}
+                                        />
+                                    </span>
                                     <span className="row-time">{formatDuration(a.seconds)}</span>
                                     <span className="row-pct">{percent(a.seconds, total)}%</span>
                                     {limit && (
-                                        <span className="limit-badge">
+                                        <button
+                                            className="ghost badge-btn"
+                                            onClick={() => startSetLimit({ kind: "app", id: a.id }, limit)}
+                                        >
                                             {formatDuration(limit.defaultMinutes * 60)}/day
-                                        </span>
+                                        </button>
                                     )}
-                                    <button
-                                        className="ghost"
-                                        onClick={() => startSetLimit({ kind: "app", id: a.id }, limit)}
-                                        title="Set a limit for this app"
-                                    >
-                                        limit
-                                    </button>
                                 </li>
                             );
                         })}
@@ -449,26 +481,23 @@ export function App() {
             )}
 
             {catalog && catalog.categories.length > 0 && (
-                <section className="panel" aria-label="All limits">
+                <section className="panel">
                     <h2 className="eyebrow">Limits</h2>
                     <p className="hint">
-                        Set a daily budget for a category or an app. Loosening a limit takes effect
-                        after the cooldown; tightening applies immediately.
+                        Set a daily budget for a category or an app. Loosening takes effect after the
+                        cooldown; tightening applies immediately.
                     </p>
                     <div className="limit-editor">
                         <select
                             onChange={(e) => {
                                 const v = e.target.value;
                                 if (v === "total") {
-                                    const existing = catalog.limits.find(
-                                        (l) => l.target.kind === "total",
-                                    );
+                                    const existing = catalog.limits.find((l) => l.target.kind === "total");
                                     startSetLimit({ kind: "total" }, existing);
                                 } else {
                                     const id = parseInt(v, 10);
                                     const existing = catalog.limits.find(
-                                        (l) =>
-                                            l.target.kind === "category" && l.target.id === id,
+                                        (l) => l.target.kind === "category" && l.target.id === id,
                                     );
                                     startSetLimit({ kind: "category", id }, existing);
                                 }
@@ -518,10 +547,7 @@ export function App() {
                                         {formatDuration(l.defaultMinutes * 60)}/day
                                     </span>
                                     <span className="row-pct">{l.enabled ? "on" : "off"}</span>
-                                    <button
-                                        className="ghost"
-                                        onClick={() => startSetLimit(l.target, l)}
-                                    >
+                                    <button className="ghost" onClick={() => startSetLimit(l.target, l)}>
                                         edit
                                     </button>
                                     <button className="ghost" onClick={() => startDelete(l.target)}>
@@ -532,6 +558,10 @@ export function App() {
                         </ul>
                     )}
                 </section>
+            )}
+
+            {connected && summary && total === 0 && (
+                <p className="hint">No screen time recorded yet today.</p>
             )}
 
             {editingTarget && (
@@ -570,17 +600,27 @@ export function App() {
                 <div className="modal-backdrop">
                     <div className="modal">
                         <h3>Enter PIN</h3>
+                        <p className="hint">
+                            {pinPromptFor.kind === "set_limit"
+                                ? "PIN required to change this limit."
+                                : pinPromptFor.kind === "delete_limit"
+                                  ? "PIN required to remove this limit."
+                                  : "PIN required to grant more time."}
+                        </p>
                         <input
                             type="password"
                             placeholder="PIN"
                             value={pinInput}
                             autoFocus
-                            onChange={(e) => setPinInput(e.target.value)}
+                            onChange={(e) => {
+                                setPinInput(e.target.value);
+                                setPinError(null);
+                            }}
                             onKeyDown={(e) => {
                                 if (e.key === "Enter") confirmPin();
                             }}
                         />
-                        {pinError && <p className="error">{pinError}</p>}
+                        {pinError && <p className="error-text">{pinError}</p>}
                         <div className="modal-actions">
                             <button onClick={confirmPin}>Confirm</button>
                             <button className="ghost" onClick={() => setPinPromptFor(null)}>
@@ -589,10 +629,6 @@ export function App() {
                         </div>
                     </div>
                 </div>
-            )}
-
-            {connected && summary && total === 0 && (
-                <p className="hint">No screen time recorded yet today.</p>
             )}
         </main>
     );
