@@ -79,14 +79,16 @@ fn read_blocked(
     }
 }
 
-/// An active overlay: its thread and the control used to dismiss it.
-type ActiveOverlay = (
-    std::thread::JoinHandle<()>,
-    std::sync::Arc<overlay::OverlayControl>,
-);
+/// An active overlay: the app it covers and the dismiss control. The overlay
+/// thread is detached; we only need the control to close the window.
+struct ActiveOverlay {
+    app_id: i64,
+    control: std::sync::Arc<overlay::OverlayControl>,
+}
 
 /// If the focused app is blocked, ensure an overlay is showing; otherwise
-/// ensure it is gone.
+/// ensure it is gone. Focus-based: the overlay stays only while the blocked
+/// app it covers is the focused one, or the block is gone.
 fn drive_overlay(overlay_active: &mut Option<ActiveOverlay>, blocked: &[st_ipc::BlockedAppDto]) {
     let focused = focused_window_key();
     let focused_blocked = focused.as_ref().and_then(|key| {
@@ -96,45 +98,79 @@ fn drive_overlay(overlay_active: &mut Option<ActiveOverlay>, blocked: &[st_ipc::
             .map(|b| b.app_id)
     });
 
-    match (focused_blocked, overlay_active.is_some()) {
-        (Some(app_id), false) => {
-            let blocked_app = blocked.iter().find(|b| b.app_id == app_id).cloned();
-            tracing::info!(app = ?app_id, "showing block overlay");
-            let rect = focused_window_rect();
-            let callbacks = overlay::OverlayCallbacks::new(
-                move |pin| close_app(app_id, pin),
-                move |pin| extend_app(app_id, pin),
-            );
-            let control = overlay::OverlayControl::new();
-            let control2 = control.clone();
-            let handle = std::thread::spawn(move || {
-                overlay::run_overlay(rect, callbacks, control2);
-            });
-            *overlay_active = Some((handle, control));
-            let _ = blocked_app;
-        }
-        (None, true) => {
-            tracing::info!("block lifted; dismissing overlay");
-            if let Some((_handle, control)) = overlay_active.take() {
-                control.dismiss();
+    match focused_blocked {
+        // A blocked app is focused.
+        Some(app_id) => {
+            match overlay_active {
+                // Already covering this exact app: nothing to do.
+                Some(active) if active.app_id == app_id => {}
+                // Covering a different app (or none): switch. Dismiss any old
+                // overlay, then show a fresh one for the newly focused app.
+                _ => {
+                    if let Some(old) = overlay_active.take() {
+                        old.control.dismiss();
+                    }
+                    tracing::info!(app = app_id, "showing block overlay");
+                    let rect = focused_window_rect();
+                    let label = blocked
+                        .iter()
+                        .find(|b| b.app_id == app_id)
+                        .map(|b| b.label.clone())
+                        .unwrap_or_else(|| format!("#{app_id}"));
+                    let pin_required = pin_configured();
+                    let mode = if pin_required {
+                        overlay::OverlayMode::ExtendLocked
+                    } else {
+                        overlay::OverlayMode::Buttons
+                    };
+                    let callbacks = overlay::OverlayCallbacks::new(
+                        move || close_app(app_id),
+                        move || extend_app(app_id),
+                    );
+                    let control = overlay::OverlayControl::new();
+                    let control2 = control.clone();
+                    let _handle = std::thread::spawn(move || {
+                        overlay::run_overlay(rect, callbacks, control2, mode, label);
+                    });
+                    *overlay_active = Some(ActiveOverlay { app_id, control });
+                }
             }
         }
-        _ => {}
+        // Nothing blocked is focused.
+        None => {
+            if let Some(active) = overlay_active.take() {
+                tracing::info!(
+                    app = active.app_id,
+                    "block lifted or focus lost; dismissing"
+                );
+                active.control.dismiss();
+            }
+        }
     }
 }
 
-/// "Quit" from the overlay: terminate the app's process tree (PIN-gated).
-fn close_app(app_id: i64, pin: &str) -> bool {
+/// Whether a PIN is configured, from the agent's Status.
+fn pin_configured() -> bool {
+    match request_agent(Request::Status) {
+        Ok(Response::Status(dto)) => dto.pin_configured,
+        _ => false,
+    }
+}
+
+/// "Quit" from the overlay: terminate the app's process tree. The overlay has
+/// no PIN field, so it sends an empty PIN; this succeeds only when no PIN is
+/// configured (the `Buttons` mode), and fails cleanly otherwise.
+fn close_app(app_id: i64) -> bool {
     match request_agent(Request::CloseApps {
         app_id,
-        pin: pin.to_string(),
+        pin: String::new(),
     }) {
         Ok(Response::Accepted { .. }) => true,
         Ok(Response::Error {
             code: st_ipc::ErrorCode::BadPin,
             ..
         }) => {
-            tracing::warn!("wrong PIN on quit");
+            tracing::warn!("PIN required to quit from the overlay; use Screentime");
             false
         }
         Ok(other) => {
@@ -148,19 +184,20 @@ fn close_app(app_id: i64, pin: &str) -> bool {
     }
 }
 
-/// "+15 minutes" from the overlay (PIN-gated).
-fn extend_app(app_id: i64, pin: &str) -> bool {
+/// "+15 minutes" from the overlay. Shown only in the no-PIN (`Buttons`) mode,
+/// so the empty PIN is accepted.
+fn extend_app(app_id: i64) -> bool {
     match request_agent(Request::GrantOverride {
         target: st_ipc::LimitTargetDto::App { id: app_id },
         seconds: 15 * 60,
-        pin: pin.to_string(),
+        pin: String::new(),
     }) {
         Ok(Response::Accepted { .. }) => true,
         Ok(Response::Error {
             code: st_ipc::ErrorCode::BadPin,
             ..
         }) => {
-            tracing::warn!("wrong PIN on extend");
+            tracing::warn!("PIN required to extend; use Screentime");
             false
         }
         Ok(other) => {

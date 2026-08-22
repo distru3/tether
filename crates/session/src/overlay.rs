@@ -10,14 +10,21 @@
 //!
 //! # Behaviour
 //!
-//! * Topmost, borderless, layered window over the blocked app's rect. Opaque,
-//!   so mouse input cannot pass through.
-//! * Fades in quickly (opacity 0 → 1 over ~200 ms).
-//! * A low-level keyboard hook swallows keys while visible, so the blocked app
-//!   cannot be driven (Alt+Tab, Alt+F4, shortcuts). The overlay has no close
-//!   affordance and cannot be dismissed.
-//! * If a PIN is configured, a PIN field gates the Quit / +15 min buttons: a
-//!   wrong PIN keeps the overlay locked.
+//! * A single topmost, borderless, layered window over the blocked app's rect.
+//!   It is opaque, so mouse input cannot pass through.
+//! * Fully custom-painted in `WM_PAINT` (no child controls): a dark panel, the
+//!   app label, and hit-region buttons (Quit / +15 min). Because there are no
+//!   child windows, layered alpha fades work — the overlay genuinely fades in
+//!   over ~200 ms.
+//! * `WS_EX_NOACTIVATE` keeps the overlay from ever becoming the "foreground
+//!   window", so clicking it cannot confuse the session's focus-based logic.
+//! * A low-level keyboard hook swallows all keys while the overlay is visible,
+//!   so the blocked app cannot be driven (Alt+Tab, Alt+F4, shortcuts). The
+//!   overlay has no close affordance and cannot be dismissed.
+//! * Two modes:
+//!   - [`OverlayMode::Buttons`] (no PIN): show **Quit** and **+15 min**.
+//!   - [`OverlayMode::ExtendLocked`] (PIN set): show **Quit** plus a message
+//!     telling the user to open Screentime to extend.
 //!
 //! # Honest limits
 //!
@@ -32,34 +39,36 @@ use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-    GetWindowLongPtrW, GetWindowTextW, PostQuitMessage, RegisterClassExW, SetWindowLongPtrW,
-    SetWindowsHookExW, TranslateMessage, UnhookWindowsHookEx, BS_PUSHBUTTON, ES_AUTOHSCROLL,
-    ES_PASSWORD, GWLP_USERDATA, HHOOK, MSG, WINDOWS_HOOK_ID, WINDOW_STYLE, WM_COMMAND, WM_DESTROY,
-    WM_NCCREATE, WNDCLASSEXW, WS_CHILD, WS_EX_LAYERED, WS_EX_TOPMOST, WS_POPUP, WS_TABSTOP,
-    WS_VISIBLE,
+    GetWindowLongPtrW, PostQuitMessage, RegisterClassExW, SetWindowLongPtrW, SetWindowsHookExW,
+    TranslateMessage, UnhookWindowsHookEx, GWLP_USERDATA, HHOOK, MSG, WINDOWS_HOOK_ID, WM_DESTROY,
+    WM_LBUTTONUP, WM_NCCREATE, WM_PAINT, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
+    WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
 };
 
 /// `WH_KEYBOARD_LL` is a `WINDOWS_HOOK_ID` constant in `WindowsAndMessaging`.
 const WH_KEYBOARD_LL: WINDOWS_HOOK_ID = WINDOWS_HOOK_ID(13);
 
-/// Child control IDs.
-const BTN_QUIT: i32 = 1;
-const BTN_EXTEND: i32 = 2;
-const EDIT_PIN: i32 = 3;
+/// Which actions the overlay shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OverlayMode {
+    /// No PIN configured: show Quit + +15 min.
+    Buttons,
+    /// PIN configured: show Quit + a "open Screentime to extend" message.
+    ExtendLocked,
+}
 
 /// Callbacks the session loop provides so the overlay can trigger agent
-/// actions (Quit / +15 min). Each returns whether the action was accepted; a
-/// `false` means the PIN was wrong and the overlay stays locked.
+/// actions. Quit is always available; extend only in [`OverlayMode::Buttons`].
 pub struct OverlayCallbacks {
-    pub on_quit: std::sync::Arc<dyn Fn(&str) -> bool + Send + Sync>,
-    pub on_extend: std::sync::Arc<dyn Fn(&str) -> bool + Send + Sync>,
+    pub on_quit: std::sync::Arc<dyn Fn() -> bool + Send + Sync>,
+    pub on_extend: std::sync::Arc<dyn Fn() -> bool + Send + Sync>,
 }
 
 impl OverlayCallbacks {
     pub fn new<Q, E>(on_quit: Q, on_extend: E) -> Self
     where
-        Q: Fn(&str) -> bool + Send + Sync + 'static,
-        E: Fn(&str) -> bool + Send + Sync + 'static,
+        Q: Fn() -> bool + Send + Sync + 'static,
+        E: Fn() -> bool + Send + Sync + 'static,
     {
         Self {
             on_quit: std::sync::Arc::new(on_quit),
@@ -68,13 +77,33 @@ impl OverlayCallbacks {
     }
 }
 
+/// Per-window state stored in `GWLP_USERDATA`.
+struct OverlayState {
+    callbacks: OverlayCallbacks,
+    mode: OverlayMode,
+    label: String,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RectI {
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+}
+
+impl RectI {
+    fn contains(&self, px: i32, py: i32) -> bool {
+        px >= self.x && px < self.x + self.w && py >= self.y && py < self.y + self.h
+    }
+}
+
 /// The low-level keyboard hook, installed only while the overlay is visible.
 /// Stored as its pointer address so the `static` stays `Send + Sync`.
 static KEYBOARD_HOOK: std::sync::Mutex<Option<isize>> = std::sync::Mutex::new(None);
 
 /// Shared control for the session loop: lets the poll thread dismiss the
-/// overlay (e.g. when the block lifts) by posting `WM_CLOSE` to its window.
-/// Stores the window handle as its pointer address so the struct stays `Send`.
+/// overlay by posting `WM_CLOSE`. Stores the handle as its pointer address.
 pub struct OverlayControl {
     hwnd: std::sync::Mutex<Option<isize>>,
 }
@@ -90,8 +119,6 @@ impl OverlayControl {
         *self.hwnd.lock().unwrap() = Some(hwnd.0 as isize);
     }
 
-    /// Ask the overlay to close. Safe to call from any thread; it posts a
-    /// `WM_CLOSE` which the message loop processes.
     pub fn dismiss(&self) {
         if let Some(addr) = *self.hwnd.lock().unwrap() {
             unsafe {
@@ -107,14 +134,15 @@ impl OverlayControl {
 }
 
 /// Run the overlay over `rect` (x, y, width, height). Blocks the calling thread
-/// in a message loop until the overlay is dismissed. Call on a dedicated
-/// thread so the polling loop can keep watching the agent.
+/// in a message loop until dismissed. Call on a dedicated thread.
 pub fn run_overlay(
     rect: (i32, i32, i32, i32),
     callbacks: OverlayCallbacks,
     control: Arc<OverlayControl>,
+    mode: OverlayMode,
+    label: String,
 ) {
-    unsafe { run_overlay_impl(rect, callbacks, control) }
+    unsafe { run_overlay_impl(rect, callbacks, control, mode, label) }
 }
 
 unsafe extern "system" fn wnd_proc(
@@ -125,24 +153,38 @@ unsafe extern "system" fn wnd_proc(
 ) -> LRESULT {
     match msg {
         WM_NCCREATE => {
-            // `lparam` points at the CREATESTRUCT whose `lpCreateParams` is the
-            // callbacks we passed to CreateWindowExW. Store it for later.
             let cs = lparam.0 as *const windows::Win32::UI::WindowsAndMessaging::CREATESTRUCTW;
-            let callbacks = (*cs).lpCreateParams as *const OverlayCallbacks;
-            SetWindowLongPtrW(hwnd, GWLP_USERDATA, callbacks as isize);
+            let state = (*cs).lpCreateParams as *const OverlayState;
+            SetWindowLongPtrW(hwnd, GWLP_USERDATA, state as isize);
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
-        WM_COMMAND => {
-            let id = (wparam.0 & 0xffff) as i32;
-            let callbacks = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const OverlayCallbacks;
-            if !callbacks.is_null() {
-                let cb = &*callbacks;
-                let pin = read_pin(hwnd);
-                let accepted = match id {
-                    BTN_QUIT => (cb.on_quit)(&pin),
-                    BTN_EXTEND => (cb.on_extend)(&pin),
-                    _ => false,
-                };
+        WM_PAINT => {
+            let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const OverlayState;
+            if !state.is_null() {
+                paint(hwnd, &*state);
+            }
+            LRESULT(0)
+        }
+        WM_LBUTTONUP => {
+            let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const OverlayState;
+            if !state.is_null() {
+                let px = (lparam.0 & 0xffff) as i16 as i32;
+                let py = ((lparam.0 >> 16) & 0xffff) as i16 as i32;
+                let st = &*state;
+                let (qrect, errect) = layout(hwnd, st.mode);
+                let mut accepted = false;
+                if let Some(r) = qrect {
+                    if r.contains(px, py) {
+                        accepted = (st.callbacks.on_quit)();
+                    }
+                }
+                if !accepted && st.mode == OverlayMode::Buttons {
+                    if let Some(r) = errect {
+                        if r.contains(px, py) {
+                            accepted = (st.callbacks.on_extend)();
+                        }
+                    }
+                }
                 if accepted {
                     let _ = DestroyWindow(hwnd);
                 }
@@ -150,9 +192,9 @@ unsafe extern "system" fn wnd_proc(
             LRESULT(0)
         }
         WM_DESTROY => {
-            let callbacks = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut OverlayCallbacks;
-            if !callbacks.is_null() {
-                drop(Box::from_raw(callbacks));
+            let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut OverlayState;
+            if !state.is_null() {
+                drop(Box::from_raw(state));
             }
             PostQuitMessage(0);
             LRESULT(0)
@@ -161,26 +203,115 @@ unsafe extern "system" fn wnd_proc(
     }
 }
 
-unsafe fn read_pin(hwnd: HWND) -> String {
-    let edit = pin_edit_handle(hwnd);
-    let mut buf = vec![0u16; 64];
-    let len = GetWindowTextW(edit, &mut buf);
-    if len > 0 {
-        String::from_utf16_lossy(&buf[..len as usize])
+/// Layout constants — keep in sync with `layout`.
+const PAD: i32 = 24;
+const BTN_H: i32 = 44;
+const BTN_GAP: i32 = 12;
+
+/// Compute button hit-rects from the window's client size. In
+/// [`OverlayMode::ExtendLocked`] there is no extend button.
+unsafe fn layout(hwnd: HWND, mode: OverlayMode) -> (Option<RectI>, Option<RectI>) {
+    let mut rect = windows::Win32::Foundation::RECT::default();
+    let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect);
+    let cw = rect.right - rect.left;
+    let ch = rect.bottom - rect.top;
+
+    let avail = cw - PAD * 2;
+    let btn_w = (avail - BTN_GAP) / 2;
+    let by = ch - PAD - BTN_H;
+
+    let qrect = RectI {
+        x: PAD,
+        y: by,
+        w: btn_w,
+        h: BTN_H,
+    };
+    let errect = if mode == OverlayMode::Buttons {
+        Some(RectI {
+            x: PAD + btn_w + BTN_GAP,
+            y: by,
+            w: btn_w,
+            h: BTN_H,
+        })
     } else {
-        String::new()
-    }
+        None
+    };
+    (Some(qrect), errect)
 }
 
-fn pin_edit_handle(hwnd: HWND) -> HWND {
-    unsafe { windows::Win32::UI::WindowsAndMessaging::GetDlgItem(hwnd, EDIT_PIN) }
-        .unwrap_or(HWND::default())
+unsafe fn paint(hwnd: HWND, state: &OverlayState) {
+    let mut rect = windows::Win32::Foundation::RECT::default();
+    let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect);
+    let cw = rect.right - rect.left;
+
+    let mut ps = windows::Win32::Graphics::Gdi::PAINTSTRUCT::default();
+    let hdc = windows::Win32::Graphics::Gdi::BeginPaint(hwnd, &mut ps);
+
+    // Background: dark ink panel.
+    let bg = windows::Win32::Graphics::Gdi::CreateSolidBrush(windows::Win32::Foundation::COLORREF(
+        0x0c0f1a,
+    ));
+    let _ = windows::Win32::Graphics::Gdi::FillRect(hdc, &rect, bg);
+    let _ = windows::Win32::Graphics::Gdi::DeleteObject(bg);
+
+    // Top accent line (ember).
+    let accent = windows::Win32::Graphics::Gdi::CreateSolidBrush(
+        windows::Win32::Foundation::COLORREF(0x3d6bff),
+    );
+    let accent_rect = windows::Win32::Foundation::RECT {
+        left: 0,
+        top: 0,
+        right: cw,
+        bottom: 3,
+    };
+    let _ = windows::Win32::Graphics::Gdi::FillRect(hdc, &accent_rect, accent);
+    let _ = windows::Win32::Graphics::Gdi::DeleteObject(accent);
+
+    // Title.
+    let title: Vec<u16> = "Time's up".encode_utf16().collect();
+    let _ = windows::Win32::Graphics::Gdi::TextOutW(hdc, PAD, 34, &title);
+
+    // App label.
+    let label: Vec<u16> = state.label.encode_utf16().collect();
+    let _ = windows::Win32::Graphics::Gdi::TextOutW(hdc, PAD, 70, &label);
+
+    // Buttons at the bottom.
+    let (qrect, errect) = layout(hwnd, state.mode);
+    if let Some(q) = qrect {
+        draw_button(hdc, &q, "Quit", 0x2b3347);
+    }
+    if let Some(e) = errect {
+        draw_button(hdc, &e, "+15 min", 0x3d6bff);
+    }
+
+    let _ = windows::Win32::Graphics::Gdi::EndPaint(hwnd, &ps);
+}
+
+unsafe fn draw_button(hdc: windows::Win32::Graphics::Gdi::HDC, r: &RectI, label: &str, fill: u32) {
+    let brush =
+        windows::Win32::Graphics::Gdi::CreateSolidBrush(windows::Win32::Foundation::COLORREF(fill));
+    let rr = windows::Win32::Foundation::RECT {
+        left: r.x,
+        top: r.y,
+        right: r.x + r.w,
+        bottom: r.y + r.h,
+    };
+    let _ = windows::Win32::Graphics::Gdi::FillRect(hdc, &rr, brush);
+    let _ = windows::Win32::Graphics::Gdi::DeleteObject(brush);
+
+    let wide: Vec<u16> = label.encode_utf16().collect();
+    let text_w = wide.len() as i32 * 8;
+    let tx = r.x + (r.w - text_w) / 2;
+    let ty = r.y + (r.h - 20) / 2;
+    let _ = windows::Win32::Graphics::Gdi::TextOutW(hdc, tx, ty, &wide);
 }
 
 unsafe fn run_overlay_impl(
     rect: (i32, i32, i32, i32),
     callbacks: OverlayCallbacks,
     control: Arc<OverlayControl>,
+    mode: OverlayMode,
+    label: String,
 ) {
     let hinstance = GetModuleHandleW(None).unwrap();
     let class_name = PCWSTR(w!("ScreentimeBlockOverlay").as_ptr());
@@ -195,9 +326,16 @@ unsafe fn run_overlay_impl(
     RegisterClassExW(&wc);
 
     let (x, y, w, h) = rect;
-    let cb = Box::into_raw(Box::new(callbacks));
+    let state = Box::into_raw(Box::new(OverlayState {
+        callbacks,
+        mode,
+        label,
+    }));
+
+    // WS_EX_NOACTIVATE: clicking the overlay must not make it the foreground
+    // window, or the session's focus-based dismissal would loop.
     let hwnd = CreateWindowExW(
-        WS_EX_LAYERED | WS_EX_TOPMOST,
+        WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
         class_name,
         PCWSTR(w!("Blocked").as_ptr()),
         WS_POPUP | WS_VISIBLE,
@@ -208,18 +346,18 @@ unsafe fn run_overlay_impl(
         None,
         None,
         hinstance,
-        Some(cb as *const c_void),
+        Some(state as *const c_void),
     );
     let Ok(hwnd) = hwnd else {
-        drop(unsafe { Box::from_raw(cb) });
+        drop(Box::from_raw(state));
         tracing::error!("failed to create overlay window");
         return;
     };
 
     control.register(hwnd);
-    create_controls(hwnd, hinstance.into());
 
-    // Fade in over ~200 ms: step +25 alpha every 20 ms until fully opaque.
+    // Fade in over ~200 ms: step +25 alpha every 20 ms. Works now because the
+    // window has no child controls.
     let mut alpha: u16 = 0;
     while alpha < 255 {
         alpha = (alpha + 25).min(255);
@@ -242,67 +380,6 @@ unsafe fn run_overlay_impl(
     }
 
     remove_keyboard_hook();
-}
-
-unsafe fn create_controls(hwnd: HWND, hinstance: windows::Win32::Foundation::HINSTANCE) {
-    // Buttons and the PIN field, centered in the overlay. The control id goes
-    // in the `hmenu` parameter of CreateWindowExW (that is how Win32 identifies
-    // child controls in WM_COMMAND).
-    let cw = 200;
-    let ch = 40;
-    let cx = 24;
-    let cy = h_center(hwnd);
-    let btn_style =
-        |extra: i32| WINDOW_STYLE(WS_CHILD.0 | WS_VISIBLE.0 | WS_TABSTOP.0 | extra as u32);
-
-    let _ = CreateWindowExW(
-        windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
-        PCWSTR(w!("BUTTON").as_ptr()),
-        PCWSTR(w!("Quit").as_ptr()),
-        btn_style(BS_PUSHBUTTON),
-        cx,
-        cy,
-        cw,
-        ch,
-        hwnd,
-        windows::Win32::UI::WindowsAndMessaging::HMENU(BTN_QUIT as _),
-        hinstance,
-        None,
-    );
-    let _ = CreateWindowExW(
-        windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
-        PCWSTR(w!("BUTTON").as_ptr()),
-        PCWSTR(w!("+15 minutes").as_ptr()),
-        btn_style(BS_PUSHBUTTON),
-        cx + cw + 12,
-        cy,
-        cw,
-        ch,
-        hwnd,
-        windows::Win32::UI::WindowsAndMessaging::HMENU(BTN_EXTEND as _),
-        hinstance,
-        None,
-    );
-    let _ = CreateWindowExW(
-        windows::Win32::UI::WindowsAndMessaging::WINDOW_EX_STYLE(0),
-        PCWSTR(w!("EDIT").as_ptr()),
-        PCWSTR(w!("").as_ptr()),
-        btn_style(ES_PASSWORD | ES_AUTOHSCROLL),
-        cx,
-        cy - 56,
-        cw * 2 + 12,
-        32,
-        hwnd,
-        windows::Win32::UI::WindowsAndMessaging::HMENU(EDIT_PIN as _),
-        hinstance,
-        None,
-    );
-}
-
-unsafe fn h_center(hwnd: HWND) -> i32 {
-    let mut r = windows::Win32::Foundation::RECT::default();
-    let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut r);
-    (r.bottom - r.top) / 2 - 20
 }
 
 fn install_keyboard_hook() {
