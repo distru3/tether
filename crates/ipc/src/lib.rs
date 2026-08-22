@@ -62,6 +62,14 @@ pub enum Request {
     /// Everything the limit editor needs in one round trip: apps, categories
     /// and current limits.
     Catalog,
+    /// Which apps are currently blocked, for the overlay owner (the session
+    /// helper). Polled, so the session helper knows when to show/hide its
+    /// overlay.
+    BlockedApps,
+    /// Deliberate user action from the block overlay's "Quit" button:
+    /// terminate the app's process tree. Distinct from the removed auto-freeze;
+    /// this only happens when the user chooses to quit.
+    CloseApps { app_id: i64, pin: String },
     /// Create or update a limit. Tightening applies at once; loosening is
     /// subject to the cooldown, which is why the response carries an effective
     /// time rather than just success.
@@ -103,6 +111,7 @@ pub enum Response {
     DaySummary(DaySummaryDto),
     Status(StatusDto),
     Catalog(CatalogDto),
+    BlockedApps(Vec<BlockedAppDto>),
     /// Accepted, with the instant the change actually takes effect. Equal to
     /// "now" for tightening, up to 24 hours out for loosening.
     Accepted {
@@ -209,6 +218,16 @@ pub struct LimitDto {
     pub default_minutes: u32,
     pub weekday_minutes: [Option<u32>; 7],
     pub enabled: bool,
+}
+
+/// A currently-blocked app, as reported to the overlay owner.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BlockedAppDto {
+    pub app_id: i64,
+    pub label: String,
+    /// Canonical `kind:value` app key, so the session helper can match the
+    /// focused window to the blocked app.
+    pub app_key: String,
 }
 
 /// Write one length-prefixed JSON frame.
@@ -322,5 +341,47 @@ mod tests {
         })
         .expect("serialise");
         assert!(json.contains("\"bad_pin\""), "unexpected payload: {json}");
+    }
+
+    #[test]
+    fn blocked_apps_request_round_trips() {
+        let mut buf = Vec::new();
+        write_message(&mut buf, &Request::BlockedApps).expect("write");
+        let mut cursor = Cursor::new(buf);
+        assert!(matches!(
+            read_message::<_, Request>(&mut cursor),
+            Ok(Request::BlockedApps)
+        ));
+    }
+
+    #[test]
+    fn close_apps_request_round_trips_with_pin() {
+        let mut buf = Vec::new();
+        write_message(
+            &mut buf,
+            &Request::CloseApps {
+                app_id: 6,
+                pin: "1234".into(),
+            },
+        )
+        .expect("write");
+        let mut cursor = Cursor::new(buf);
+        assert!(matches!(
+            read_message::<_, Request>(&mut cursor),
+            Ok(Request::CloseApps { app_id: 6, pin }) if pin == "1234"
+        ));
+    }
+
+    #[test]
+    fn blocked_app_dto_serialises_with_stable_fields() {
+        let json = serde_json::to_string(&BlockedAppDto {
+            app_id: 6,
+            label: "Elden Ring".into(),
+            app_key: "win-exe:c:\\games\\elden ring\\game\\eldenring.exe".into(),
+        })
+        .expect("serialise");
+        assert!(json.contains("\"app_id\":6"));
+        assert!(json.contains("Elden Ring"));
+        assert!(json.contains("win-exe:"));
     }
 }

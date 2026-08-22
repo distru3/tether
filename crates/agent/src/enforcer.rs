@@ -1,45 +1,37 @@
-//! Enforcement: translate the limits engine's verdicts into frozen processes.
+//! Enforcement: translate the limits engine's verdicts into block state.
 //!
-//! This is the M2 heart of the app. On every evaluation tick the enforcer:
+//! On every evaluation tick the enforcer:
 //!
 //! 1. Looks up the focused app's record (category + tags).
 //! 2. Asks the limits engine what to do (`Allow`/`Warn`/`Block`).
-//! 3. On `Block`: freezes the app's whole process tree and records it in
-//!    `block_state`. On `Allow`/`Warn`: thaws anything it froze and clears the
-//!    block, so a PIN override lifts a block live.
-//! 4. On day rollover: thaws everything and clears yesterday's blocks, because
-//!    every budget resets at the day boundary.
+//! 3. On `Block`: records the block in `block_state` so the overlay owner (the
+//!    session helper) knows to cover the app. On `Allow`/`Warn`: clears the
+//!    block, so a PIN override lifts it live.
+//! 4. On day rollover: clears yesterday's blocks, because every budget resets
+//!    at the day boundary.
 //!
-//! Freeze-instead-of-kill is deliberate (see `enforce-win`): a frozen app keeps
-//! its unsaved work and can be resumed the moment the limit lifts.
-
-use std::collections::HashMap;
+//! The agent never touches the app's processes. M2.5 moved blocking from a
+//! process freeze to a non-invasive overlay: the session helper draws a
+//! topmost window over the blocked app and blocks its input, which works even
+//! for anti-cheat-protected or elevated processes that `NtSuspendProcess`
+//! could never touch. `block_state` is the sole source of truth the overlay
+//! polls.
 
 use st_core::category::CategoryKind;
 use st_core::daykey::DayKey;
 use st_core::limits::{Decision, LimitEngine};
 use st_core::model::{AppKey, SubjectRef};
-use st_core::platform::ProcessController;
 use st_storage::Db;
 
-/// Tracks which PIDs the agent itself froze, so it never double-freezes (which
-/// `NtSuspendProcess` treats as an error) and always thaws exactly what it
-/// froze when the block lifts.
 pub struct Enforcer {
-    /// App key -> pids we froze. Keys are cloned so we can thaw after a row is
-    /// deleted; values are the PIDs from `find_processes`.
-    frozen: HashMap<AppKey, Vec<u32>>,
-    /// Last day we evaluated. A new day means every budget resets, so anything
-    /// we froze must be thawed.
+    /// Last day we evaluated. A new day means every budget resets, so any
+    /// blocks from the previous day must be cleared.
     last_day: Option<DayKey>,
 }
 
 impl Enforcer {
     pub fn new() -> Self {
-        Self {
-            frozen: HashMap::new(),
-            last_day: None,
-        }
+        Self { last_day: None }
     }
 
     /// Evaluate and act on the focused app. Returns the verdict for logging.
@@ -49,14 +41,13 @@ impl Enforcer {
     pub fn tick(
         &mut self,
         db: &mut Db,
-        processes: &mut dyn ProcessController,
         engine: &LimitEngine,
         window_key: Option<&AppKey>,
         today: DayKey,
         weekday: usize,
     ) -> anyhow::Result<()> {
         if self.last_day != Some(today) {
-            self.handle_day_rollover(db, processes)?;
+            self.handle_day_rollover(db)?;
             self.last_day = Some(today);
         }
 
@@ -66,7 +57,7 @@ impl Enforcer {
 
         // Not every focused window is a tracked app (e.g. the lock screen is
         // filtered upstream); resolve it via storage, then evaluate.
-        let Some(app_id) = self.resolve_app_id(db, window_key)? else {
+        let Some(app_id) = db.app_id_for_key(window_key)? else {
             return Ok(());
         };
         let Some(record) = db.app_record(app_id)? else {
@@ -87,100 +78,32 @@ impl Enforcer {
         match decision {
             Decision::Block { binding } => {
                 tracing::info!(app = %record.key, ?binding, "blocking app");
-                self.block(db, processes, window_key, &record.key, subject)?;
+                db.set_block(subject, "limit", chrono::Utc::now(), None)?;
             }
             Decision::Allow { .. } | Decision::Warn { .. } => {
-                self.unblock(db, processes, window_key, &record.key, subject)?;
+                db.clear_block(subject)?;
             }
         }
         Ok(())
     }
 
-    /// Freeze the app's process tree and record the block, unless it is already
-    /// frozen (so a repeated Block verdict is a no-op).
-    fn block(
-        &mut self,
-        db: &mut Db,
-        processes: &mut dyn ProcessController,
-        key: &AppKey,
-        record_key: &AppKey,
-        subject: SubjectRef,
-    ) -> anyhow::Result<()> {
-        if self.frozen.contains_key(key) {
-            return Ok(());
-        }
-        let pids = processes.find_processes(key).unwrap_or_default();
-        for pid in &pids {
-            if let Err(e) = processes.freeze(*pid) {
-                tracing::warn!(pid, error = %e, "freeze failed (process may have exited)");
-            }
-        }
-        if pids.is_empty() {
-            tracing::warn!(app = %record_key, "blocked but no matching processes found");
-        }
-        self.frozen.insert(key.clone(), pids);
-
-        // Record the block. It expires at the day boundary, so the rollover
-        // handler in `tick` will clear it. The reason is always `limit` for M2.
-        let expires = None;
-        let _ = db.set_block(subject, "limit", chrono::Utc::now(), expires);
-        Ok(())
-    }
-
-    /// Thaw anything we froze for this app and clear its block.
-    fn unblock(
-        &mut self,
-        db: &mut Db,
-        processes: &mut dyn ProcessController,
-        key: &AppKey,
-        _record_key: &AppKey,
-        subject: SubjectRef,
-    ) -> anyhow::Result<()> {
-        if let Some(pids) = self.frozen.remove(key) {
-            for pid in &pids {
-                if let Err(e) = processes.thaw(*pid) {
-                    tracing::debug!(pid, error = %e, "thaw failed (process may have exited)");
-                }
-            }
-        }
-        let _ = db.clear_block(subject);
-        Ok(())
-    }
-
-    /// On a new day, thaw every PID we froze and clear all blocks. Budgets
-    /// reset at the boundary, so yesterday's blocks must not survive it.
-    fn handle_day_rollover(
-        &mut self,
-        db: &mut Db,
-        processes: &mut dyn ProcessController,
-    ) -> anyhow::Result<()> {
-        if self.frozen.is_empty() {
-            return Ok(());
-        }
-        for (_key, pids) in self.frozen.drain() {
-            for pid in &pids {
-                let _ = processes.thaw(*pid);
-            }
-        }
-        if let Ok(blocked) = db.blocked_subjects() {
-            for (subject, _reason) in blocked {
-                let _ = db.clear_block(subject);
-            }
+    /// On a new day, clear yesterday's blocks. Budgets reset at the boundary,
+    /// so blocks from the previous day must not survive it. The overlay owner
+    /// will simply stop showing an overlay once the block is gone.
+    fn handle_day_rollover(&mut self, db: &mut Db) -> anyhow::Result<()> {
+        let blocked = db.blocked_subjects()?;
+        for (subject, _reason) in blocked {
+            let _ = db.clear_block(subject);
         }
         Ok(())
     }
 
-    /// Whether the app may ever be frozen, from its primary category kind.
+    /// Whether the app may ever be blocked, from its primary category kind.
     fn blockable(&self, db: &Db, primary_category: i64) -> anyhow::Result<bool> {
         Ok(!matches!(
             db.category_kind(primary_category)?,
             Some(CategoryKind::NeverBlock)
         ))
-    }
-
-    /// Resolve an app key to its database id, if it is tracked at all.
-    fn resolve_app_id(&self, db: &Db, key: &AppKey) -> anyhow::Result<Option<i64>> {
-        Ok(db.app_id_for_key(key)?)
     }
 }
 
@@ -189,54 +112,10 @@ impl Default for Enforcer {
         Self::new()
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use st_core::limits::Limit;
-    use st_core::platform::{PlatformError, PlatformResult};
-    use std::cell::RefCell;
-
-    /// Records freeze/thaw calls so tests can assert exactly what happened.
-    #[derive(Default)]
-    struct FakeController {
-        calls: RefCell<Vec<String>>,
-        pids: RefCell<HashMap<String, Vec<u32>>>,
-    }
-
-    impl FakeController {
-        fn track(&self, key: &str, pids: Vec<u32>) {
-            self.pids.borrow_mut().insert(key.to_string(), pids);
-        }
-        fn calls(&self) -> Vec<String> {
-            self.calls.borrow().clone()
-        }
-    }
-
-    impl ProcessController for FakeController {
-        fn find_processes(&mut self, key: &AppKey) -> PlatformResult<Vec<u32>> {
-            Ok(self
-                .pids
-                .borrow()
-                .get(key.basename())
-                .cloned()
-                .unwrap_or_default())
-        }
-        fn freeze(&mut self, pid: u32) -> PlatformResult<()> {
-            self.calls.borrow_mut().push(format!("freeze {pid}"));
-            Ok(())
-        }
-        fn thaw(&mut self, pid: u32) -> PlatformResult<()> {
-            self.calls.borrow_mut().push(format!("thaw {pid}"));
-            Ok(())
-        }
-        fn terminate(&mut self, _pid: u32) -> PlatformResult<()> {
-            Err(PlatformError::Unsupported("tests"))
-        }
-        fn backend(&self) -> &'static str {
-            "fake"
-        }
-    }
 
     fn seed_app(db: &mut Db, key: &str, category_slug: &str) -> i64 {
         let uncat = db.category_id("uncategorized").expect("uncat");
@@ -262,164 +141,158 @@ mod tests {
         .expect("interval");
     }
 
+    fn engine_for(target: st_core::limits::LimitTarget) -> LimitEngine {
+        LimitEngine::with_default_warnings(vec![Limit::new(1, target, 0)])
+    }
+
+    fn steam_key() -> AppKey {
+        AppKey::windows_exe("C:\\games\\steam\\steam.exe")
+    }
+
+    fn tick_blocking(
+        enforcer: &mut Enforcer,
+        db: &mut Db,
+        key: &AppKey,
+        day: DayKey,
+        weekday: usize,
+        target: st_core::limits::LimitTarget,
+    ) {
+        let engine = engine_for(target);
+        enforcer
+            .tick(db, &engine, Some(key), day, weekday)
+            .expect("tick");
+    }
+
     #[test]
-    fn exhausted_limit_freezes_and_records_the_block() {
+    fn exhausted_limit_records_a_block() {
         let mut db = Db::open_in_memory().expect("db");
         let games = db.category_id("games").expect("games");
         let day = DayKey(20260820);
 
-        let app = seed_app(&mut db, "C:\\steam.exe", "games");
+        let app = seed_app(&mut db, "C:\\games\\steam\\steam.exe", "games");
         snapshot_usage(&mut db, app, 60 * 60);
 
-        let mut controller = FakeController::default();
-        controller.track("steam.exe", vec![11, 12]);
         let mut enforcer = Enforcer::new();
-        let engine = LimitEngine::with_default_warnings(vec![Limit::new(
-            1,
+        tick_blocking(
+            &mut enforcer,
+            &mut db,
+            &steam_key(),
+            day,
+            3,
             st_core::limits::LimitTarget::Category(games),
-            0,
-        )]);
+        );
 
-        enforcer
-            .tick(
-                &mut db,
-                &mut controller,
-                &engine,
-                Some(&AppKey::windows_exe("C:\\steam.exe")),
-                day,
-                3,
-            )
-            .expect("tick");
-
-        assert_eq!(controller.calls(), vec!["freeze 11", "freeze 12"]);
         assert!(db.is_blocked(SubjectRef::App(app)).expect("blocked"));
     }
 
     #[test]
-    fn once_frozen_the_block_is_a_noop_until_allow() {
+    fn an_override_lifts_the_block_live() {
         let mut db = Db::open_in_memory().expect("db");
         let games = db.category_id("games").expect("games");
         let day = DayKey(20260820);
 
-        let app = seed_app(&mut db, "C:\\steam.exe", "games");
+        let app = seed_app(&mut db, "C:\\games\\steam\\steam.exe", "games");
         snapshot_usage(&mut db, app, 10 * 60);
 
-        let mut controller = FakeController::default();
-        controller.track("steam.exe", vec![11]);
         let mut enforcer = Enforcer::new();
-        let engine = LimitEngine::with_default_warnings(vec![Limit::new(
-            1,
+        tick_blocking(
+            &mut enforcer,
+            &mut db,
+            &steam_key(),
+            day,
+            3,
             st_core::limits::LimitTarget::Category(games),
-            0,
-        )]);
-
-        for _ in 0..3 {
-            enforcer
-                .tick(
-                    &mut db,
-                    &mut controller,
-                    &engine,
-                    Some(&AppKey::windows_exe("C:\\steam.exe")),
-                    day,
-                    3,
-                )
-                .expect("tick");
-        }
-        assert_eq!(
-            controller.calls(),
-            vec!["freeze 11"],
-            "no double freeze, got {:?}",
-            controller.calls()
         );
+        assert!(db.is_blocked(SubjectRef::App(app)).expect("blocked"));
 
-        // A +15 override lifts the budget -> next tick must thaw.
-        let over = st_core::limits::LimitTarget::Category(games);
-        db.grant_override(&over, day, 15 * 60, chrono::Utc::now(), Some("test"))
-            .expect("override");
-        enforcer
-            .tick(
-                &mut db,
-                &mut controller,
-                &engine,
-                Some(&AppKey::windows_exe("C:\\steam.exe")),
-                day,
-                3,
-            )
-            .expect("tick");
-        assert_eq!(
-            controller.calls(),
-            vec!["freeze 11", "thaw 11"],
-            "override must lift the freeze"
+        // A +15 override lifts the budget -> next tick must clear the block.
+        db.grant_override(
+            &st_core::limits::LimitTarget::Category(games),
+            day,
+            15 * 60,
+            chrono::Utc::now(),
+            Some("test"),
+        )
+        .expect("override");
+        tick_blocking(
+            &mut enforcer,
+            &mut db,
+            &steam_key(),
+            day,
+            3,
+            st_core::limits::LimitTarget::Category(games),
         );
         assert!(!db.is_blocked(SubjectRef::App(app)).expect("unblocked"));
     }
 
     #[test]
-    fn never_block_apps_are_never_frozen() {
+    fn never_block_apps_are_never_blocked() {
         let mut db = Db::open_in_memory().expect("db");
         let day = DayKey(20260820);
 
         let app = seed_app(&mut db, "C:\\code.exe", "development");
         snapshot_usage(&mut db, app, 99 * 60);
 
-        let mut controller = FakeController::default();
-        controller.track("code.exe", vec![1]);
         let mut enforcer = Enforcer::new();
         // A total budget of zero would block any blockable app.
-        let engine = LimitEngine::with_default_warnings(vec![Limit::new(
-            1,
+        tick_blocking(
+            &mut enforcer,
+            &mut db,
+            &AppKey::windows_exe("C:\\code.exe"),
+            day,
+            3,
             st_core::limits::LimitTarget::Total,
-            0,
-        )]);
+        );
 
-        enforcer
-            .tick(
-                &mut db,
-                &mut controller,
-                &engine,
-                Some(&AppKey::windows_exe("C:\\code.exe")),
-                day,
-                3,
-            )
-            .expect("tick");
-
-        assert!(controller.calls().is_empty(), "never block");
+        assert!(!db.is_blocked(SubjectRef::App(app)).expect("not blocked"));
     }
 
     #[test]
-    fn frozen_apps_are_thawed_on_day_rollover() {
+    fn blocks_are_cleared_on_day_rollover() {
         let mut db = Db::open_in_memory().expect("db");
         let games = db.category_id("games").expect("games");
         let day = DayKey(20260820);
 
-        let app = seed_app(&mut db, "C:\\steam.exe", "games");
+        let app = seed_app(&mut db, "C:\\games\\steam\\steam.exe", "games");
         snapshot_usage(&mut db, app, 60 * 60);
 
-        let mut controller = FakeController::default();
-        controller.track("steam.exe", vec![11]);
         let mut enforcer = Enforcer::new();
-        let engine = LimitEngine::with_default_warnings(vec![Limit::new(
-            1,
+        tick_blocking(
+            &mut enforcer,
+            &mut db,
+            &steam_key(),
+            day,
+            3,
             st_core::limits::LimitTarget::Category(games),
-            0,
-        )]);
+        );
+        assert!(db.is_blocked(SubjectRef::App(app)).expect("blocked"));
 
+        // Next day: everything is unblocked.
+        let engine = engine_for(st_core::limits::LimitTarget::Category(games));
         enforcer
-            .tick(
-                &mut db,
-                &mut controller,
-                &engine,
-                Some(&AppKey::windows_exe("C:\\steam.exe")),
-                day,
-                3,
-            )
+            .tick(&mut db, &engine, None, DayKey(20260821), 4)
             .expect("tick");
-        assert_eq!(controller.calls(), vec!["freeze 11"]);
+        assert!(!db.is_blocked(SubjectRef::App(app)).expect("cleared"));
+    }
 
-        // Next day: everything thaws.
-        enforcer
-            .tick(&mut db, &mut controller, &engine, None, DayKey(20260821), 4)
-            .expect("tick");
-        assert_eq!(controller.calls(), vec!["freeze 11", "thaw 11"]);
+    #[test]
+    fn a_zero_limit_blocks_immediately_without_usage() {
+        let mut db = Db::open_in_memory().expect("db");
+        let games = db.category_id("games").expect("games");
+        let day = DayKey(20260820);
+
+        seed_app(&mut db, "C:\\games\\steam\\steam.exe", "games");
+        let mut enforcer = Enforcer::new();
+        tick_blocking(
+            &mut enforcer,
+            &mut db,
+            &steam_key(),
+            day,
+            3,
+            st_core::limits::LimitTarget::Category(games),
+        );
+
+        let blocked = db.blocked_subjects().expect("list");
+        assert_eq!(blocked.len(), 1);
     }
 }

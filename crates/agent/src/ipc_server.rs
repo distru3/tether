@@ -16,7 +16,9 @@ use chrono::{DateTime, Utc};
 use st_core::category::CategoryKind;
 use st_core::daykey::DayKey;
 use st_core::limits::LimitTarget;
+use st_core::model::{AppKey, SubjectRef};
 use st_core::pin::{hash_pin, verify_pin};
+use st_core::platform::ProcessController;
 use st_ipc::{transport, ErrorCode, LimitTargetDto, Request, Response, StatusDto, UsageRowDto};
 use st_storage::{Db, LimitRow};
 
@@ -65,6 +67,7 @@ pub fn spawn(
     db: Arc<Mutex<Db>>,
     status: StatusInfo,
     policy: Policy,
+    processes: Arc<Mutex<Box<dyn ProcessController>>>,
 ) -> std::thread::JoinHandle<()> {
     std::thread::Builder::new()
         .name("ipc-server".into())
@@ -72,7 +75,7 @@ pub fn spawn(
             match transport::server_accept(PIPE_NAME) {
                 Ok(mut stream) => match st_ipc::read_message::<_, Request>(&mut stream) {
                     Ok(request) => {
-                        let response = handle(&db, &status, &policy, request);
+                        let response = handle(&db, &status, &policy, &processes, request);
                         if let Err(e) = st_ipc::write_message(&mut stream, &response) {
                             tracing::warn!(error = %e, "failed to write IPC response");
                         }
@@ -88,13 +91,21 @@ pub fn spawn(
         .expect("spawning ipc-server thread")
 }
 
-fn handle(db: &Mutex<Db>, status: &StatusInfo, policy: &Policy, request: Request) -> Response {
+fn handle(
+    db: &Mutex<Db>,
+    status: &StatusInfo,
+    policy: &Policy,
+    processes: &Mutex<Box<dyn ProcessController>>,
+    request: Request,
+) -> Response {
     let now = Utc::now();
     match request {
         Request::Ping => Response::Pong,
         Request::Status => status_response(db, status, policy),
         Request::DaySummary { day } => day_summary(db, day),
         Request::Catalog => catalog(db),
+        Request::BlockedApps => blocked_apps(db),
+        Request::CloseApps { app_id, pin } => close_apps(db, processes, app_id, &pin),
         Request::SetPin {
             new_pin,
             current_pin,
@@ -272,6 +283,76 @@ fn catalog(db: &Mutex<Db>) -> Response {
             .collect(),
         limits: limits.iter().filter_map(limit_to_dto).collect(),
     })
+}
+
+/// Currently-blocked apps, for the overlay owner. Joins `block_state` with the
+/// app rows to hand back a label and key the session helper can match.
+fn blocked_apps(db: &Mutex<Db>) -> Response {
+    let db = match db.lock() {
+        Ok(db) => db,
+        Err(_) => return error_internal("database lock poisoned".into()),
+    };
+    let blocked = match db.blocked_subjects() {
+        Ok(b) => b,
+        Err(e) => return error_internal(format!("list blocks: {e}")),
+    };
+    let mut out = Vec::new();
+    for (subject, _reason) in blocked {
+        let SubjectRef::App(app_id) = subject else {
+            continue;
+        };
+        let Some(record) = db.app_record(app_id).ok().flatten() else {
+            continue;
+        };
+        out.push(st_ipc::BlockedAppDto {
+            app_id,
+            label: record.display_name,
+            app_key: record.key.to_db_string(),
+        });
+    }
+    Response::BlockedApps(out)
+}
+
+/// "Quit" from the block overlay: terminate the app's process tree. This is a
+/// deliberate user action (not the removed auto-freeze), so it is PIN-gated
+/// like every other mutating request.
+fn close_apps(
+    db: &Mutex<Db>,
+    processes: &Mutex<Box<dyn ProcessController>>,
+    app_id: i64,
+    pin: &str,
+) -> Response {
+    let db = match db.lock() {
+        Ok(db) => db,
+        Err(_) => return error_internal("database lock poisoned".into()),
+    };
+    if !pin_ok(&db, pin) {
+        return Response::Error {
+            code: ErrorCode::BadPin,
+            message: "PIN required".into(),
+        };
+    }
+    let Some(record) = db.app_record(app_id).ok().flatten() else {
+        return Response::Error {
+            code: ErrorCode::NotFound,
+            message: format!("app {app_id} not found"),
+        };
+    };
+    let key: AppKey = record.key;
+    let Ok(mut processes) = processes.lock() else {
+        return error_internal("process controller lock poisoned".into());
+    };
+    let pids = match processes.find_processes(&key) {
+        Ok(pids) => pids,
+        Err(e) => return error_internal(format!("find processes: {e}")),
+    };
+    for pid in pids {
+        if let Err(e) = processes.terminate(pid) {
+            tracing::warn!(pid, error = %e, "terminate failed (process may have exited)");
+        }
+    }
+    let _ = db.clear_block(SubjectRef::App(app_id));
+    accepted(Utc::now())
 }
 
 fn set_pin(db: &Mutex<Db>, new_pin: &str, current_pin: Option<&str>) -> Response {

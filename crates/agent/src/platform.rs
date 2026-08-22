@@ -8,7 +8,10 @@ use st_core::platform::{IdleMonitor, NetworkFilter, ProcessController, WindowTra
 pub struct Backends {
     pub tracker: Box<dyn WindowTracker>,
     pub idle: Box<dyn IdleMonitor>,
-    pub processes: Box<dyn ProcessController>,
+    /// The process controller is used only by the IPC server now (for the
+    /// overlay's "Quit" action), so it is optional and moved out of the
+    /// sampler's backends at startup.
+    pub processes: Option<Box<dyn ProcessController>>,
     pub filter: Box<dyn NetworkFilter>,
 }
 
@@ -20,7 +23,7 @@ pub fn detect(capture_titles: bool, idle_threshold_secs: u64) -> Backends {
     Backends {
         tracker: Box::new(Win32WindowTracker::new(capture_titles)),
         idle: Box::new(Win32IdleMonitor::new(idle_threshold_secs)),
-        processes: Box::new(Win32ProcessController::new()),
+        processes: Some(Box::new(Win32ProcessController::new())),
         filter: Box::new(HostsFileFilter::new()),
     }
 }
@@ -40,7 +43,7 @@ pub fn detect(_capture_titles: bool, idle_threshold_secs: u64) -> Backends {
     Backends {
         tracker: Box::new(X11WindowTracker::new()),
         idle: Box::new(X11IdleMonitor::new(idle_threshold_secs)),
-        processes: Box::new(CgroupProcessController::new()),
+        processes: Some(Box::new(CgroupProcessController::new())),
         filter: Box::new(EtcHostsFilter::new()),
     }
 }

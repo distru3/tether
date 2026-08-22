@@ -69,7 +69,11 @@ fn main() -> Result<()> {
     tracing::info!(
         tracker = backends.tracker.backend(),
         idle = backends.idle.backend(),
-        processes = backends.processes.backend(),
+        processes = backends
+            .processes
+            .as_ref()
+            .map(|p| p.backend())
+            .unwrap_or("none"),
         filter = backends.filter.backend(),
         "backends selected"
     );
@@ -84,26 +88,46 @@ fn main() -> Result<()> {
     let status = ipc_server::StatusInfo {
         agent_version: env!("CARGO_PKG_VERSION").to_string(),
         tracker_backend: backends.tracker.backend().to_string(),
-        enforcement_backend: backends.processes.backend().to_string(),
+        enforcement_backend: backends
+            .processes
+            .as_ref()
+            .map(|p| p.backend().to_string())
+            .unwrap_or_else(|| "none".into()),
         filter_backend: backends.filter.backend().to_string(),
         // Hosts-file filtering cannot intercept DoH/DoT; be honest about it.
         tracking_available: true,
         blocks_encrypted_dns: false,
     };
+    // The process controller is no longer used by the sampler (M2.5 removed
+    // the freeze); only the IPC server needs it, for the overlay's "Quit"
+    // action. Move it out of the backends and share it behind a lock.
+    let processes = Arc::new(Mutex::new(
+        backends
+            .processes
+            .take()
+            .expect("process controller present"),
+    ));
+    // Read the policy knobs first, each in its own statement: a temporary
+    // `MutexGuard` lives until the end of its statement, so two `db.lock()`
+    // calls inside a single `Policy { .. }` literal would deadlock on the
+    // second one.
+    let limit_cooldown_hours = db.lock().unwrap().setting_i64("limit_cooldown_hours", 24);
+    let strict_mode = db
+        .lock()
+        .unwrap()
+        .setting("strict_mode")
+        .ok()
+        .flatten()
+        .map(|v| v == "true")
+        .unwrap_or(false);
     let _ipc_thread = ipc_server::spawn(
         db.clone(),
         status,
         ipc_server::Policy {
-            limit_cooldown_hours: db.lock().unwrap().setting_i64("limit_cooldown_hours", 24),
-            strict_mode: db
-                .lock()
-                .unwrap()
-                .setting("strict_mode")
-                .ok()
-                .flatten()
-                .map(|v| v == "true")
-                .unwrap_or(false),
+            limit_cooldown_hours,
+            strict_mode,
         },
+        processes,
     );
     tracing::info!(pipe = ipc_server::PIPE_NAME, "IPC server listening");
 
@@ -163,7 +187,6 @@ fn main() -> Result<()> {
                 LimitEngine::with_default_warnings(db_guard.load_limits().unwrap_or_default());
             let result = enforcer.tick(
                 &mut db_guard,
-                backends.processes.as_mut(),
                 &engine,
                 window.as_ref().map(|w| &w.key),
                 today,

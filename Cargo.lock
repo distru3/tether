@@ -3204,6 +3204,7 @@ dependencies = [
  "st-ipc",
  "tracing",
  "tracing-subscriber",
+ "windows 0.58.0",
 ]
 
 [[package]]
