@@ -11,6 +11,7 @@
 //! not yet verified is how you end up locking yourself out of your own machine.
 
 mod classify;
+mod enforcer;
 mod ipc_server;
 mod platform;
 mod sampler;
@@ -24,11 +25,12 @@ use chrono::Duration;
 use st_core::category::UNCATEGORIZED_SLUG;
 use st_core::clock::{Clock, ClockGuard, ClockVerdict, SystemClock};
 use st_core::daykey::DayKey;
-use st_core::limits::{Decision, LimitEngine};
+use st_core::limits::LimitEngine;
 use st_core::model::{SubjectRef, UsageInterval};
 use st_core::platform::IdleState;
 use st_storage::Db;
 
+use crate::enforcer::Enforcer;
 use crate::sampler::{PendingInterval, Sampler};
 
 const POLL: StdDuration = StdDuration::from_secs(1);
@@ -107,6 +109,7 @@ fn main() -> Result<()> {
 
     let mut sampler = Sampler::new(day_start_minutes);
     let mut guard = ClockGuard::new(&clock, Duration::seconds(CLOCK_TOLERANCE_SECS));
+    let mut enforcer = Enforcer::new();
     let mut ticks: u32 = 0;
     let mut tracker_error_logged = false;
 
@@ -148,8 +151,27 @@ fn main() -> Result<()> {
         ticks = ticks.wrapping_add(1);
         if ticks % EVALUATE_EVERY_TICKS == 0 {
             let today = DayKey::from_utc(now, tz_offset, day_start_minutes);
-            if let Err(e) = report_limits(&db.lock().unwrap(), today) {
-                tracing::error!(error = %e, "limit evaluation failed");
+            let weekday = today.weekday_index().unwrap_or(0);
+
+            let mut db_guard = db.lock().unwrap();
+            // A loosened limit may have come into effect since the last tick.
+            if let Err(e) = db_guard.promote_pending_limits(now) {
+                tracing::warn!(error = %e, "promoting pending limits failed");
+            }
+            // Reload limits so tightening and freshly-promoted loosening apply.
+            let engine =
+                LimitEngine::with_default_warnings(db_guard.load_limits().unwrap_or_default());
+            let result = enforcer.tick(
+                &mut db_guard,
+                backends.processes.as_mut(),
+                &engine,
+                window.as_ref().map(|w| &w.key),
+                today,
+                weekday,
+            );
+            drop(db_guard);
+            if let Err(e) = result {
+                tracing::error!(error = %e, "limit enforcement failed");
             }
         }
 
@@ -205,41 +227,6 @@ fn persist(
         day = %pending.day,
         "recorded interval"
     );
-    Ok(())
-}
-
-fn report_limits(db: &Db, day: DayKey) -> Result<()> {
-    let limits = db.load_limits()?;
-    if limits.is_empty() {
-        return Ok(());
-    }
-
-    let engine = LimitEngine::with_default_warnings(limits);
-    let snapshot = db.day_snapshot(day)?;
-    let Some(weekday) = day.weekday_index() else {
-        anyhow::bail!("invalid day key {day}");
-    };
-
-    for limit in engine.limits() {
-        let decision = match limit.target {
-            st_core::limits::LimitTarget::App(app_id) => {
-                engine.evaluate(app_id, &[], true, weekday, &snapshot)
-            }
-            _ => continue,
-        };
-
-        match decision {
-            Decision::Block { binding } => {
-                tracing::info!(?binding, "limit exhausted (enforcement lands in M2)")
-            }
-            Decision::Warn {
-                remaining_secs,
-                threshold_secs,
-                ..
-            } => tracing::info!(remaining_secs, threshold_secs, "approaching limit"),
-            Decision::Allow { .. } => {}
-        }
-    }
     Ok(())
 }
 

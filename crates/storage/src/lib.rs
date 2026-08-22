@@ -541,6 +541,18 @@ impl Db {
         Ok(out)
     }
 
+    /// The database id of an app given its canonical key, if it has been seen.
+    pub fn app_id_for_key(&self, key: &AppKey) -> Result<Option<i64>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT id FROM apps WHERE app_key = ?1",
+                params![key.to_db_string()],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
     /// A single app record, for the enforcement loop and the categoriser.
     pub fn app_record(&self, app_id: i64) -> Result<Option<AppRecord>> {
         let row = self.conn.query_row(

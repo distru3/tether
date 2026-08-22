@@ -154,8 +154,8 @@ fn status_response(db: &Mutex<Db>, status: &StatusInfo, policy: &Policy) -> Resp
 }
 
 fn day_summary(db: &Mutex<Db>, day: DayKey) -> Response {
-    let summary = match db.lock() {
-        Ok(db) => db.day_summary(day),
+    let db = match db.lock() {
+        Ok(db) => db,
         Err(_) => {
             return Response::Error {
                 code: ErrorCode::Internal,
@@ -163,40 +163,65 @@ fn day_summary(db: &Mutex<Db>, day: DayKey) -> Response {
             }
         }
     };
-    match summary {
-        Ok(summary) => Response::DaySummary(st_ipc::DaySummaryDto {
-            day: summary.day,
-            total_seconds: summary.total_seconds,
-            apps: summary
-                .apps
-                .into_iter()
-                .map(|a| UsageRowDto {
-                    id: a.id,
-                    label: a.label,
-                    seconds: a.seconds,
-                    color: Some(a.category_color),
-                    limit_seconds: None,
-                    blocked: false,
-                })
-                .collect(),
-            categories: summary
-                .categories
-                .into_iter()
-                .map(|c| UsageRowDto {
-                    id: c.id,
-                    label: c.name,
-                    seconds: c.seconds,
-                    color: Some(c.color),
-                    limit_seconds: None,
-                    blocked: false,
-                })
-                .collect(),
-        }),
-        Err(e) => Response::Error {
-            code: ErrorCode::Internal,
-            message: format!("dashboard query failed: {e}"),
-        },
-    }
+    let summary = match db.day_summary(day) {
+        Ok(summary) => summary,
+        Err(e) => {
+            return Response::Error {
+                code: ErrorCode::Internal,
+                message: format!("dashboard query failed: {e}"),
+            }
+        }
+    };
+
+    // Which apps are currently frozen, for honest blocked flags.
+    let blocked_apps: std::collections::HashSet<i64> = db
+        .blocked_subjects()
+        .ok()
+        .into_iter()
+        .flatten()
+        .filter_map(|(subject, _)| match subject {
+            st_core::model::SubjectRef::App(id) => Some(id),
+            st_core::model::SubjectRef::Site(_) => None,
+        })
+        .collect();
+
+    // Per-app allowed seconds from limits, for progress rings.
+    let limits = db.load_limits().unwrap_or_default();
+    let limit_secs_for = |app_id: i64| -> Option<i64> {
+        limits
+            .iter()
+            .find(|l| matches!(l.target, st_core::limits::LimitTarget::App(id) if id == app_id))
+            .map(|l| i64::from(l.default_minutes) * 60)
+    };
+
+    Response::DaySummary(st_ipc::DaySummaryDto {
+        day: summary.day,
+        total_seconds: summary.total_seconds,
+        apps: summary
+            .apps
+            .into_iter()
+            .map(|a| UsageRowDto {
+                id: a.id,
+                label: a.label,
+                seconds: a.seconds,
+                color: Some(a.category_color),
+                limit_seconds: limit_secs_for(a.id),
+                blocked: blocked_apps.contains(&a.id),
+            })
+            .collect(),
+        categories: summary
+            .categories
+            .into_iter()
+            .map(|c| UsageRowDto {
+                id: c.id,
+                label: c.name,
+                seconds: c.seconds,
+                color: Some(c.color),
+                limit_seconds: None,
+                blocked: false,
+            })
+            .collect(),
+    })
 }
 
 fn catalog(db: &Mutex<Db>) -> Response {
