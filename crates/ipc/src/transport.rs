@@ -98,8 +98,9 @@ mod win {
     use std::io::{self, Read, Write};
     use windows::core::{Error as WinError, PCWSTR};
     use windows::Win32::Foundation::{
-        CloseHandle, ERROR_BROKEN_PIPE, ERROR_FILE_NOT_FOUND, ERROR_NO_DATA, ERROR_PIPE_CONNECTED,
-        ERROR_PIPE_NOT_CONNECTED, GENERIC_READ, GENERIC_WRITE, HANDLE, INVALID_HANDLE_VALUE,
+        CloseHandle, ERROR_BROKEN_PIPE, ERROR_FILE_NOT_FOUND, ERROR_NO_DATA, ERROR_PIPE_BUSY,
+        ERROR_PIPE_CONNECTED, ERROR_PIPE_NOT_CONNECTED, GENERIC_READ, GENERIC_WRITE, HANDLE,
+        INVALID_HANDLE_VALUE,
     };
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, ReadFile, WriteFile, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ,
@@ -171,13 +172,20 @@ mod win {
     /// Client side: open the pipe. `ERROR_FILE_NOT_FOUND` means the agent is
     /// not running, surfaced as an io error the UI can inspect.
     ///
-    /// A server-side pipe instance may not exist yet (the agent can be mid-way
-    /// through `accept`), so `ERROR_FILE_NOT_FOUND` is retried briefly before
-    /// giving up.
+    /// Two transient conditions are retried across a generous window (~1 s):
+    ///
+    /// * `ERROR_FILE_NOT_FOUND` — no instance exists right now. Even a healthy
+    ///   agent has microsecond gaps between handing one accepted connection to
+    ///   its worker and creating the next listening instance.
+    /// * `ERROR_PIPE_BUSY` — instances exist but all are occupied. The classic
+    ///   named-pipe client mistake is treating this as fatal; the documented
+    ///   remedy is to wait (`WaitNamedPipe`) and reopen.
     pub(super) fn connect(name: &str) -> Result<PipeStream> {
+        const ATTEMPTS: u32 = 50;
+        const RETRY_DELAY_MS: u64 = 20;
         let full = pipe_path(name);
         let mut last_err = None;
-        for _ in 0..5 {
+        for _ in 0..ATTEMPTS {
             let (_keep_alive, path) = wide(&full);
             match unsafe {
                 CreateFileW(
@@ -195,14 +203,15 @@ mod win {
                 }
                 Ok(_) => return Err(TransportError::Io(io::Error::last_os_error())),
                 Err(e) => {
-                    if e.code() != ERROR_FILE_NOT_FOUND.into() {
+                    let code = e.code();
+                    if code != ERROR_FILE_NOT_FOUND.into() && code != ERROR_PIPE_BUSY.into() {
                         return Err(TransportError::Io(io::Error::new(
                             io::ErrorKind::NotFound,
                             e,
                         )));
                     }
                     last_err = Some(e);
-                    std::thread::sleep(std::time::Duration::from_millis(20));
+                    std::thread::sleep(std::time::Duration::from_millis(RETRY_DELAY_MS));
                 }
             }
         }

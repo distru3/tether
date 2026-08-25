@@ -226,6 +226,32 @@ impl WorkerCap {
     }
 }
 
+/// Returns a worker slot on drop.
+///
+/// Why a guard instead of calling `release()` after the serve call: if the
+/// worker thread panics mid-connection, code after the panic site never runs,
+/// and every skipped release permanently shrinks the worker pool. Once enough
+/// slots leaked, `acquire` blocked forever, the accept loop stopped creating
+/// pipe instances, and the agent went deaf while its process lived on. The
+/// guard makes leak-free release unconditional; combined with `catch_unwind`
+/// below, one poisoned request can no longer cost the server its ear.
+struct SlotGuard(WorkerCapGuardInner);
+
+type WorkerCapGuardInner = Arc<WorkerCap>;
+
+impl SlotGuard {
+    fn acquire(cap: &Arc<WorkerCap>) -> Self {
+        cap.acquire();
+        Self(Arc::clone(cap))
+    }
+}
+
+impl Drop for SlotGuard {
+    fn drop(&mut self) {
+        self.0.release();
+    }
+}
+
 /// Handle on the running IPC server.
 ///
 /// Deliberately no `JoinHandle`: the accept loop runs until process teardown
@@ -275,28 +301,39 @@ pub fn spawn(
     std::thread::Builder::new()
         .name("ipc-server".into())
         .spawn(move || loop {
-            workers.acquire();
+            // Acquire before accept so a saturated server stops advertising an
+            // instance it could not afford to serve; the SlotGuard guarantees
+            // the slot comes back even if everything below unwinds.
+            let guard = SlotGuard::acquire(&workers);
             match transport::server_accept(pipe_name) {
                 Ok(stream) => {
                     let ctx = ctx.clone();
-                    let worker_cap = workers.clone();
                     let owned = OwnedStream(stream);
-                    let spawned =
-                        std::thread::Builder::new()
-                            .name("ipc-worker".into())
-                            .spawn(move || {
-                                serve_connection(owned, ctx);
-                                worker_cap.release();
-                            });
+                    let spawned = std::thread::Builder::new()
+                        .name("ipc-worker".into())
+                        .spawn(move || {
+                            // A panic in a handler must cost one connection,
+                            // never the worker pool or the listening loop.
+                            let result = std::panic::catch_unwind(
+                                std::panic::AssertUnwindSafe(|| serve_connection(owned, ctx)),
+                            );
+                            if result.is_err() {
+                                tracing::error!(
+                                    "IPC connection handler panicked; connection dropped, server continues"
+                                );
+                            }
+                            // guard drops here: slot released unconditionally
+                        });
                     if spawned.is_err() {
-                        // Thread creation failed (resource exhaustion): refund
-                        // the slot and pause so a tight loop cannot spin.
-                        workers.release();
+                        // Thread creation failed (resource exhaustion): the
+                        // guard's drop refunds the slot; pause so a tight loop
+                        // cannot spin.
+                        drop(guard);
                         std::thread::sleep(StdDuration::from_secs(1));
                     }
                 }
                 Err(e) => {
-                    workers.release();
+                    drop(guard);
                     tracing::error!(error = %e, "IPC accept failed");
                     std::thread::sleep(StdDuration::from_secs(1));
                 }
@@ -1887,14 +1924,10 @@ mod tests {
         );
     }
 
-    /// The concurrency contract: one connection, many frames. Legacy one-shot
-    /// clients exercise the same worker loop with a single frame.
-    #[test]
+    /// Shared server boilerplate for the live-pipe tests.
     #[cfg(windows)]
-    fn a_persistent_connection_serves_many_frames_in_order() {
-        let name: &'static str =
-            Box::leak(format!("screentime_agent_test_{}", std::process::id()).into_boxed_str());
-        let _server = spawn(
+    fn spawn_test_server(name: &'static str) -> IpcServerHandle {
+        spawn(
             name,
             Arc::new(Mutex::new(Db::open_in_memory().expect("db"))),
             StatusInfo {
@@ -1913,7 +1946,17 @@ mod tests {
             },
             Arc::new(Mutex::new(Box::<FakeProcesses>::default())),
             Arc::new(TestClock::new(at("2026-08-20T12:00:00Z"), 0)),
-        );
+        )
+    }
+
+    /// The concurrency contract: one connection, many frames. Legacy one-shot
+    /// clients exercise the same worker loop with a single frame.
+    #[test]
+    #[cfg(windows)]
+    fn a_persistent_connection_serves_many_frames_in_order() {
+        let name: &'static str =
+            Box::leak(format!("screentime_agent_test_{}", std::process::id()).into_boxed_str());
+        let _server = spawn_test_server(name);
 
         let mut stream = st_ipc::transport::client_connect(name).expect("connect");
         for expected in ["pong", "status"] {
@@ -1952,6 +1995,40 @@ mod tests {
         assert!(matches!(
             st_ipc::read_message::<_, Request>(&mut std::io::Cursor::new(empty)),
             Err(IpcError::Closed)
+        ));
+    }
+
+    /// Regression for the deaf-agent incident: every connection is served by a
+    /// worker holding one slot, and before the SlotGuard fix a worker that
+    /// died unexpectedly (panic path) skipped its release — leaking capacity
+    /// until `acquire` blocked forever and no pipe instance ever existed
+    /// again. Flooding well past [`MAX_WORKERS`] malformed connections must
+    /// leave the server fully alive.
+    #[test]
+    #[cfg(windows)]
+    fn a_flood_of_broken_connections_cannot_exhaust_the_worker_pool() {
+        let name: &'static str = Box::leak(
+            format!("screentime_agent_test_flood_{}", std::process::id()).into_boxed_str(),
+        );
+        spawn_test_server(name);
+
+        use std::io::Write;
+        for _ in 0..(MAX_WORKERS * 3) {
+            let mut stream = st_ipc::transport::client_connect(name).expect("connect");
+            // Well-formed length prefix, nonsense body: the frame layer rejects
+            // it and the worker closes the connection.
+            stream.write_all(&4u32.to_le_bytes()).expect("write len");
+            stream.write_all(b"junk").expect("write body");
+            drop(stream);
+        }
+
+        let mut probe = st_ipc::transport::client_connect(name).expect(
+            "server must still be listening after far more broken connections than workers",
+        );
+        st_ipc::write_message(&mut probe, &Request::Ping).expect("write ping");
+        assert!(matches!(
+            st_ipc::read_message::<_, Response>(&mut probe),
+            Ok(Response::Pong)
         ));
     }
 }
