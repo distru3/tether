@@ -10,6 +10,10 @@ st-core.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+# Drives the TypeScript bindings exported to ui/src/types/generated (see the
+# `export_ts_bindings` test). `serde-compat` makes the existing serde
+# attributes define the generated shapes, so there is one source of truth.
+ts-rs = { version = "11", features = ["serde-compat"] }
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [

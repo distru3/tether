@@ -8,6 +8,7 @@ members = [
     "crates/tracker-linux",
     "crates/enforce-win",
     "crates/enforce-linux",
+    "crates/st-win32",
     "crates/agent",
     "crates/session",
     "ui/src-tauri",

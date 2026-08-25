@@ -17,12 +17,13 @@
 use chrono::{DateTime, Datelike, Duration, FixedOffset, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use ts_rs::TS;
 
 /// A local calendar day encoded as `YYYYMMDD`.
 ///
 /// Stored as an integer because it is compact, sorts correctly, indexes well in
 /// SQLite, and is readable when eyeballing the database.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, TS)]
 pub struct DayKey(pub i32);
 
 impl DayKey {

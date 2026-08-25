@@ -4,6 +4,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
+use ts_rs::TS;
 
 use crate::daykey::DayKey;
 
@@ -17,7 +18,12 @@ pub type CategoryId = i64;
 /// updates, the user's limits silently stop applying. Hence path-based keys are
 /// normalised (lower-cased on Windows, which is case-insensitive) and packaged
 /// apps prefer their publisher-assigned identifier over any file path.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
+/// On the wire (serde) this is externally tagged with snake_case variant names,
+/// e.g. `{"windows_exe": "c:\\apps\\game.exe"}`. Nothing serialised `AppKey`
+/// before the IPC usage-report payload did, so this pins the representation
+/// from day one.
+#[serde(rename_all = "snake_case")]
 pub enum AppKey {
     /// Classic Windows executable, keyed by normalised full path.
     WindowsExe(String),

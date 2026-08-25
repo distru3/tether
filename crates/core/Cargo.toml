@@ -12,3 +12,6 @@ thiserror.workspace = true
 argon2.workspace = true
 rand_core = { version = "0.6", features = ["getrandom"] }
 tracing.workspace = true
+# Only used to derive `TS` on shared types (`AppKey`, `DayKey`) that cross the
+# IPC boundary; see st-ipc's bindings export.
+ts-rs = { version = "11", features = ["serde-compat"] }

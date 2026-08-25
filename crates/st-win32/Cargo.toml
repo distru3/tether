@@ -1,0 +1,17 @@
+[package]
+name = "st-win32"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[lib]
+name = "st_win32"
+
+# No non-Windows dependencies: every item here is Win32-only, so the crate is
+# expected to be pulled in behind `target.'cfg(windows)'` by its consumers.
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_System_Threading",
+] }

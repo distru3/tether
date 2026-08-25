@@ -21,13 +21,26 @@ use std::io::{Read, Write};
 
 use serde::{Deserialize, Serialize};
 use st_core::daykey::DayKey;
+use st_core::model::AppKey;
 use thiserror::Error;
+use ts_rs::TS;
 
 pub mod transport;
 
 /// Rejects oversized frames before allocating, so a malformed or hostile length
 /// prefix cannot exhaust memory.
 pub const MAX_FRAME_BYTES: u32 = 8 * 1024 * 1024;
+
+/// Canonical local endpoint name shared by the agent (server), the session
+/// helper and the UI host (clients).
+///
+/// The transport functions take this *bare* name: on Windows,
+/// [`transport::server_accept`] / [`transport::client_connect`] build the full
+/// NT path `\\.\pipe\{PIPE_NAME}` from it. A future Unix port would place a
+/// socket named after the same constant, so clients keep one source of truth.
+/// The duplicates in `agent`/`session`/`src-tauri` are legacy and should be
+/// replaced by this constant when those crates are rewired.
+pub const PIPE_NAME: &str = "screentime";
 
 #[derive(Debug, Error)]
 pub enum IpcError {
@@ -43,7 +56,7 @@ pub enum IpcError {
 
 pub type Result<T> = std::result::Result<T, IpcError>;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Request {
     /// Liveness probe. Also how the UI detects that the agent has been stopped.
@@ -55,8 +68,11 @@ pub enum Request {
     Status,
     /// Reclassify an app. `primary` drives reporting; `tags` only affect limits.
     Categorize {
+        #[ts(as = "i32")]
         app_id: i64,
+        #[ts(as = "i32")]
         primary: i64,
+        #[ts(as = "Vec<i32>")]
         tags: Vec<i64>,
     },
     /// Everything the limit editor needs in one round trip: apps, categories
@@ -69,7 +85,11 @@ pub enum Request {
     /// Deliberate user action from the block overlay's "Quit" button:
     /// terminate the app's process tree. Distinct from the removed auto-freeze;
     /// this only happens when the user chooses to quit.
-    CloseApps { app_id: i64, pin: String },
+    CloseApps {
+        #[ts(as = "i32")]
+        app_id: i64,
+        pin: String,
+    },
     /// Create or update a limit. Tightening applies at once; loosening is
     /// subject to the cooldown, which is why the response carries an effective
     /// time rather than just success.
@@ -85,6 +105,7 @@ pub enum Request {
     /// "+15 minutes", PIN gated, refused outright in strict mode.
     GrantOverride {
         target: LimitTargetDto,
+        #[ts(as = "i32")]
         seconds: i64,
         pin: String,
     },
@@ -94,17 +115,12 @@ pub enum Request {
         new_pin: String,
         current_pin: Option<String>,
     },
-    /// Usage reported by the session helper, which is the only component able to
-    /// see the focused window.
-    ReportUsage {
-        app_key: String,
-        display_name: String,
-        seconds: i64,
-        session_id: String,
-    },
+    /// Usage reported by the session helper, which is the only component able
+    /// to see the focused window. See [`ReportUsageDto`] for the contract.
+    ReportUsage { report: ReportUsageDto },
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
     Pong,
@@ -114,6 +130,11 @@ pub enum Response {
     BlockedApps(BlockedAppsDto),
     /// Accepted, with the instant the change actually takes effect. Equal to
     /// "now" for tightening, up to 24 hours out for loosening.
+    ///
+    /// Also the acknowledgement for [`Request::ReportUsage`], where
+    /// `effective_utc` carries the agent's *ingest* instant (RFC 3339) rather
+    /// than an enforcement time: the session helper can compare it against its
+    /// own send clock to detect and compensate for skew.
     Accepted {
         effective_utc: String,
     },
@@ -123,7 +144,7 @@ pub enum Response {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
     BadPin,
@@ -134,20 +155,84 @@ pub enum ErrorCode {
     /// The category is `never_block`, so it cannot carry a limit.
     NotLimitable,
     NotFound,
+    /// The request itself was invalid: a malformed payload, an out-of-range
+    /// value or an unknown target id. Callers previously abused [`ErrorCode::
+    /// BadPin`] for "unknown target"; use this instead so the UI can say
+    /// something honest.
+    BadRequest,
     Internal,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+/// A batch of foreground-window observations from the session helper.
+///
+/// # Contract
+///
+/// * **Sampling.** The helper samples the focused window locally at ~1 Hz and
+///   collapses consecutive identical samples (same app, same idle bucket) into
+///   single observations carrying the accumulated seconds, so a two-hour
+///   session is one observation rather than 7200. `window_title` is sampled at
+///   most once per collapse window; it is advisory (shown in the UI), never
+///   part of app identity.
+/// * **Batching.** Observations are buffered client-side and flushed as one
+///   `ReportUsage` request every few seconds of activity (and once before the
+///   helper exits). Batches bound pipe traffic without delaying data much;
+///   the agent must not rely on batch boundaries for anything.
+/// * **Ordering.** Within a batch, observations are ordered ascending by
+///   `observed_at_utc`. Across batches, ordering is only guaranteed per
+///   connection; the agent tolerates interleaved helpers (fast user
+///   switching) by attributing usage per `app_key` + day.
+/// * **Idempotency.** The transport is one-request-per-connection, so a lost
+///   response forces a resend that may double-deliver an entire batch. Ingestion
+///   must therefore be idempotent: identical `(app_key, observed_at_utc)`
+///   pairs collapse, and seconds accumulate additively otherwise.
+/// * **Clocks.** `observed_at_utc` uses the helper's wall clock and is trusted
+///   for day-bucketing only after the agent sanity-checks it against its own
+///   receive time ([`Response::Accepted`]'s `effective_utc` lets the helper
+///   measure skew). Large divergence is clamped, not trusted.
+///
+/// The agent replies with [`Response::Accepted`] on success; any
+/// [`Response::Error`] means the whole batch was discarded and should be
+/// retried after backoff (it was not partially applied).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ReportUsageDto {
+    pub observations: Vec<ObservationDto>,
+}
+
+/// One collapsed foreground-window sample taken by the session helper.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ObservationDto {
+    /// Identity of the application that had focus, using the canonical
+    /// [`AppKey`] form so the agent can join directly against its catalog
+    /// without re-parsing strings.
+    pub app_key: AppKey,
+    /// Foreground window title, when one could be read. Advisory only.
+    pub window_title: Option<String>,
+    /// Seconds the user had no input at sampling time, so the agent can
+    /// discount idle-but-focused time. Saturating: large values mean "idle".
+    pub idle_seconds: u32,
+    /// RFC 3339 UTC instant this observation ends at (the sampler collapses
+    /// backwards from here). See the clock rules in [`ReportUsageDto`].
+    pub observed_at_utc: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum LimitTargetDto {
-    App { id: i64 },
-    Category { id: i64 },
+    App {
+        #[ts(as = "i32")]
+        id: i64,
+    },
+    Category {
+        #[ts(as = "i32")]
+        id: i64,
+    },
     Total,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct DaySummaryDto {
     pub day: DayKey,
+    #[ts(as = "i32")]
     pub total_seconds: i64,
     /// Per-app usage, already sorted descending by the agent so the UI does no
     /// work on the main thread.
@@ -157,18 +242,24 @@ pub struct DaySummaryDto {
     pub categories: Vec<UsageRowDto>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct UsageRowDto {
+    // `as = "i32"`: ts-rs >= 10 renders 64-bit ints as `bigint`, but these
+    // values travel as JSON numbers over IPC (all well inside 2^53), so the
+    // bindings must say `number`. Same pattern below wherever an i64 crosses.
+    #[ts(as = "i32")]
     pub id: i64,
     pub label: String,
+    #[ts(as = "i32")]
     pub seconds: i64,
     pub color: Option<String>,
     /// Present when a limit applies, for the progress ring.
+    #[ts(as = "Option<i32>")]
     pub limit_seconds: Option<i64>,
     pub blocked: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct StatusDto {
     pub agent_version: String,
     pub tracker_backend: String,
@@ -183,25 +274,29 @@ pub struct StatusDto {
 }
 
 /// Everything the limit editor needs, in one round trip.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct CatalogDto {
     pub apps: Vec<AppDto>,
     pub categories: Vec<CategoryDto>,
     pub limits: Vec<LimitDto>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct AppDto {
+    #[ts(as = "i32")]
     pub id: i64,
     pub key: String,
     pub display_name: String,
+    #[ts(as = "i32")]
     pub primary_category: i64,
+    #[ts(as = "Vec<i32>")]
     pub tags: Vec<i64>,
     pub user_classified: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct CategoryDto {
+    #[ts(as = "i32")]
     pub id: i64,
     pub slug: String,
     pub name: String,
@@ -211,8 +306,9 @@ pub struct CategoryDto {
     pub builtin: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct LimitDto {
+    #[ts(as = "i32")]
     pub id: i64,
     pub target: LimitTargetDto,
     pub default_minutes: u32,
@@ -221,8 +317,9 @@ pub struct LimitDto {
 }
 
 /// A currently-blocked app, as reported to the overlay owner.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct BlockedAppDto {
+    #[ts(as = "i32")]
     pub app_id: i64,
     pub label: String,
     /// Canonical `kind:value` app key, so the session helper can match the
@@ -233,7 +330,7 @@ pub struct BlockedAppDto {
 /// The payload of `Response::BlockedApps`. Wrapped in a struct (not a bare
 /// `Vec`) because `Response` is internally tagged: Serde cannot tag a newtype
 /// variant that is a sequence.
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct BlockedAppsDto {
     pub blocked: Vec<BlockedAppDto>,
 }
@@ -343,12 +440,28 @@ mod tests {
 
     #[test]
     fn error_responses_serialise_with_stable_codes() {
-        let json = serde_json::to_string(&Response::Error {
-            code: ErrorCode::BadPin,
-            message: "nope".into(),
-        })
-        .expect("serialise");
-        assert!(json.contains("\"bad_pin\""), "unexpected payload: {json}");
+        // These strings are wire-visible (the UI and session helper switch on
+        // them), so they may only change deliberately.
+        let cases: &[(ErrorCode, &str)] = &[
+            (ErrorCode::BadPin, "\"bad_pin\""),
+            (ErrorCode::CooldownActive, "\"cooldown_active\""),
+            (ErrorCode::StrictMode, "\"strict_mode\""),
+            (ErrorCode::NotLimitable, "\"not_limitable\""),
+            (ErrorCode::NotFound, "\"not_found\""),
+            (ErrorCode::BadRequest, "\"bad_request\""),
+            (ErrorCode::Internal, "\"internal\""),
+        ];
+        for (code, expected) in cases {
+            let json = serde_json::to_string(&Response::Error {
+                code: *code,
+                message: "nope".into(),
+            })
+            .expect("serialise");
+            assert!(
+                json.contains(expected),
+                "expected {expected} in payload for {code:?}: {json}"
+            );
+        }
     }
 
     #[test]
@@ -410,5 +523,95 @@ mod tests {
             "tag missing: {json}"
         );
         assert!(json.contains("Elden Ring"));
+    }
+
+    /// A representative batch, as the session helper would send it.
+    fn sample_report() -> ReportUsageDto {
+        ReportUsageDto {
+            observations: vec![
+                ObservationDto {
+                    app_key: AppKey::windows_exe("C:\\Apps\\Game\\game.exe"),
+                    window_title: Some("Elden Ring".into()),
+                    idle_seconds: 0,
+                    observed_at_utc: "2026-08-25T10:00:30Z".into(),
+                },
+                ObservationDto {
+                    app_key: AppKey::WindowsAumid(
+                        "Microsoft.MicrosoftEdge_8wekyb3d8bbwe!MSEDGE".into(),
+                    ),
+                    window_title: None,
+                    idle_seconds: 45,
+                    observed_at_utc: "2026-08-25T10:01:00Z".into(),
+                },
+            ],
+        }
+    }
+
+    #[test]
+    fn report_usage_round_trips_through_framing() {
+        let mut buf = Vec::new();
+        write_message(
+            &mut buf,
+            &Request::ReportUsage {
+                report: sample_report(),
+            },
+        )
+        .expect("write");
+
+        let mut cursor = Cursor::new(buf);
+        let decoded: Request = read_message(&mut cursor).expect("read");
+        assert!(matches!(
+            decoded,
+            Request::ReportUsage { report } if report == sample_report()
+        ));
+    }
+
+    #[test]
+    fn report_usage_serialises_with_the_type_tag() {
+        let json = serde_json::to_string(&Request::ReportUsage {
+            report: sample_report(),
+        })
+        .expect("serialise");
+        assert!(
+            json.contains("\"type\":\"report_usage\""),
+            "tag missing: {json}"
+        );
+    }
+
+    #[test]
+    fn report_usage_payload_serialises_with_stable_fields() {
+        // Wire-visible shape: the agent joins `app_key` against its catalog and
+        // buckets on `observed_at_utc`, so field names and the externally
+        // tagged `AppKey` form are contract.
+        let json = serde_json::to_string(&sample_report()).expect("serialise");
+        assert!(json.contains("\"observations\":["));
+        assert!(json.contains("\"app_key\":{\"windows_exe\":\"c:\\\\apps\\\\game\\\\game.exe\"}"));
+        assert!(json.contains("\"windows_aumid\""));
+        assert!(json.contains("\"window_title\":null"));
+        assert!(json.contains("\"idle_seconds\":45"));
+        assert!(json.contains("\"observed_at_utc\":\"2026-08-25T10:01:00Z\""));
+
+        let ack = serde_json::to_string(&Response::Accepted {
+            effective_utc: "2026-08-25T10:01:00Z".into(),
+        })
+        .expect("serialise");
+        assert!(ack.contains("\"type\":\"accepted\""), "tag missing: {ack}");
+        assert!(ack.contains("\"effective_utc\""));
+    }
+
+    /// Regenerates the committed TypeScript bindings under
+    /// `ui/src/types/generated/`. Run via `cargo test -p st-ipc
+    /// export_ts_bindings`. Uses `export_all_to` (not `#[ts(export)]`) so the
+    /// output location is pinned to the repo instead of depending on
+    /// `TS_RS_EXPORT_DIR` or the working directory.
+    #[test]
+    fn export_ts_bindings() {
+        let dir =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/src/types/generated");
+        std::fs::create_dir_all(&dir).expect("create generated dir");
+        // Export both protocol roots; every consumed DTO (and its transitive
+        // dependencies in st-core) is reachable from one of them.
+        Response::export_all_to(&dir).expect("export response bindings");
+        Request::export_all_to(&dir).expect("export request bindings");
     }
 }
