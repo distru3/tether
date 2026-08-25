@@ -58,8 +58,12 @@ use std::ffi::c_void;
 use std::sync::Arc;
 
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows::Win32::Graphics::Gdi::InvalidateRect;
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, SIZE, WPARAM};
+use windows::Win32::Graphics::Gdi::{
+    CreateFontW, CreateSolidBrush, DeleteObject, ExtTextOutW, FillRect, GetTextExtentPoint32W,
+    InvalidateRect, SelectObject, SetBkMode, SetTextColor, ETO_OPTIONS, HDC, HFONT, HGDIOBJ,
+    TRANSPARENT,
+};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
@@ -401,6 +405,320 @@ unsafe fn handle_click(hwnd: HWND, state: &mut OverlayState, px: i32, py: i32) {
     }
 }
 
+/// Ledger-theme palette. COLORREF packs as `0x00bbggrr`; these mirror
+/// `ui/src/styles/tokens.css` so the overlay reads as the same publication as
+/// the dashboard: warm newsprint, one ink, one editorial red.
+const fn rgb(r: u8, g: u8, b: u8) -> u32 {
+    r as u32 | (g as u32) << 8 | (b as u32) << 16
+}
+const PAPER: u32 = rgb(0xF6, 0xF2, 0xEA);
+const PAPER_RAISED: u32 = rgb(0xFB, 0xF8, 0xF2);
+const INK: u32 = rgb(0x21, 0x1D, 0x1A);
+const INK_SOFT: u32 = rgb(0x57, 0x50, 0x4A);
+const RULE_STRONG: u32 = rgb(0xB3, 0xA9, 0x92);
+const RED: u32 = rgb(0xA0, 0x2C, 0x20);
+
+/// The faces of the design system, created fresh per paint and freed on drop.
+/// Georgia carries display/body exactly like the dashboard; Consolas is the
+/// utility voice for labels, digits and buttons.
+struct Fonts {
+    display: HFONT,
+    body: HFONT,
+    italic: HFONT,
+    mono: HFONT,
+    mono_bold: HFONT,
+}
+
+impl Fonts {
+    /// Heights are negative: GDI treats them as character heights rather than
+    /// line heights, which keeps sizes predictable across DPI settings.
+    unsafe fn new() -> Self {
+        let georgia = PCWSTR(w!("Georgia").as_ptr());
+        let consolas = PCWSTR(w!("Consolas").as_ptr());
+        // windows-0.58 exposes CreateFontW with plain integer params; the
+        // magic numbers are the stock GDI enum values (charset 1 =
+        // DEFAULT_CHARSET, precision/quality 0/5 = default/ClearType).
+        let make = |height: i32, weight: i32, italic: bool, face: PCWSTR| -> HFONT {
+            CreateFontW(
+                height,
+                0,
+                0,
+                0,
+                weight,
+                italic as u32,
+                0,
+                0,
+                1,
+                0,
+                0,
+                5,
+                0,
+                face,
+            )
+        };
+        Self {
+            display: make(-48, 700, false, georgia),
+            body: make(-23, 400, false, georgia),
+            italic: make(-20, 400, true, georgia),
+            mono: make(-13, 400, false, consolas),
+            mono_bold: make(-15, 700, false, consolas),
+        }
+    }
+}
+
+impl Drop for Fonts {
+    fn drop(&mut self) {
+        // SAFETY: each handle came from CreateFontW above and outlived every
+        // selection into the paint DC.
+        for f in [
+            &self.display,
+            &self.body,
+            &self.italic,
+            &self.mono,
+            &self.mono_bold,
+        ] {
+            unsafe {
+                let _ = DeleteObject(HGDIOBJ(f.0));
+            }
+        }
+    }
+}
+
+unsafe fn select_font(hdc: HDC, font: &HFONT) -> HGDIOBJ {
+    SelectObject(hdc, HGDIOBJ(font.0))
+}
+
+/// Measure a UTF-16 string under the given font selection.
+unsafe fn text_extent(hdc: HDC, s: &str, font: &HFONT) -> (i32, i32) {
+    let old = select_font(hdc, font);
+    let mut size = SIZE::default();
+    let _ = GetTextExtentPoint32W(hdc, &s.encode_utf16().collect::<Vec<u16>>(), &mut size);
+    select_font(hdc, &HFONT(old.0));
+    (size.cx, size.cy)
+}
+
+/// Truncate to fit `max_w` with a trailing ellipsis, measuring as we cut.
+unsafe fn ellipsize(hdc: HDC, s: &str, font: &HFONT, max_w: i32) -> String {
+    let (w, _) = text_extent(hdc, s, font);
+    if w <= max_w {
+        return s.to_string();
+    }
+    let mut chars: Vec<char> = s.chars().collect();
+    while !chars.is_empty() {
+        chars.pop();
+        let candidate: String = chars.iter().collect::<String>() + "\u{2026}";
+        let (cw, _) = text_extent(hdc, &candidate, font);
+        if cw <= max_w {
+            return candidate;
+        }
+    }
+    String::new()
+}
+
+/// Draw text at `(x, y)` (top-left) in the given face and colour.
+unsafe fn draw_text(hdc: HDC, x: i32, y: i32, s: &str, font: &HFONT, colour: u32) {
+    select_font(hdc, font);
+    SetTextColor(hdc, COLORREF(colour));
+    SetBkMode(hdc, TRANSPARENT);
+    let wide: Vec<u16> = s.encode_utf16().collect();
+    let _ = ExtTextOutW(
+        hdc,
+        x,
+        y,
+        ETO_OPTIONS(0),
+        None,
+        PCWSTR(wide.as_ptr()),
+        wide.len() as u32,
+        None,
+    );
+}
+
+/// Like [`draw_text`] but centred on horizontal position `cx`.
+unsafe fn draw_text_centered(hdc: HDC, cx: i32, y: i32, s: &str, font: &HFONT, colour: u32) {
+    let (w, _) = text_extent(hdc, s, font);
+    draw_text(hdc, cx - w / 2, y, s, font, colour);
+}
+
+/// Uppercase text with letter-spacing — the eyebrow/utility voice. GDI has no
+/// native tracking parameter, so each glyph's advance is widened manually via
+/// the per-character dx array of ExtTextOutW.
+unsafe fn draw_tracked_caps(
+    hdc: HDC,
+    x: i32,
+    y: i32,
+    s: &str,
+    font: &HFONT,
+    colour: u32,
+    track: i32,
+) {
+    select_font(hdc, font);
+    SetTextColor(hdc, COLORREF(colour));
+    SetBkMode(hdc, TRANSPARENT);
+    let upper = s.to_uppercase();
+    let wide: Vec<u16> = upper.encode_utf16().collect();
+    let mut dx = Vec::with_capacity(wide.len());
+    for ch in upper.chars() {
+        let (w, _) = text_extent(hdc, &ch.to_string(), font);
+        dx.push(w + track);
+    }
+    let _ = ExtTextOutW(
+        hdc,
+        x,
+        y,
+        ETO_OPTIONS(0),
+        None,
+        PCWSTR(wide.as_ptr()),
+        wide.len() as u32,
+        Some(dx.as_ptr()),
+    );
+}
+
+/// Solid rectangle, same as before but returning nothing new.
+fn fill(hdc: HDC, r: &RECT, colour: u32) {
+    // SAFETY: GDI object calls with locally created brush, deleted before return.
+    unsafe {
+        let brush = CreateSolidBrush(COLORREF(colour));
+        let _ = FillRect(hdc, r, brush);
+        let _ = DeleteObject(HGDIOBJ(brush.0));
+    }
+}
+
+/// A rectangular border of thickness `t` drawn inward from `r`'s edges.
+fn stroke(hdc: HDC, r: &RectI, t: i32, colour: u32) {
+    let outer = RECT {
+        left: r.x,
+        top: r.y,
+        right: r.x + r.w,
+        bottom: r.y + r.h,
+    };
+    fill(
+        hdc,
+        &RECT {
+            left: outer.left,
+            top: outer.top,
+            right: outer.right,
+            bottom: outer.top + t,
+        },
+        colour,
+    );
+    fill(
+        hdc,
+        &RECT {
+            left: outer.left,
+            top: outer.bottom - t,
+            right: outer.right,
+            bottom: outer.bottom,
+        },
+        colour,
+    );
+    fill(
+        hdc,
+        &RECT {
+            left: outer.left,
+            top: outer.top,
+            right: outer.left + t,
+            bottom: outer.bottom,
+        },
+        colour,
+    );
+    fill(
+        hdc,
+        &RECT {
+            left: outer.right - t,
+            top: outer.top,
+            right: outer.right,
+            bottom: outer.bottom,
+        },
+        colour,
+    );
+}
+
+/// Button voices: solid ink is the primary action, outlined paper the
+/// secondary — matching `.btn--primary` / outlined text-buttons in the UI.
+#[derive(Clone, Copy)]
+enum BtnStyle {
+    Ink,
+    Outline,
+}
+
+unsafe fn draw_button(hdc: HDC, r: &RectI, label: &str, style: BtnStyle, fonts: &Fonts) {
+    match style {
+        BtnStyle::Ink => {
+            fill(
+                hdc,
+                &RECT {
+                    left: r.x,
+                    top: r.y,
+                    right: r.x + r.w,
+                    bottom: r.y + r.h,
+                },
+                INK,
+            );
+            draw_text_centered(
+                hdc,
+                r.x + r.w / 2,
+                r.y + (r.h - text_extent(hdc, label, &fonts.mono_bold).1) / 2,
+                label,
+                &fonts.mono_bold,
+                PAPER,
+            );
+        }
+        BtnStyle::Outline => {
+            fill(
+                hdc,
+                &RECT {
+                    left: r.x,
+                    top: r.y,
+                    right: r.x + r.w,
+                    bottom: r.y + r.h,
+                },
+                PAPER_RAISED,
+            );
+            stroke(hdc, r, 1, RULE_STRONG);
+            draw_text_centered(
+                hdc,
+                r.x + r.w / 2,
+                r.y + (r.h - text_extent(hdc, label, &fonts.mono_bold).1) / 2,
+                label,
+                &fonts.mono_bold,
+                INK,
+            );
+        }
+    }
+}
+
+/// The page's one loud moment, transplanted from the web banner: a red
+/// double-ruled OVER LIMIT plate, right-aligned like a rubber stamp.
+unsafe fn draw_stamp(hdc: HDC, right: i32, y: i32, fonts: &Fonts) {
+    let (w, h) = (178, 46);
+    let r = RectI {
+        x: right - w,
+        y,
+        w,
+        h,
+    };
+    stroke(hdc, &r, 3, RED);
+    stroke(
+        hdc,
+        &RectI {
+            x: r.x + 7,
+            y: r.y + 7,
+            w: r.w - 14,
+            h: r.h - 14,
+        },
+        1,
+        RED,
+    );
+    draw_text_centered(
+        hdc,
+        r.x + r.w / 2,
+        r.y + (h - 17) / 2,
+        "OVER LIMIT",
+        &fonts.mono_bold,
+        RED,
+    );
+}
+
 unsafe fn paint(hwnd: HWND, state: &OverlayState) {
     let mut rect = RECT::default();
     let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect);
@@ -409,90 +727,127 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
     let mut ps = windows::Win32::Graphics::Gdi::PAINTSTRUCT::default();
     let hdc = windows::Win32::Graphics::Gdi::BeginPaint(hwnd, &mut ps);
 
-    // Background: dark ink panel.
-    fill(hdc, &rect, 0x0c0f1a);
+    // SAFETY: GDI calls below use objects created in this scope; DC state is
+    // reset per selection and torn down by EndPaint.
+    unsafe {
+        let fonts = Fonts::new();
 
-    // Top accent line.
-    fill(
-        hdc,
-        &RECT {
-            left: 0,
-            top: 0,
-            right: cw,
-            bottom: 3,
-        },
-        0x3d6bff,
-    );
+        // The sheet.
+        fill(hdc, &rect, PAPER);
 
-    text(hdc, PAD, 34, "Time's up");
-    text(hdc, PAD, 70, &state.label);
+        // Masthead: brand left, verdict right, newspaper double rule below.
+        draw_tracked_caps(hdc, PAD, 24, "SCREENTIME", &fonts.mono, INK_SOFT, 3);
+        let blocked = "BLOCKED";
+        let (blocked_w, _) = text_extent(hdc, blocked, &fonts.mono);
+        draw_tracked_caps(
+            hdc,
+            cw - PAD - blocked_w - 6 * blocked.len() as i32,
+            24,
+            blocked,
+            &fonts.mono,
+            RED,
+            3,
+        );
+        fill(
+            hdc,
+            &RECT {
+                left: PAD,
+                top: 62,
+                right: cw - PAD,
+                bottom: 65,
+            },
+            INK,
+        );
+        fill(
+            hdc,
+            &RECT {
+                left: PAD,
+                top: 69,
+                right: cw - PAD,
+                bottom: 70,
+            },
+            RULE_STRONG,
+        );
 
-    match state.mode {
-        OverlayMode::Buttons => {
-            let (quit, extend) = layout_buttons(cw, ch);
-            draw_button(hdc, &quit, "Quit", 0x2b3347);
-            draw_button(hdc, &extend, "+15 min", 0x3d6bff);
-        }
-        OverlayMode::PinExtend => {
-            text(hdc, PAD, 106, "Enter the PIN to add 15 minutes");
+        // The stamp sits in the header band, clear of the headline.
+        draw_stamp(hdc, cw - PAD, 20, &fonts);
 
-            let (gx, gy) = pad_origin(cw, ch);
-            // Masked entry above the grid; one dot per clicked digit.
-            let dots = "\u{25cf}".repeat(state.pin.chars().count());
-            text(hdc, gx, gy - BTN_GAP - 30, &dots);
-            if state.wrong_pin {
-                text(hdc, gx, gy - BTN_GAP - 6, "Incorrect PIN");
+        // Headline figure and the app it convicts.
+        draw_text(hdc, PAD, 104, "Time's up.", &fonts.display, INK);
+        let label = ellipsize(hdc, &state.label, &fonts.body, cw - PAD * 2);
+        draw_text(hdc, PAD, 172, &label, &fonts.body, INK_SOFT);
+        draw_text(
+            hdc,
+            PAD,
+            210,
+            "This app hit its standing order for today.",
+            &fonts.italic,
+            INK_SOFT,
+        );
+
+        match state.mode {
+            OverlayMode::Buttons => {
+                let (quit, extend) = layout_buttons(cw, ch);
+                draw_text(
+                    hdc,
+                    PAD,
+                    quit.y - 38,
+                    "You can close the app, or buy fifteen more minutes.",
+                    &fonts.italic,
+                    INK_SOFT,
+                );
+                draw_button(hdc, &quit, "QUIT", BtnStyle::Outline, &fonts);
+                draw_button(hdc, &extend, "+15 MIN", BtnStyle::Ink, &fonts);
             }
+            OverlayMode::PinExtend => {
+                let (gx, gy) = pad_origin(cw, ch);
+                draw_tracked_caps(
+                    hdc,
+                    gx,
+                    gy - BTN_GAP - 84,
+                    "SUPERVISOR PIN",
+                    &fonts.mono,
+                    INK_SOFT,
+                    3,
+                );
 
-            for (i, cell) in layout_pad(cw, ch).iter().enumerate() {
-                let (label, colour) = match PAD_KEYS[i] {
-                    "OK" => ("+15 min", 0x3d6bff),
-                    "C" => ("Clear", 0x2b3347),
-                    digit => (digit, 0x2b3347),
-                };
-                draw_button(hdc, cell, label, colour);
+                // Masked entry: one printed ink square per clicked digit.
+                for i in 0..state.pin.chars().count() {
+                    fill(
+                        hdc,
+                        &RECT {
+                            left: gx + i as i32 * 22,
+                            top: gy - BTN_GAP - 56,
+                            right: gx + i as i32 * 22 + 10,
+                            bottom: gy - BTN_GAP - 46,
+                        },
+                        INK,
+                    );
+                }
+                if state.wrong_pin {
+                    draw_text(
+                        hdc,
+                        gx,
+                        gy - BTN_GAP - 32,
+                        "That PIN doesn't match.",
+                        &fonts.italic,
+                        RED,
+                    );
+                }
+
+                for (i, cell) in layout_pad(cw, ch).iter().enumerate() {
+                    let (label, style) = match PAD_KEYS[i] {
+                        "OK" => ("+15 MIN", BtnStyle::Ink),
+                        "C" => ("CLEAR", BtnStyle::Outline),
+                        digit => (digit, BtnStyle::Outline),
+                    };
+                    draw_button(hdc, cell, label, style, &fonts);
+                }
             }
         }
     }
 
     let _ = windows::Win32::Graphics::Gdi::EndPaint(hwnd, &ps);
-}
-
-/// Solid-colour rectangle helper; the brush lives only for this call.
-fn fill(hdc: windows::Win32::Graphics::Gdi::HDC, r: &RECT, colour: u32) {
-    // SAFETY: GDI object calls with locally created brush, deleted before return.
-    unsafe {
-        let brush = windows::Win32::Graphics::Gdi::CreateSolidBrush(
-            windows::Win32::Foundation::COLORREF(colour),
-        );
-        let _ = windows::Win32::Graphics::Gdi::FillRect(hdc, r, brush);
-        let _ = windows::Win32::Graphics::Gdi::DeleteObject(brush);
-    }
-}
-
-fn text(hdc: windows::Win32::Graphics::Gdi::HDC, x: i32, y: i32, s: &str) {
-    // SAFETY: TextOutW copies from the slice for its duration.
-    unsafe {
-        let wide: Vec<u16> = s.encode_utf16().collect();
-        let _ = windows::Win32::Graphics::Gdi::TextOutW(hdc, x, y, &wide);
-    }
-}
-
-fn draw_button(hdc: windows::Win32::Graphics::Gdi::HDC, r: &RectI, label: &str, colour: u32) {
-    fill(
-        hdc,
-        &RECT {
-            left: r.x,
-            top: r.y,
-            right: r.x + r.w,
-            bottom: r.y + r.h,
-        },
-        colour,
-    );
-    // Crude centring: monospace-ish estimate, consistent with the rest of the
-    // hand-painted panel (no child controls, no text metrics plumbing).
-    let text_w = label.encode_utf16().count() as i32 * 8;
-    text(hdc, r.x + (r.w - text_w) / 2, r.y + (r.h - 20) / 2, label);
 }
 
 /// Timer id for the fade-in ramp. Arbitrary but unique within the window.

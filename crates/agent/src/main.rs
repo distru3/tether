@@ -47,7 +47,6 @@ use crate::platform::Backends;
 use crate::sampler::{PendingInterval, Sampler};
 
 const POLL: StdDuration = StdDuration::from_secs(1);
-const EVALUATE_EVERY_TICKS: u32 = 5;
 const CLOCK_TOLERANCE_SECS: i64 = 3;
 
 fn main() -> Result<()> {
@@ -177,7 +176,6 @@ fn run_main_loop(
     let mut sampler = self_sampling.then(|| Sampler::new(day_start_minutes));
     let mut guard = ClockGuard::new(&*clock, Duration::seconds(CLOCK_TOLERANCE_SECS));
     let mut enforcer = Enforcer::new();
-    let mut ticks: u32 = 0;
     let mut tracker_error_logged = false;
 
     tracing::info!("agent running; press Ctrl+C to stop");
@@ -216,18 +214,18 @@ fn run_main_loop(
             }
         }
 
-        ticks = ticks.wrapping_add(1);
-        if ticks % EVALUATE_EVERY_TICKS == 0 {
-            evaluate_limits(
-                &*clock,
-                &db,
-                &ipc,
-                &mut enforcer,
-                now,
-                tz_offset,
-                day_start_minutes,
-            );
-        }
+        // Every tick evaluates limits: a handful of indexed reads over local
+        // SQLite (sub-millisecond), and 1 Hz is what makes enforcement feel
+        // live — a crossed limit blocks within a second of the credit landing.
+        evaluate_limits(
+            &*clock,
+            &db,
+            &ipc,
+            &mut enforcer,
+            now,
+            tz_offset,
+            day_start_minutes,
+        );
 
         std::thread::sleep(POLL);
     }

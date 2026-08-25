@@ -8,7 +8,10 @@ import type { StatusDto } from "../types/generated/StatusDto";
 
 export type Phase = "connecting" | "live" | "offline";
 
-const POLL_MS = 3000;
+// One poll per visible second: a local named-pipe round trip plus one small
+// SQLite read is well under a millisecond on the agent side, and 1 Hz is what
+// makes the ledger feel like it is counting rather than refreshing.
+const POLL_MS = 1000;
 const CATALOG_MS = 60000;
 
 export interface Dashboard {

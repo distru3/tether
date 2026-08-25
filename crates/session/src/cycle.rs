@@ -16,13 +16,17 @@ use st_ipc::{BlockedAppDto, ObservationDto};
 
 /// Width of one collapse window on the Unix clock, in seconds.
 ///
-/// Why grid-aligned fixed windows instead of "close after N samples": the wire
-/// contract is idempotent on `(app_key, observed_at_utc)`, which only works if
-/// the same stretch of usage always produces the *same* end stamp. Wall-clock
-/// alignment gives that for free (a resend of window 17:00:20–17:00:30 carries
-/// `17:00:30` again no matter when the helper restarted), and it lets the agent
-/// infer each observation's duration as the gap to the next stamp.
-pub const COLLAPSE_WINDOW_SECS: i64 = 10;
+/// One second, so usage shows up live: the agent credits each interval as
+/// soon as the next sample arrives, and the dashboard moves second by second.
+/// The wire cost is one small frame per active second on a local pipe — noise.
+///
+/// Why a grid-aligned fixed window instead of "close after N samples": the
+/// wire contract is idempotent on `(app_key, observed_at_utc)`, which only
+/// works if the same stretch of usage always produces the *same* end stamp.
+/// Wall-clock alignment gives that for free (a resend of 17:00:20–17:00:21
+/// carries `17:00:21` again no matter when the helper restarted), and it lets
+/// the agent infer each observation's duration as the gap to the next stamp.
+pub const COLLAPSE_WINDOW_SECS: i64 = 1;
 
 /// Idle seconds at or beyond which a sample counts as "away" rather than
 /// "at desk". The two buckets are what force a collapse-window flush when the
@@ -32,9 +36,9 @@ pub const IDLE_BUCKET_SECS: u64 = 60;
 
 /// Maximum age of the cached `BlockedApps` answer before it must be refetched.
 /// Bounds how late an app that becomes blocked mid-focus (limit crossed while
-/// the user sits in the app) gets its overlay: at most this many seconds,
-/// independent of focus changes.
-pub const BLOCKEDAPPS_MAX_AGE_SECS: u64 = 15;
+/// the user sits in the app) gets its overlay. Two seconds keeps that lag at
+/// "immediate" to a human while costing one tiny frame every other cycle.
+pub const BLOCKEDAPPS_MAX_AGE_SECS: u64 = 2;
 
 /// Ceiling on buffered observations. Normally unreachable: windows close every
 /// [`COLLAPSE_WINDOW_SECS`] and are drained each ~1 s cycle. The cap exists so
@@ -350,30 +354,28 @@ mod tests {
     }
 
     #[test]
-    fn consecutive_samples_of_one_app_collapse_into_one_observation() {
+    fn consecutive_samples_emit_one_grid_aligned_observation_per_second() {
         let mut acc = ObsAccumulator::default();
         assert!(acc
             .offer(sample(Some(exe("C:\\a\\g.exe"))), at(100))
             .is_empty());
-        assert!(acc
-            .offer(sample(Some(exe("C:\\a\\g.exe"))), at(103))
-            .is_empty());
-        // Same app, different path spelling: identity is the canonical key,
-        // so it still collapses rather than splitting the window.
-        assert!(acc
-            .offer(sample(Some(exe("C:\\A\\G.EXE"))), at(105))
-            .is_empty());
+        // t=105 crossed the window ending at 101: that window closes stamped
+        // at its grid end, and a fresh one opens for 106. Same app, different
+        // path spelling: identity is the canonical key, so it stays one run.
+        let out = acc.offer(sample(Some(exe("C:\\A\\G.EXE"))), at(105));
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].observed_at_utc, "1970-01-01T00:01:41Z");
     }
 
     #[test]
     fn crossing_the_window_edge_flushes_and_realigns_to_the_clock_grid() {
         let mut acc = ObsAccumulator::default();
         acc.offer(sample(Some(exe("C:\\a\\g.exe"))), at(95));
-        // t=105 is past the window ending at t=100: the window closes stamped
-        // at its grid edge, and a fresh window opens for 110.
+        // t=105 is past the window ending at t=96: the window closes stamped
+        // at its grid edge, and a fresh window opens for 106.
         let out = acc.offer(sample(Some(exe("C:\\a\\g.exe"))), at(105));
         assert_eq!(out.len(), 1);
-        assert_eq!(out[0].observed_at_utc, "1970-01-01T00:01:40Z");
+        assert_eq!(out[0].observed_at_utc, "1970-01-01T00:01:36Z");
     }
 
     #[test]
@@ -383,9 +385,9 @@ mod tests {
         let out = acc.offer(sample(Some(exe("C:\\b\\w.exe"))), at(97));
         assert_eq!(out.len(), 1);
         assert_eq!(out[0].app_key, exe("C:\\a\\g.exe"));
-        // The new app's window stays open.
+        // A same-second resample stays inside the fresh window.
         assert!(acc
-            .offer(sample(Some(exe("C:\\b\\w.exe"))), at(98))
+            .offer(sample(Some(exe("C:\\b\\w.exe"))), at(97))
             .is_empty());
         let drained = acc.flush(at(99));
         assert_eq!(drained.len(), 1);
@@ -457,11 +459,15 @@ mod tests {
         let mut s1 = sample(Some(exe("C:\\a\\g.exe")));
         s1.title = Some("Boss fight".into());
         acc.offer(s1, at(96));
+        // Same window: a retitled sample does not overwrite the captured one.
         let mut s2 = sample(Some(exe("C:\\a\\g.exe")));
         s2.title = Some("Different tab".into());
-        assert!(acc.offer(s2, at(97)).is_empty());
-        let out = acc.flush(at(99));
+        assert!(acc.offer(s2.clone(), at(96)).is_empty());
+        // Crossing into a new window starts capturing afresh.
+        let out = acc.offer(s2, at(97));
         assert_eq!(out[0].window_title.as_deref(), Some("Boss fight"));
+        let drained = acc.flush(at(98));
+        assert_eq!(drained[0].window_title.as_deref(), Some("Different tab"));
     }
 
     #[test]

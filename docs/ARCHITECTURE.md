@@ -101,6 +101,13 @@ nothing; expired blocks thaw on tick and overrides land on the reporting user's
 local day. The hosts writer aborts on read failure rather than wipe unmanaged
 lines, and writes atomically via temp file + rename.
 
+The anti-impulse cooldown guards exactly one action: loosening *minutes* while
+a limit stays enabled. Removing or disabling an order is instant — the
+cooldown exists to stop future-you from granting itself more time, not from
+standing an order down. Enforcement runs on the agent's 1 Hz tick and the
+session reports at 1 Hz, so a crossed limit surfaces within about a second of
+the credit landing.
+
 ## Milestones
 
 See `README.md`.

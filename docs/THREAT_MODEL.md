@@ -26,7 +26,8 @@ worse than one that says nothing: users will trust it and then be surprised.
 * Reversible enforcement: freeze rather than kill. Grace countdown before any
   destructive action.
 * Anti-impulse **cooldown** on loosening limits (24 h by default). Tightening
-  takes effect immediately.
+  takes effect immediately; removing or disabling an order is also instant —
+  the cooldown guards "give myself more minutes", not "stand the order down".
 * Clock-tamper detection: wall time cross-checked against monotonic time; a
   detected rollback is logged and does not credit the interval.
 * Sleep-gap detection: same mechanism, opposite direction. Time under

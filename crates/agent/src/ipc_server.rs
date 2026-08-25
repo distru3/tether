@@ -622,17 +622,17 @@ fn set_limit(ctx: &Ctx, spec: LimitSpec, now: DateTime<Utc>) -> Response {
         Err(e) => return error_internal(format!("load limits: {e}")),
     };
     let effective = match existing {
-        // Tightening (or a brand-new limit) applies immediately.
+        // Tightening, a brand-new limit, and switching a limit OFF apply
+        // immediately. Disabling is deliberately an *instant* escape hatch:
+        // the anti-impulse cooldown exists to stop future-you from granting
+        // itself more minutes, not from standing an order down entirely.
         Some(existing)
-            if !is_loosening(
-                &existing,
-                spec.default_minutes,
-                spec.weekday_minutes,
-                spec.enabled,
-            ) =>
+            if !spec.enabled
+                || !is_loosening(&existing, spec.default_minutes, spec.weekday_minutes) =>
         {
             now
         }
+        // Only loosening *minutes* while staying enabled waits out the cooldown.
         Some(_) => now + Duration::hours(ctx.policy.limit_cooldown_hours.max(0)),
         None => now,
     };
@@ -676,16 +676,13 @@ fn delete_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str, now: DateTime<Utc>
     let Some(target) = dto_to_target(&target) else {
         return bad_request("unknown limit target".into());
     };
-    // Deleting is always a loosening action: cooldown applies.
-    let effective = now + Duration::hours(ctx.policy.limit_cooldown_hours.max(0));
-    let result = if effective > now {
-        db.queue_pending_delete(&target, effective)
-    } else {
-        db.delete_limit_by_target(&target)
-    };
-    match result {
+    // Deleting lifts enforcement instantly (owner decision, 2026-08): the
+    // cooldown protects against loosening minutes on impulse, not against
+    // standing an order down. The enforcer's next evaluation tick thaws
+    // whatever the deleted order had frozen.
+    match db.delete_limit_by_target(&target) {
         Ok(()) => Response::Accepted {
-            effective_utc: effective.to_rfc3339(),
+            effective_utc: now.to_rfc3339(),
         },
         Err(e) => error_internal(format!("delete limit: {e}")),
     }
@@ -934,17 +931,14 @@ struct LimitSpec {
     pin: String,
 }
 
-/// A limit is "loosening" if any dimension went up or it was disabled. Mixed
-/// changes are treated conservatively as loosening.
+/// A limit is "loosening" if any time dimension went up. Disabling is NOT
+/// counted here: it is handled one branch above as an instant action, by
+/// design (the cooldown guards minute-loosening, not standing a order down).
 fn is_loosening(
     existing: &st_core::limits::Limit,
     default_minutes: u32,
     weekday_minutes: [Option<u32>; 7],
-    enabled: bool,
 ) -> bool {
-    if !enabled && existing.enabled {
-        return true;
-    }
     if default_minutes > existing.default_minutes {
         return true;
     }
@@ -1045,20 +1039,14 @@ mod tests {
     #[test]
     fn tightening_is_not_loosening() {
         let existing = base();
-        assert!(!is_loosening(&existing, 15, [None; 7], true));
-        assert!(!is_loosening(&existing, 30, [None; 7], true));
+        assert!(!is_loosening(&existing, 15, [None; 7]));
+        assert!(!is_loosening(&existing, 30, [None; 7]));
     }
 
     #[test]
     fn increasing_minutes_is_loosening() {
         let existing = base();
-        assert!(is_loosening(&existing, 45, [None; 7], true));
-    }
-
-    #[test]
-    fn disabling_is_loosening() {
-        let existing = base();
-        assert!(is_loosening(&existing, 30, [None; 7], false));
+        assert!(is_loosening(&existing, 45, [None; 7]));
     }
 
     #[test]
@@ -1066,7 +1054,7 @@ mod tests {
         let existing = base();
         let mut new = [None; 7];
         new[6] = Some(120);
-        assert!(is_loosening(&existing, 30, new, true));
+        assert!(is_loosening(&existing, 30, new));
     }
 
     #[test]
@@ -1075,7 +1063,7 @@ mod tests {
         existing.weekday_minutes[6] = Some(120);
         let mut new = [None; 7];
         new[6] = Some(60);
-        assert!(!is_loosening(&existing, 30, new, true));
+        assert!(!is_loosening(&existing, 30, new));
     }
 
     #[test]
@@ -1084,7 +1072,7 @@ mod tests {
         let mut new = [None; 7];
         new[0] = Some(15); // tighter on Monday
         new[6] = Some(120); // looser on Sunday
-        assert!(is_loosening(&existing, 30, new, true));
+        assert!(is_loosening(&existing, 30, new));
     }
 
     #[test]
@@ -1144,6 +1132,31 @@ mod tests {
 
     fn test_ctx(db: Db, clock: TestClock) -> Ctx {
         test_ctx_with_policy(db, clock, |_| ())
+    }
+
+    /// A second context over an existing context's database, for tests that
+    /// need two moments in time against the same storage.
+    fn test_ctx_with_db_handle(db: &Arc<Mutex<Db>>, clock: TestClock) -> Ctx {
+        Ctx {
+            db: Arc::clone(db),
+            status: Arc::new(StatusInfo {
+                agent_version: "test".into(),
+                tracker_backend: "fake".into(),
+                enforcement_backend: "fake".into(),
+                filter_backend: "none".into(),
+                self_sampling: false,
+                blocks_encrypted_dns: false,
+            }),
+            policy: Arc::new(Policy {
+                limit_cooldown_hours: 24,
+                strict_mode: false,
+                day_start_minutes: 0,
+                idle_threshold_secs: 60,
+            }),
+            processes: Arc::new(Mutex::new(Box::new(FakeProcesses::default()))),
+            clock: Arc::new(clock),
+            live: Arc::new(Live::default()),
+        }
     }
 
     fn test_ctx_with_policy(db: Db, clock: TestClock, tweak: impl FnOnce(&mut Policy)) -> Ctx {
@@ -1412,7 +1425,7 @@ mod tests {
     }
 
     #[test]
-    fn delete_limit_is_queued_behind_the_cooldown() {
+    fn delete_limit_applies_instantly() {
         let db = Db::open_in_memory().expect("db");
         let games = db.category_id("games").expect("games");
         db.upsert_limit(
@@ -1429,18 +1442,61 @@ mod tests {
                 pin: String::new(),
             },
         );
-        expect_accepted(response, at("2026-08-21T12:00:00Z"));
+        // Instant by design (owner decision, 2026-08): standing an order down
+        // is not an impulse the cooldown needs to guard.
+        expect_accepted(response, at("2026-08-20T12:00:00Z"));
 
-        let mut db_guard = lock_db(&ctx.db);
-        assert_eq!(
-            db_guard.load_limits().expect("limits").len(),
-            1,
-            "deletion waits for the cooldown"
-        );
-        db_guard
-            .promote_pending_limits(at("2026-08-21T12:00:00Z"))
-            .expect("promote");
+        let db_guard = lock_db(&ctx.db);
         assert!(db_guard.load_limits().expect("limits").is_empty());
+    }
+
+    #[test]
+    fn disabling_a_limit_applies_instantly_while_loosening_still_waits() {
+        let db = Db::open_in_memory().expect("db");
+        let games = db.category_id("games").expect("games");
+        db.upsert_limit(
+            &Limit::new(1, LimitTarget::Category(games), 30),
+            at("2026-08-20T09:00:00Z"),
+        )
+        .expect("seed limit");
+
+        // Disable: instant.
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let response = handle(
+            &ctx,
+            Request::SetLimit {
+                target: LimitTargetDto::Category { id: games },
+                default_minutes: 30,
+                weekday_minutes: [None; 7],
+                enabled: false,
+                pin: String::new(),
+            },
+        );
+        expect_accepted(response, at("2026-08-20T12:00:00Z"));
+        assert!(
+            !lock_db(&ctx.db).load_limits().expect("limits")[0].enabled,
+            "the disabled state must be live immediately"
+        );
+
+        // Loosening minutes while enabled still queues behind the cooldown.
+        let ctx = test_ctx_with_db_handle(&ctx.db, TestClock::new(at("2026-08-20T12:05:00Z"), 0));
+        let response = handle(
+            &ctx,
+            Request::SetLimit {
+                target: LimitTargetDto::Category { id: games },
+                default_minutes: 120,
+                weekday_minutes: [None; 7],
+                enabled: true,
+                pin: String::new(),
+            },
+        );
+        expect_accepted(response, at("2026-08-21T12:05:00Z"));
+        let db_guard = lock_db(&ctx.db);
+        assert_eq!(
+            db_guard.load_limits().expect("limits")[0].default_minutes,
+            30,
+            "the tighter value keeps being enforced during cooldown"
+        );
     }
 
     /// Regression for bug 2: an override granted at 19:00 local in UTC-7 must
