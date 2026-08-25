@@ -12,6 +12,10 @@ use crate::{Db, Result};
 pub(crate) const MIGRATIONS: &[(i64, &str)] = &[
     (1, include_str!("../migrations/0001_init.sql")),
     (2, include_str!("../migrations/0002_pending_limits.sql")),
+    (
+        3,
+        include_str!("../migrations/0003_total_target_uniqueness.sql"),
+    ),
 ];
 
 impl Db {
@@ -95,9 +99,9 @@ mod tests {
 
         let version: i64 = db
             .conn()
-            .query_row("PRAGMA user_version", [], |r| r.get(0))
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 2, "upgrade must reach the latest migration");
+        assert_eq!(version, 3, "upgrade must reach the latest migration");
 
         // The 0002 table now exists and is empty but usable.
         let pending: i64 = db
@@ -110,6 +114,60 @@ mod tests {
         let legacy = db.category_id("legacy-slug").expect("legacy row survives");
         assert!(legacy > 0);
         assert!(db.category_id("uncategorized").is_ok(), "builtins seeded");
+
+        drop(db);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// Regression for the duplicate-total-orders bug: 0001/0002's UNIQUE
+    /// constraints never fired for `target_id IS NULL`, so installs could
+    /// carry several rows for the total target. The 0003 upgrade must
+    /// collapse them to the oldest and install an index that keeps it that
+    /// way.
+    #[test]
+    fn upgrade_collapses_duplicate_total_orders_into_one() {
+        let dir = temp_dir("total-dedupe");
+        let path = dir.join("dupes.db");
+
+        {
+            let conn = Connection::open(&path).expect("create v2 db");
+            conn.execute_batch(MIGRATIONS[0].1).expect("v1 schema");
+            conn.execute_batch(MIGRATIONS[1].1).expect("v2 schema");
+            conn.pragma_update(None, "user_version", 2).expect("v2");
+            for minutes in [60, 45, 45] {
+                conn.execute(
+                    "INSERT INTO limits (target_type, target_id, default_minutes,
+                                          weekday_minutes, enabled, created_utc)
+                     VALUES ('total', NULL, ?1, '[null,null,null,null,null,null,null]', 1,
+                             '2026-08-20T09:00:00Z')",
+                    [minutes],
+                )
+                .expect("seed total row");
+            }
+        }
+
+        let db = Db::open(&path).expect("reopen and upgrade");
+        let limits = db.load_limits().expect("load after upgrade");
+        assert_eq!(limits.len(), 1, "duplicates collapsed to the oldest");
+        assert_eq!(limits[0].default_minutes, 60, "oldest row wins");
+
+        // The new expression index makes a fresh total INSERT a conflict —
+        // which the writer resolves by updating, not duplicating.
+        use st_core::limits::{Limit, LimitTarget};
+        db.upsert_limit(
+            &Limit::new(0, LimitTarget::Total, 30),
+            crate::testutil::now(),
+        )
+        .expect("upsert over the survivor");
+        let limits = db.load_limits().expect("reload");
+        assert_eq!(limits.len(), 1);
+        assert_eq!(limits[0].default_minutes, 30);
+
+        let version: i64 = db
+            .conn()
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version");
+        assert_eq!(version, 3);
 
         drop(db);
         let _ = std::fs::remove_dir_all(&dir);

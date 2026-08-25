@@ -134,23 +134,39 @@ impl Db {
     pub fn upsert_limit(&self, limit: &Limit, now: DateTime<Utc>) -> Result<()> {
         let (target_type, target_id) = target_to_row(&limit.target);
         let weekday_json = weekday_minutes_to_json(&limit.weekday_minutes);
-        self.conn.execute(
-            "INSERT INTO limits
-                 (target_type, target_id, default_minutes, weekday_minutes, enabled, created_utc)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
-             ON CONFLICT(target_type, target_id) DO UPDATE SET
-                 default_minutes = excluded.default_minutes,
-                 weekday_minutes = excluded.weekday_minutes,
-                 enabled         = excluded.enabled",
+        // UPDATE-then-INSERT instead of ON CONFLICT: a SQL UNIQUE constraint
+        // treats NULLs as distinct, so 0001's `UNIQUE (target_type,
+        // target_id)` silently never fired for total orders (`target_id IS
+        // NULL`) and every edit inserted a duplicate. The expression index
+        // from 0003 is the structural guard; this writer no longer depends on
+        // conflict detection at all. `IS` matches NULLs where `=` does not.
+        let updated = self.conn.execute(
+            "UPDATE limits
+             SET default_minutes = ?1, weekday_minutes = ?2, enabled = ?3
+             WHERE target_type = ?4 AND target_id IS ?5",
             params![
-                target_type,
-                target_id,
                 limit.default_minutes,
                 weekday_json,
                 limit.enabled as i64,
-                now.to_rfc3339()
+                target_type,
+                target_id,
             ],
         )?;
+        if updated == 0 {
+            self.conn.execute(
+                "INSERT INTO limits
+                     (target_type, target_id, default_minutes, weekday_minutes, enabled, created_utc)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    target_type,
+                    target_id,
+                    limit.default_minutes,
+                    weekday_json,
+                    limit.enabled as i64,
+                    now.to_rfc3339(),
+                ],
+            )?;
+        }
         Ok(())
     }
 
@@ -188,26 +204,38 @@ impl Db {
     ) -> Result<()> {
         let (target_type, target_id) = target_to_row(target);
         let weekday_json = weekday_minutes_to_json(&weekday_minutes);
-        self.conn.execute(
-            "INSERT INTO pending_limits
-                 (target_type, target_id, action, default_minutes, weekday_minutes,
-                  enabled, effective_from_utc)
-             VALUES (?1, ?2, 'update', ?3, ?4, ?5, ?6)
-             ON CONFLICT(target_type, target_id) DO UPDATE SET
-                 action             = 'update',
-                 default_minutes    = excluded.default_minutes,
-                 weekday_minutes    = excluded.weekday_minutes,
-                 enabled            = excluded.enabled,
-                 effective_from_utc = excluded.effective_from_utc",
+        // Same NULL-conflict story as `upsert_limit`: UPDATE-then-INSERT with
+        // `IS`, so re-queuing a total-order change replaces the queued row.
+        let updated = self.conn.execute(
+            "UPDATE pending_limits
+             SET action = 'update', default_minutes = ?1, weekday_minutes = ?2,
+                 enabled = ?3, effective_from_utc = ?4
+             WHERE target_type = ?5 AND target_id IS ?6",
             params![
-                target_type,
-                target_id,
                 default_minutes,
                 weekday_json,
                 enabled as i64,
-                effective_from_utc.to_rfc3339()
+                effective_from_utc.to_rfc3339(),
+                target_type,
+                target_id,
             ],
         )?;
+        if updated == 0 {
+            self.conn.execute(
+                "INSERT INTO pending_limits
+                     (target_type, target_id, action, default_minutes, weekday_minutes,
+                      enabled, effective_from_utc)
+                 VALUES (?1, ?2, 'update', ?3, ?4, ?5, ?6)",
+                params![
+                    target_type,
+                    target_id,
+                    default_minutes,
+                    weekday_json,
+                    enabled as i64,
+                    effective_from_utc.to_rfc3339(),
+                ],
+            )?;
+        }
         Ok(())
     }
 
@@ -218,18 +246,21 @@ impl Db {
         effective_from_utc: DateTime<Utc>,
     ) -> Result<()> {
         let (target_type, target_id) = target_to_row(target);
-        self.conn.execute(
-            "INSERT INTO pending_limits
-                 (target_type, target_id, action, effective_from_utc)
-             VALUES (?1, ?2, 'delete', ?3)
-             ON CONFLICT(target_type, target_id) DO UPDATE SET
-                 action             = 'delete',
-                 default_minutes    = NULL,
-                 weekday_minutes    = NULL,
-                 enabled            = NULL,
-                 effective_from_utc = excluded.effective_from_utc",
-            params![target_type, target_id, effective_from_utc.to_rfc3339()],
+        let updated = self.conn.execute(
+            "UPDATE pending_limits
+             SET action = 'delete', default_minutes = NULL, weekday_minutes = NULL,
+                 enabled = NULL, effective_from_utc = ?1
+             WHERE target_type = ?2 AND target_id IS ?3",
+            params![effective_from_utc.to_rfc3339(), target_type, target_id],
         )?;
+        if updated == 0 {
+            self.conn.execute(
+                "INSERT INTO pending_limits
+                     (target_type, target_id, action, effective_from_utc)
+                 VALUES (?1, ?2, 'delete', ?3)",
+                params![target_type, target_id, effective_from_utc.to_rfc3339()],
+            )?;
+        }
         Ok(())
     }
 
@@ -384,6 +415,66 @@ mod tests {
         assert_eq!(loaded[0].default_minutes, 30);
         assert_eq!(loaded[0].minutes_for_weekday(6), 120);
         assert_eq!(loaded[0].minutes_for_weekday(0), 30);
+    }
+
+    /// Regression: SQL UNIQUE treats NULLs as distinct, so re-saving the
+    /// *total* order used to insert a second row on every suspend/edit. The
+    /// upsert must replace per target across all three kinds.
+    #[test]
+    fn upserting_any_target_twice_stays_one_row() {
+        let db = Db::open_in_memory().expect("open");
+        let games = db.category_id("games").expect("games");
+
+        db.upsert_limit(&Limit::new(0, LimitTarget::Total, 60), now())
+            .expect("total v1");
+        db.upsert_limit(&Limit::new(0, LimitTarget::Total, 45), now())
+            .expect("total v2 (was duplicating)");
+
+        db.upsert_limit(&Limit::new(0, LimitTarget::App(7), 30), now())
+            .expect("app v1");
+        db.upsert_limit(&Limit::new(0, LimitTarget::App(7), 20), now())
+            .expect("app v2");
+
+        db.upsert_limit(&Limit::new(0, LimitTarget::Category(games), 90), now())
+            .expect("category v1");
+        db.upsert_limit(&Limit::new(0, LimitTarget::Category(games), 80), now())
+            .expect("category v2");
+
+        let loaded = db.load_limits().expect("load");
+        assert_eq!(loaded.len(), 3, "one row per target, not one per save");
+        let total = loaded.iter().find(|l| l.target == LimitTarget::Total);
+        assert_eq!(total.map(|l| l.default_minutes), Some(45));
+    }
+
+    #[test]
+    fn queueing_a_pending_change_twice_keeps_one_row_even_for_total() {
+        let mut db = Db::open_in_memory().expect("open");
+        let later = now() + chrono::Duration::hours(24);
+
+        db.queue_pending_update(&LimitTarget::Total, 120, [None; 7], true, later)
+            .expect("queue v1");
+        db.queue_pending_update(&LimitTarget::Total, 150, [None; 7], true, later)
+            .expect("queue v2 (was duplicating)");
+        db.queue_pending_delete(&LimitTarget::Total, later)
+            .expect("re-queue as delete replaces the update");
+
+        let pending: i64 = db
+            .conn()
+            .query_row("SELECT COUNT(*) FROM pending_limits", [], |r| r.get(0))
+            .expect("count");
+        let action: String = db
+            .conn()
+            .query_row("SELECT action FROM pending_limits", [], |r| r.get(0))
+            .expect("action");
+        assert_eq!(pending, 1, "one queued change per target");
+        assert_eq!(action, "delete", "the newest queued action wins");
+        // And promotion still consumes it cleanly.
+        db.promote_pending_limits(later).expect("promote");
+        let pending_after: i64 = db
+            .conn()
+            .query_row("SELECT COUNT(*) FROM pending_limits", [], |r| r.get(0))
+            .expect("count after");
+        assert_eq!(pending_after, 0);
     }
 
     #[test]

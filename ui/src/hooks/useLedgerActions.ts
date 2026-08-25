@@ -94,14 +94,15 @@ export function useLedgerActions(deps: Deps) {
         setGateError(null);
     }, []);
 
-    const openEditor = useCallback((target: LimitTargetDto, limit: LimitDto | null) => {
+    const openEditor = useCallback((target: LimitTargetDto | null, limit: LimitDto | null) => {
         const next = { target, limit };
         editorRef.current = next;
         setEditor(next);
     }, []);
 
     const startNewOrder = useCallback(() => {
-        openEditor({ kind: "total" }, null);
+        // Null target: the editor shows its picker (total / category / app).
+        openEditor(null, null);
     }, [openEditor]);
 
     const closeEditor = useCallback(() => {
