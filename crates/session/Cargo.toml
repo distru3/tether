@@ -15,14 +15,21 @@ st-ipc.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+# RFC 3339 stamps for `ObservationDto.observed_at_utc`. Zero-cost addition:
+# chrono is already in the dependency tree via st-core/st-storage/st-ipc, so
+# this pulls in no new code.
+chrono.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+# Canonical process-image-path query (replaces this crate's inline
+# QueryFullProcessImageNameW copy). Not yet in [workspace.dependencies], so it
+# is referenced by path directly.
+st-win32 = { path = "../st-win32" }
+# Foreground-window + idle sampling; the session helper is the sampling front.
+st-tracker-win.workspace = true
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
     "Win32_System_LibraryLoader",
-    "Win32_System_SystemInformation",
-    "Win32_System_Threading",
-    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_WindowsAndMessaging",
 ] }

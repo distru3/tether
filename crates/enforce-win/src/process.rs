@@ -20,16 +20,16 @@ use std::mem::size_of;
 
 use st_core::model::AppKey;
 use st_core::platform::{PlatformError, PlatformResult, ProcessController};
+use st_win32::{image_path_from_handle, open_process_query, wide_to_string};
 
-use windows::core::{s, PCSTR, PWSTR};
+use windows::core::{s, PCSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
 use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
 use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, TerminateProcess, PROCESS_NAME_WIN32,
-    PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SUSPEND_RESUME, PROCESS_TERMINATE,
+    OpenProcess, TerminateProcess, PROCESS_SUSPEND_RESUME, PROCESS_TERMINATE,
 };
 
 /// `NTSTATUS`-returning single-argument ntdll function.
@@ -123,9 +123,16 @@ impl ProcessController for Win32ProcessController {
                     // Cheap name filter first; the full-path check needs a
                     // handle per process, which is far more expensive.
                     if name == target_basename {
-                        if let Ok(path) = image_path(entry.th32ProcessID) {
-                            if path.replace('/', "\\").to_lowercase() == *target_path {
-                                pids.push(entry.th32ProcessID);
+                        // Image-path querying is delegated to st_win32, the
+                        // workspace's canonical Win32 plumbing: this crate used
+                        // to carry a private OpenProcess +
+                        // QueryFullProcessImageNameW + UTF-16-decode copy that
+                        // would drift exactly as that crate's docs warn.
+                        if let Ok(handle) = open_process_query(entry.th32ProcessID) {
+                            if let Ok(path) = image_path_from_handle(&handle) {
+                                if path.replace('/', "\\").to_lowercase() == *target_path {
+                                    pids.push(entry.th32ProcessID);
+                                }
                             }
                         }
                     }
@@ -174,34 +181,14 @@ unsafe fn resolve_ntdll(name: PCSTR) -> Option<NtProcessFn> {
     >(addr))
 }
 
-unsafe fn image_path(pid: u32) -> PlatformResult<String> {
-    let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
-        .map_err(|_| PlatformError::ProcessGone(pid))?;
-    let mut buf = vec![0u16; 32_768];
-    let mut len = buf.len() as u32;
-    let result = QueryFullProcessImageNameW(
-        handle,
-        PROCESS_NAME_WIN32,
-        PWSTR(buf.as_mut_ptr()),
-        &mut len,
-    );
-    let _ = CloseHandle(handle);
-    result.map_err(|_| PlatformError::ProcessGone(pid))?;
-    buf.truncate(len as usize);
-    Ok(String::from_utf16_lossy(&buf))
-}
-
-fn wide_to_string(buf: &[u16]) -> String {
-    let end = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
-    String::from_utf16_lossy(&buf[..end])
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn wide_to_string_stops_at_the_nul() {
+        // Now exercised through the adopted st_win32 re-export; the private
+        // copy this crate used to own is gone.
         let mut buf = [0u16; 8];
         for (i, c) in "abc".encode_utf16().enumerate() {
             buf[i] = c;

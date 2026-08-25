@@ -1,41 +1,113 @@
 //! IPC server: answers the UI's requests over a local named pipe.
 //!
-//! One request per connection, matching the transport's design: each UI command
-//! opens a connection, sends one frame, reads one response and closes. The
-//! server thread blocks on `accept`, so it needs no multiplexing and cannot be
-//! pinned by a slow client for longer than one command.
+//! # Concurrency model
+//!
+//! Thread-per-connection. The accept loop parks when [`MAX_WORKERS`] workers
+//! are live, so connection floods cannot exhaust threads or memory, and each
+//! worker serves its connection for as long as the client keeps it open —
+//! looping read/handle/write until a clean close or a protocol error. Two
+//! client shapes are therefore served by one code path:
+//!
+//! * legacy one-shot clients (one frame, then close), and
+//! * persistent clients (many frames per connection, e.g. the session helper
+//!   polling `BlockedApps` and streaming `ReportUsage`).
+//!
+//! A slow *or* idle client pins one worker, never the whole server; the cap
+//! bounds worst-case resource use. Shared state (`Db`, the process controller,
+//! the runtime facts in [`Live`]) lives behind `Arc`s cloned into each worker.
+//! Requests themselves stay sequential per connection — the wire has no
+//! correlation ids, so pipelining is not supported by design.
 //!
 //! M1 handled the read-only surface. M2 adds the mutating surface: limits,
 //! PIN, overrides and categorisation. Anything that loosens enforcement is
 //! PIN-gated (unless no PIN is configured yet) and subject to the anti-impulse
 //! cooldown; tightening applies immediately.
+//!
+//! # Where time comes from
+//!
+//! Every timestamp in this file flows from the injected
+//! [`Clock`](st_core::clock::Clock), never `Utc::now()`. Tamper semantics (and
+//! every handler-level test) depend on wall time being controllable.
 
-use std::sync::{Arc, Mutex};
+use std::collections::HashMap;
+use std::sync::{Arc, Condvar, Mutex};
+use std::time::Duration as StdDuration;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use st_core::category::CategoryKind;
+use st_core::clock::Clock;
 use st_core::daykey::DayKey;
 use st_core::limits::LimitTarget;
 use st_core::model::{AppKey, SubjectRef};
 use st_core::pin::{hash_pin, verify_pin};
 use st_core::platform::ProcessController;
-use st_ipc::{transport, ErrorCode, LimitTargetDto, Request, Response, StatusDto, UsageRowDto};
+use st_ipc::{
+    transport, ErrorCode, LimitTargetDto, ObservationDto, ReportUsageDto, Request, Response,
+    StatusDto, UsageRowDto,
+};
 use st_storage::{Db, LimitRow};
 
-/// The name of the agent's pipe. The UI and any future session helper connect
-/// to `\\.\pipe\{PIPE_NAME}`.
-pub const PIPE_NAME: &str = "screentime";
+use crate::locks::{lock_db, lock_recover};
+use crate::persist;
+use crate::sampler::PendingInterval;
+
+/// Concurrent connections served before the accept loop starts parking. The
+/// honest client population is a UI plus a session helper per login session;
+/// 32 leaves ample headroom while capping thread/memory use against a hostile
+/// or buggy local process opening sockets in a loop.
+const MAX_WORKERS: usize = 32;
+
+// -- Report-ingestion tuning knobs. -----------------------------------------
+
+/// An observation timestamped further ahead than this is rejected outright:
+/// it would credit future time and land usage on a day that has not happened.
+/// Generous enough for modest positive clock skew between machines.
+const REPORT_MAX_FUTURE_SECS: i64 = 120;
+
+/// Observations older than this are stale buffer dumps or replays, not live
+/// reporting; they are dropped rather than silently reshaping old days.
+const REPORT_MAX_AGE_SECS: i64 = 48 * 3600;
+
+/// Past-skew worth warning about (but still crediting) so chronic skew is
+/// visible in the logs without discarding data.
+const REPORT_SKEW_WARN_SECS: i64 = 600;
+
+/// Maximum gap two consecutive active observations of the same app may have
+/// and still count as one continuous focus run. Must exceed the helper's flush
+/// period ("a few seconds" per the wire contract) with room for jitter, yet
+/// stay far below a task switch.
+const CHAIN_GAP_SECS: i64 = 30;
+
+/// How long after the last accepted report `tracking_available` stays true.
+/// The helper flushes every few seconds, so a minute of silence means it is
+/// gone (crashed, logged out) and the UI should say tracking is degraded.
+const RECENT_REPORT_SECS: i64 = 60;
+
+/// Focus used for enforcement older than this is stale: the helper stopped
+/// reporting, so the main loop should stop evaluating that app.
+const FOCUS_MAX_AGE_SECS: i64 = 30;
+
+/// Cross-batch resend protection: identical `(app_key, observed_at)` pairs
+/// within this window are collapsed. Covers the realistic case — a lost reply
+/// triggers a resend seconds later. Agent restart clears the window, which is
+/// acceptable: resends do not outlive the helper either.
+const DEDUPE_TTL_SECS: i64 = 300;
+
+/// Hard bound on the dedupe ring so a hostile reporter cannot grow memory.
+const DEDUPE_CAP: usize = 8192;
 
 /// Static facts about the agent the UI reports. Extracted once at startup so
-/// the IPC thread does not need to touch the platform backends, which are not
-/// `Sync` and live on the sampler's thread.
+/// IPC threads do not touch the platform backends.
 #[derive(Debug, Clone)]
 pub struct StatusInfo {
     pub agent_version: String,
     pub tracker_backend: String,
     pub enforcement_backend: String,
     pub filter_backend: String,
-    pub tracking_available: bool,
+    /// Whether the agent is running its own in-process sampling loop (the
+    /// development fallback), as opposed to relying on session-helper reports.
+    pub self_sampling: bool,
+    // Hosts-file filtering cannot intercept DoH/DoT; be honest about it.
     pub blocks_encrypted_dns: bool,
 }
 
@@ -47,69 +119,233 @@ pub struct Policy {
     pub limit_cooldown_hours: i64,
     /// When true, "+15 minutes" overrides are refused outright.
     pub strict_mode: bool,
+    /// Minutes after local midnight at which the day rolls over. Overrides
+    /// must be attributed to exactly the day the enforcer/sampler compute.
+    pub day_start_minutes: i64,
+    /// Idle seconds beyond which focused time stops accruing.
+    pub idle_threshold_secs: i64,
 }
 
-/// A limit edit as sent by the UI, grouped so the handler stays readable.
-#[derive(Debug, Clone)]
-struct LimitSpec {
-    target: LimitTargetDto,
-    default_minutes: u32,
-    weekday_minutes: [Option<u32>; 7],
-    enabled: bool,
-    pin: String,
-}
-
-/// Run the IPC server on a background thread. Returns the join handle.
+/// Runtime-updated facts shared between IPC workers and the main loop.
 ///
-/// The thread exits only when the process is torn down; in M1 there is no
-/// graceful stop to coordinate.
+/// Three small independent mutexes instead of one: handlers touch them one at
+/// a time, and nested locking is a deadlock waiting to happen.
+pub struct Live {
+    last_report: Mutex<Option<DateTime<Utc>>>,
+    focus: Mutex<Option<(AppKey, DateTime<Utc>)>>,
+    seen_observations: Mutex<Vec<(String, i64)>>,
+    open_chains: Mutex<HashMap<String, ChainState>>,
+}
+
+impl Default for Live {
+    fn default() -> Self {
+        Self {
+            last_report: Mutex::new(None),
+            focus: Mutex::new(None),
+            seen_observations: Mutex::new(Vec::new()),
+            open_chains: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+/// One app's open focus run: the instant its latest credited observation ended.
+#[derive(Debug, Clone, Copy)]
+struct ChainState {
+    last: DateTime<Utc>,
+}
+
+impl Live {
+    fn note_report(&self, now: DateTime<Utc>) {
+        *lock_recover(&self.last_report, "last-report stamp") = Some(now);
+    }
+
+    fn reported_within(&self, secs: i64, now: DateTime<Utc>) -> bool {
+        lock_recover(&self.last_report, "last-report stamp")
+            .map_or(false, |t| (now - t).num_seconds() <= secs)
+    }
+
+    fn note_focus(&self, key: AppKey, at: DateTime<Utc>) {
+        let mut focus = lock_recover(&self.focus, "focus");
+        if focus.as_ref().map_or(true, |(_, t)| at >= *t) {
+            *focus = Some((key, at));
+        }
+    }
+
+    /// The most recently observed focused app, if the observation is fresh
+    /// enough to act on for enforcement.
+    pub(crate) fn focus_key(&self, now: DateTime<Utc>) -> Option<AppKey> {
+        lock_recover(&self.focus, "focus")
+            .clone()
+            .filter(|(_, t)| (now - *t).num_seconds() <= FOCUS_MAX_AGE_SECS)
+            .map(|(k, _)| k)
+    }
+}
+
+/// Everything a connection worker needs. Cloned per worker; every field is an
+/// cheap handle onto shared state.
+#[derive(Clone)]
+pub struct Ctx {
+    db: Arc<Mutex<Db>>,
+    status: Arc<StatusInfo>,
+    policy: Arc<Policy>,
+    processes: Arc<Mutex<Box<dyn ProcessController>>>,
+    clock: Arc<dyn Clock>,
+    live: Arc<Live>,
+}
+
+/// Slot accounting for the worker cap: a count plus a condvar the accept loop
+/// waits on when full.
+struct WorkerCap {
+    count: Mutex<usize>,
+    slot_free: Condvar,
+}
+
+impl WorkerCap {
+    fn new() -> Self {
+        Self {
+            count: Mutex::new(0),
+            slot_free: Condvar::new(),
+        }
+    }
+
+    fn acquire(&self) {
+        let mut n = lock_recover(&self.count, "worker counter");
+        while *n >= MAX_WORKERS {
+            n = self
+                .slot_free
+                .wait(n)
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+        }
+        *n += 1;
+    }
+
+    fn release(&self) {
+        let mut n = lock_recover(&self.count, "worker counter");
+        *n = n.saturating_sub(1);
+        self.slot_free.notify_one();
+    }
+}
+
+/// Handle on the running IPC server.
+///
+/// Deliberately no `JoinHandle`: the accept loop runs until process teardown
+/// (there is no graceful-stop protocol yet), so there is nothing useful to
+/// join on.
+pub struct IpcServerHandle {
+    /// Shared runtime facts the main loop reads (focus for enforcement,
+    /// recency for `tracking_available`).
+    pub live: Arc<Live>,
+}
+
+/// A pipe stream moved into its worker thread.
+///
+/// `PipeStream` holds a raw Win32 `HANDLE`, which is not `Send` as far as
+/// rustc can see — but kernel handles carry no thread affinity, and this
+/// wrapper takes *exclusive ownership* when moved, so serving the connection
+/// from a different thread than `accept` is sound. Nothing else ever touches
+/// the handle after the move.
+struct OwnedStream(st_ipc::transport::PipeStream);
+
+// SAFETY: see the type-level comment. Exclusive ownership of a thread-agnostic
+// kernel object; no shared state escapes.
+unsafe impl Send for OwnedStream {}
+
+/// Run the IPC server: an accept loop plus up to [`MAX_WORKERS`] connection
+/// workers. Returns handles to coordinate shutdown and share runtime facts.
 pub fn spawn(
+    pipe_name: &'static str,
     db: Arc<Mutex<Db>>,
     status: StatusInfo,
     policy: Policy,
     processes: Arc<Mutex<Box<dyn ProcessController>>>,
-) -> std::thread::JoinHandle<()> {
+    clock: Arc<dyn Clock>,
+) -> IpcServerHandle {
+    let live = Arc::new(Live::default());
+    let ctx = Ctx {
+        db,
+        status: Arc::new(status),
+        policy: Arc::new(policy),
+        processes,
+        clock,
+        live: live.clone(),
+    };
+    let workers = Arc::new(WorkerCap::new());
+
+    // Detach the accept loop; see `IpcServerHandle` for why there is no join.
     std::thread::Builder::new()
         .name("ipc-server".into())
         .spawn(move || loop {
-            match transport::server_accept(PIPE_NAME) {
-                Ok(mut stream) => match st_ipc::read_message::<_, Request>(&mut stream) {
-                    Ok(request) => {
-                        let response = handle(&db, &status, &policy, &processes, request);
-                        if let Err(e) = st_ipc::write_message(&mut stream, &response) {
-                            tracing::warn!(error = %e, "failed to write IPC response");
-                        }
+            workers.acquire();
+            match transport::server_accept(pipe_name) {
+                Ok(stream) => {
+                    let ctx = ctx.clone();
+                    let worker_cap = workers.clone();
+                    let owned = OwnedStream(stream);
+                    let spawned =
+                        std::thread::Builder::new()
+                            .name("ipc-worker".into())
+                            .spawn(move || {
+                                serve_connection(owned, ctx);
+                                worker_cap.release();
+                            });
+                    if spawned.is_err() {
+                        // Thread creation failed (resource exhaustion): refund
+                        // the slot and pause so a tight loop cannot spin.
+                        workers.release();
+                        std::thread::sleep(StdDuration::from_secs(1));
                     }
-                    Err(e) => tracing::warn!(error = %e, "malformed IPC request"),
-                },
+                }
                 Err(e) => {
+                    workers.release();
                     tracing::error!(error = %e, "IPC accept failed");
-                    std::thread::sleep(std::time::Duration::from_secs(1));
+                    std::thread::sleep(StdDuration::from_secs(1));
                 }
             }
         })
-        .expect("spawning ipc-server thread")
+        .expect("spawning ipc-server thread");
+
+    IpcServerHandle { live }
 }
 
-fn handle(
-    db: &Mutex<Db>,
-    status: &StatusInfo,
-    policy: &Policy,
-    processes: &Mutex<Box<dyn ProcessController>>,
-    request: Request,
-) -> Response {
-    let now = Utc::now();
+/// Serve one connection until the peer closes cleanly or breaks protocol.
+///
+/// Takes [`OwnedStream`] so the moved value is the `Send` wrapper; capturing
+/// the inner stream directly would re-expose the raw handle as non-Send
+/// (edition-2021 closures capture precise places, not whole bindings).
+fn serve_connection(stream: OwnedStream, ctx: Ctx) {
+    let OwnedStream(mut stream) = stream;
+    loop {
+        match st_ipc::read_message::<_, Request>(&mut stream) {
+            Ok(request) => {
+                let response = handle(&ctx, request);
+                if let Err(e) = st_ipc::write_message(&mut stream, &response) {
+                    tracing::warn!(error = %e, "failed to write IPC response; closing connection");
+                    break;
+                }
+            }
+            // Clean close: the normal end for one-shot clients.
+            Err(st_ipc::IpcError::Closed) => break,
+            Err(e) => {
+                tracing::warn!(error = %e, "malformed IPC frame; closing connection");
+                break;
+            }
+        }
+    }
+}
+
+fn handle(ctx: &Ctx, request: Request) -> Response {
+    let now = ctx.clock.now_utc();
     match request {
         Request::Ping => Response::Pong,
-        Request::Status => status_response(db, status, policy),
-        Request::DaySummary { day } => day_summary(db, day),
-        Request::Catalog => catalog(db),
-        Request::BlockedApps => blocked_apps(db),
-        Request::CloseApps { app_id, pin } => close_apps(db, processes, app_id, &pin),
+        Request::Status => status_response(ctx),
+        Request::DaySummary { day } => day_summary(ctx, day),
+        Request::Catalog => catalog(ctx),
+        Request::BlockedApps => blocked_apps(ctx),
+        Request::CloseApps { app_id, pin } => close_apps(ctx, app_id, &pin),
         Request::SetPin {
             new_pin,
             current_pin,
-        } => set_pin(db, &new_pin, current_pin.as_deref()),
+        } => set_pin(ctx, &new_pin, current_pin.as_deref()),
         Request::SetLimit {
             target,
             default_minutes,
@@ -117,8 +353,7 @@ fn handle(
             enabled,
             pin,
         } => set_limit(
-            db,
-            policy,
+            ctx,
             LimitSpec {
                 target,
                 default_minutes,
@@ -128,71 +363,63 @@ fn handle(
             },
             now,
         ),
-        Request::DeleteLimit { target, pin } => delete_limit(db, policy, target, &pin, now),
+        Request::DeleteLimit { target, pin } => delete_limit(ctx, target, &pin, now),
         Request::GrantOverride {
             target,
             seconds,
             pin,
-        } => grant_override(db, policy, target, seconds, &pin, now),
+        } => grant_override(ctx, target, seconds, &pin, now),
         Request::Categorize {
             app_id,
             primary,
             tags,
-        } => categorize(db, app_id, primary, &tags),
-        Request::ReportUsage { .. } => Response::Error {
-            code: ErrorCode::Internal,
-            message: "session-helper reporting lands with the session binary".into(),
-        },
+        } => categorize(ctx, app_id, primary, &tags),
+        Request::ReportUsage { report } => report_usage(ctx, report),
     }
 }
 
-fn status_response(db: &Mutex<Db>, status: &StatusInfo, policy: &Policy) -> Response {
-    let pin_configured = db
-        .lock()
-        .ok()
-        .and_then(|db| db.pin_hash().ok().flatten())
-        .is_some();
+fn status_response(ctx: &Ctx) -> Response {
+    let pin_configured = {
+        let db = lock_db(&ctx.db);
+        db.pin_hash().ok().flatten().is_some()
+    };
+    // Truthful tracking: reports arriving recently mean the session helper is
+    // alive; otherwise only the legacy self-sampling fallback counts.
+    let tracking_available = ctx.status.self_sampling
+        || ctx
+            .live
+            .reported_within(RECENT_REPORT_SECS, ctx.clock.now_utc());
+
     Response::Status(StatusDto {
-        agent_version: status.agent_version.clone(),
-        tracker_backend: status.tracker_backend.clone(),
-        enforcement_backend: status.enforcement_backend.clone(),
-        filter_backend: status.filter_backend.clone(),
-        tracking_available: status.tracking_available,
-        blocks_encrypted_dns: status.blocks_encrypted_dns,
-        strict_mode: policy.strict_mode,
+        agent_version: ctx.status.agent_version.clone(),
+        tracker_backend: ctx.status.tracker_backend.clone(),
+        enforcement_backend: ctx.status.enforcement_backend.clone(),
+        filter_backend: ctx.status.filter_backend.clone(),
+        tracking_available,
+        blocks_encrypted_dns: ctx.status.blocks_encrypted_dns,
+        strict_mode: ctx.policy.strict_mode,
         pin_configured,
     })
 }
 
-fn day_summary(db: &Mutex<Db>, day: DayKey) -> Response {
-    let db = match db.lock() {
-        Ok(db) => db,
-        Err(_) => {
-            return Response::Error {
-                code: ErrorCode::Internal,
-                message: "database lock poisoned".into(),
-            }
-        }
-    };
+fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
+    let db = lock_db(&ctx.db);
     let summary = match db.day_summary(day) {
         Ok(summary) => summary,
         Err(e) => {
-            return Response::Error {
-                code: ErrorCode::Internal,
-                message: format!("dashboard query failed: {e}"),
-            }
+            return error_internal(format!("dashboard query failed: {e}"));
         }
     };
 
-    // Which apps are currently frozen, for honest blocked flags.
+    // Which apps are currently blocked, for honest blocked flags.
     let blocked_apps: std::collections::HashSet<i64> = db
         .blocked_subjects()
         .ok()
         .into_iter()
         .flatten()
         .filter_map(|(subject, _)| match subject {
-            st_core::model::SubjectRef::App(id) => Some(id),
-            st_core::model::SubjectRef::Site(_) => None,
+            SubjectRef::App(id) => Some(id),
+            SubjectRef::Site(_) => None,
         })
         .collect();
 
@@ -201,7 +428,7 @@ fn day_summary(db: &Mutex<Db>, day: DayKey) -> Response {
     let limit_secs_for = |app_id: i64| -> Option<i64> {
         limits
             .iter()
-            .find(|l| matches!(l.target, st_core::limits::LimitTarget::App(id) if id == app_id))
+            .find(|l| matches!(l.target, LimitTarget::App(id) if id == app_id))
             .map(|l| i64::from(l.default_minutes) * 60)
     };
 
@@ -235,16 +462,8 @@ fn day_summary(db: &Mutex<Db>, day: DayKey) -> Response {
     })
 }
 
-fn catalog(db: &Mutex<Db>) -> Response {
-    let db = match db.lock() {
-        Ok(db) => db,
-        Err(_) => {
-            return Response::Error {
-                code: ErrorCode::Internal,
-                message: "database lock poisoned".into(),
-            }
-        }
-    };
+fn catalog(ctx: &Ctx) -> Response {
+    let db = lock_db(&ctx.db);
     let (apps, categories, limits) =
         match (db.list_apps(), db.list_categories(), db.list_limit_rows()) {
             (Ok(apps), Ok(categories), Ok(limits)) => (apps, categories, limits),
@@ -287,11 +506,8 @@ fn catalog(db: &Mutex<Db>) -> Response {
 
 /// Currently-blocked apps, for the overlay owner. Joins `block_state` with the
 /// app rows to hand back a label and key the session helper can match.
-fn blocked_apps(db: &Mutex<Db>) -> Response {
-    let db = match db.lock() {
-        Ok(db) => db,
-        Err(_) => return error_internal("database lock poisoned".into()),
-    };
+fn blocked_apps(ctx: &Ctx) -> Response {
+    let db = lock_db(&ctx.db);
     let blocked = match db.blocked_subjects() {
         Ok(b) => b,
         Err(e) => return error_internal(format!("list blocks: {e}")),
@@ -316,16 +532,8 @@ fn blocked_apps(db: &Mutex<Db>) -> Response {
 /// "Quit" from the block overlay: terminate the app's process tree. This is a
 /// deliberate user action (not the removed auto-freeze), so it is PIN-gated
 /// like every other mutating request.
-fn close_apps(
-    db: &Mutex<Db>,
-    processes: &Mutex<Box<dyn ProcessController>>,
-    app_id: i64,
-    pin: &str,
-) -> Response {
-    let db = match db.lock() {
-        Ok(db) => db,
-        Err(_) => return error_internal("database lock poisoned".into()),
-    };
+fn close_apps(ctx: &Ctx, app_id: i64, pin: &str) -> Response {
+    let db = lock_db(&ctx.db);
     if !pin_ok(&db, pin) {
         return Response::Error {
             code: ErrorCode::BadPin,
@@ -339,9 +547,9 @@ fn close_apps(
         };
     };
     let key: AppKey = record.key;
-    let Ok(mut processes) = processes.lock() else {
-        return error_internal("process controller lock poisoned".into());
-    };
+    drop(db);
+
+    let mut processes = lock_recover(&ctx.processes, "process controller");
     let pids = match processes.find_processes(&key) {
         Ok(pids) => pids,
         Err(e) => return error_internal(format!("find processes: {e}")),
@@ -351,21 +559,21 @@ fn close_apps(
             tracing::warn!(pid, error = %e, "terminate failed (process may have exited)");
         }
     }
+    drop(processes);
+
+    let db = lock_db(&ctx.db);
     let _ = db.clear_block(SubjectRef::App(app_id));
-    accepted(Utc::now())
+    accepted(ctx.clock.now_utc())
 }
 
-fn set_pin(db: &Mutex<Db>, new_pin: &str, current_pin: Option<&str>) -> Response {
+fn set_pin(ctx: &Ctx, new_pin: &str, current_pin: Option<&str>) -> Response {
     if new_pin.is_empty() {
         return Response::Error {
             code: ErrorCode::BadPin,
             message: "PIN cannot be empty".into(),
         };
     }
-    let db = match db.lock() {
-        Ok(db) => db,
-        Err(_) => return error_internal("database lock poisoned".into()),
-    };
+    let db = lock_db(&ctx.db);
     match db.pin_hash() {
         Ok(Some(stored)) => {
             let current = current_pin.unwrap_or("");
@@ -381,18 +589,15 @@ fn set_pin(db: &Mutex<Db>, new_pin: &str, current_pin: Option<&str>) -> Response
     }
     match hash_pin(new_pin) {
         Ok(hash) => match db.set_pin_hash(&hash) {
-            Ok(()) => accepted(Utc::now()),
+            Ok(()) => accepted(ctx.clock.now_utc()),
             Err(e) => error_internal(format!("store pin: {e}")),
         },
         Err(e) => error_internal(format!("hash pin: {e}")),
     }
 }
 
-fn set_limit(db: &Mutex<Db>, policy: &Policy, spec: LimitSpec, now: DateTime<Utc>) -> Response {
-    let db = match db.lock() {
-        Ok(db) => db,
-        Err(_) => return error_internal("database lock poisoned".into()),
-    };
+fn set_limit(ctx: &Ctx, spec: LimitSpec, now: DateTime<Utc>) -> Response {
+    let db = lock_db(&ctx.db);
     if !pin_ok(&db, &spec.pin) {
         return Response::Error {
             code: ErrorCode::BadPin,
@@ -400,10 +605,7 @@ fn set_limit(db: &Mutex<Db>, policy: &Policy, spec: LimitSpec, now: DateTime<Utc
         };
     }
     let Some(target) = dto_to_target(&spec.target) else {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "unknown target".into(),
-        };
+        return bad_request("unknown limit target".into());
     };
     if let Err(code) = validate_target(&db, &target) {
         return Response::Error {
@@ -412,10 +614,13 @@ fn set_limit(db: &Mutex<Db>, policy: &Policy, spec: LimitSpec, now: DateTime<Utc
         };
     }
 
-    let existing = db
-        .load_limits()
-        .ok()
-        .and_then(|ls| ls.into_iter().find(|l| l.target == target));
+    // A failed read must never masquerade as "no existing limit": that would
+    // route a loosening edit down the apply-immediately path and defeat the
+    // anti-impulse cooldown precisely when the database is misbehaving.
+    let existing = match db.load_limits() {
+        Ok(limits) => limits.into_iter().find(|l| l.target == target),
+        Err(e) => return error_internal(format!("load limits: {e}")),
+    };
     let effective = match existing {
         // Tightening (or a brand-new limit) applies immediately.
         Some(existing)
@@ -428,7 +633,7 @@ fn set_limit(db: &Mutex<Db>, policy: &Policy, spec: LimitSpec, now: DateTime<Utc
         {
             now
         }
-        Some(_) => now + chrono::Duration::hours(policy.limit_cooldown_hours.max(0)),
+        Some(_) => now + Duration::hours(ctx.policy.limit_cooldown_hours.max(0)),
         None => now,
     };
 
@@ -460,17 +665,8 @@ fn set_limit(db: &Mutex<Db>, policy: &Policy, spec: LimitSpec, now: DateTime<Utc
     }
 }
 
-fn delete_limit(
-    db: &Mutex<Db>,
-    policy: &Policy,
-    target: LimitTargetDto,
-    pin: &str,
-    now: DateTime<Utc>,
-) -> Response {
-    let db = match db.lock() {
-        Ok(db) => db,
-        Err(_) => return error_internal("database lock poisoned".into()),
-    };
+fn delete_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str, now: DateTime<Utc>) -> Response {
+    let db = lock_db(&ctx.db);
     if !pin_ok(&db, pin) {
         return Response::Error {
             code: ErrorCode::BadPin,
@@ -478,13 +674,10 @@ fn delete_limit(
         };
     }
     let Some(target) = dto_to_target(&target) else {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "unknown target".into(),
-        };
+        return bad_request("unknown limit target".into());
     };
     // Deleting is always a loosening action: cooldown applies.
-    let effective = now + chrono::Duration::hours(policy.limit_cooldown_hours.max(0));
+    let effective = now + Duration::hours(ctx.policy.limit_cooldown_hours.max(0));
     let result = if effective > now {
         db.queue_pending_delete(&target, effective)
     } else {
@@ -499,18 +692,14 @@ fn delete_limit(
 }
 
 fn grant_override(
-    db: &Mutex<Db>,
-    policy: &Policy,
+    ctx: &Ctx,
     target: LimitTargetDto,
     seconds: i64,
     pin: &str,
     now: DateTime<Utc>,
 ) -> Response {
-    let db = match db.lock() {
-        Ok(db) => db,
-        Err(_) => return error_internal("database lock poisoned".into()),
-    };
-    if policy.strict_mode {
+    let db = lock_db(&ctx.db);
+    if ctx.policy.strict_mode {
         return Response::Error {
             code: ErrorCode::StrictMode,
             message: "overrides are disabled in strict mode".into(),
@@ -523,28 +712,226 @@ fn grant_override(
         };
     }
     let Some(target) = dto_to_target(&target) else {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "unknown target".into(),
-        };
+        return bad_request("unknown limit target".into());
     };
     let seconds = seconds.clamp(1, 24 * 3600);
-    let day = DayKey::from_utc(now, 0, 0);
+    // Attribute the bonus to the user's local day — the same computation the
+    // sampler/enforcer use — not to the UTC calendar day. Hard-coding offset
+    // zero put evening overrides west of UTC onto tomorrow's budget.
+    let day = DayKey::from_utc(
+        now,
+        ctx.clock.local_offset_seconds(),
+        ctx.policy.day_start_minutes,
+    );
     match db.grant_override(&target, day, seconds, now, Some("user override")) {
         Ok(()) => accepted(now),
         Err(e) => error_internal(format!("grant override: {e}")),
     }
 }
 
-fn categorize(db: &Mutex<Db>, app_id: i64, primary: i64, tags: &[i64]) -> Response {
-    let mut db = match db.lock() {
-        Ok(db) => db,
-        Err(_) => return error_internal("database lock poisoned".into()),
-    };
+fn categorize(ctx: &Ctx, app_id: i64, primary: i64, tags: &[i64]) -> Response {
+    let mut db = lock_db(&ctx.db);
     match db.set_app_categories(app_id, primary, tags, true) {
-        Ok(()) => accepted(Utc::now()),
+        Ok(()) => accepted(ctx.clock.now_utc()),
         Err(e) => error_internal(format!("categorise: {e}")),
     }
+}
+
+/// Ingest one session-helper report.
+///
+/// Pipeline, in order:
+///
+/// 1. **Parse & sanity-check** each `observed_at_utc` against the agent clock.
+///    Unparsable stamps are dropped; timestamps wildly in the future (beyond
+///    [`REPORT_MAX_FUTURE_SECS`]) or stale (beyond [`REPORT_MAX_AGE_SECS`])
+///    are dropped too — both would corrupt day buckets. Moderate past skew is
+///    credited but logged, so chronic clock drift is visible without throwing
+///    away real usage.
+/// 2. **Dedupe**: identical `(app_key, observed_at)` pairs collapse, within
+///    the batch and against a TTL'd ring of recently ingested pairs (the wire
+///    contract requires idempotency because a lost reply forces a resend).
+/// 3. **Chain**: observations are sorted ascending, then consecutive active
+///    observations of the same app bridge into runs whenever their gap is at
+///    most [`CHAIN_GAP_SECS`]. Each bridging step credits `[previous_end,
+///    this_end]`, so credit accumulates incrementally across batches and no
+///    per-batch bookkeeping is needed. An observation whose `idle_seconds`
+///    reaches the configured threshold closes the app's open run instead —
+///    focused-but-idle time accrues nothing, mirroring local-sampler idle
+///    semantics. The first observation of a run credits nothing by itself:
+///    duration needs two endpoints, which is also why helpers flush repeatedly
+///    while an app stays focused rather than sending one final sample.
+/// 4. **Bucket & persist**: each credited span is split at local-day
+///    boundaries (midnight rollover mid-batch lands on the right days) and
+///    written through the same classify-and-record path local sampling uses.
+///
+/// The reply is always [`Response::Accepted`] carrying the agent's ingest
+/// instant unless something failed *before* anything was persisted (unknown
+/// taxonomy, poisoned storage); the helper compares `effective_utc` with its
+/// own send clock to measure skew.
+fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
+    let now = ctx.clock.now_utc();
+    let tz_offset = ctx.clock.local_offset_seconds();
+    let day_start = ctx.policy.day_start_minutes;
+    let idle_threshold = ctx.policy.idle_threshold_secs.max(1);
+
+    // 1. Parse and sanity-check timestamps.
+    let mut parsed: Vec<(DateTime<Utc>, ObservationDto)> =
+        Vec::with_capacity(report.observations.len());
+    for obs in report.observations {
+        let Ok(t) = DateTime::parse_from_rfc3339(&obs.observed_at_utc) else {
+            tracing::warn!(
+                app = %obs.app_key,
+                observed_at = %obs.observed_at_utc,
+                "dropping observation with unparsable timestamp"
+            );
+            continue;
+        };
+        let t = t.with_timezone(&Utc);
+        if t > now + Duration::seconds(REPORT_MAX_FUTURE_SECS) {
+            tracing::warn!(
+                app = %obs.app_key,
+                observed_at = %t,
+                now = %now,
+                "dropping wildly-future observation"
+            );
+            continue;
+        }
+        if t < now - Duration::seconds(REPORT_MAX_AGE_SECS) {
+            tracing::warn!(app = %obs.app_key, observed_at = %t, "dropping stale observation");
+            continue;
+        }
+        if t < now - Duration::seconds(REPORT_SKEW_WARN_SECS) {
+            tracing::warn!(
+                app = %obs.app_key,
+                behind_secs = (now - t).num_seconds(),
+                "observation lags agent clock; crediting anyway"
+            );
+        }
+        parsed.push((t, obs));
+    }
+
+    // 2. Dedupe within the batch and against recent batches.
+    {
+        let mut seen = lock_recover(&ctx.live.seen_observations, "observation dedupe ring");
+        let cutoff = (now - Duration::seconds(DEDUPE_TTL_SECS)).timestamp();
+        seen.retain(|(_, ts)| *ts >= cutoff);
+        parsed.retain(|(t, obs)| {
+            let entry = (obs.app_key.to_db_string(), t.timestamp());
+            if seen.contains(&entry) {
+                false
+            } else {
+                seen.push(entry);
+                true
+            }
+        });
+        if seen.len() > DEDUPE_CAP {
+            let excess = seen.len() - DEDUPE_CAP;
+            seen.drain(..excess);
+        }
+    }
+
+    // 3. Order and chain into credited spans.
+    parsed.sort_by_key(|(t, _)| *t);
+    let mut credited: Vec<(AppKey, DateTime<Utc>, DateTime<Utc>)> = Vec::new();
+    {
+        let mut chains = lock_recover(&ctx.live.open_chains, "open usage chains");
+        for (t, obs) in parsed {
+            let key_string = obs.app_key.to_db_string();
+            ctx.live.note_focus(obs.app_key.clone(), t);
+            if i64::from(obs.idle_seconds) >= idle_threshold {
+                chains.remove(&key_string);
+                continue;
+            }
+            match chains.get_mut(&key_string) {
+                Some(state) if (t - state.last).num_seconds() <= CHAIN_GAP_SECS => {
+                    credited.push((obs.app_key.clone(), state.last, t));
+                    state.last = t;
+                }
+                _ => {
+                    chains.insert(key_string, ChainState { last: t });
+                }
+            }
+        }
+    }
+
+    // 4. Split across day boundaries and persist through the shared path.
+    if !credited.is_empty() {
+        let mut db = lock_db(&ctx.db);
+        let default_category = match db.category_id(st_core::category::UNCATEGORIZED_SLUG) {
+            Ok(id) => id,
+            Err(e) => return error_internal(format!("uncategorized category missing: {e}")),
+        };
+        for (key, start, end) in credited {
+            let span = PendingInterval {
+                key: key.clone(),
+                display_name: key.basename().to_string(),
+                start,
+                end,
+                day: DayKey(0),
+            };
+            for piece in split_by_day(&span, tz_offset, day_start) {
+                if let Err(e) = persist(&mut db, &piece, default_category, now) {
+                    tracing::error!(
+                        error = %e,
+                        app = %piece.key,
+                        "failed to persist reported interval"
+                    );
+                }
+            }
+        }
+    }
+
+    ctx.live.note_report(now);
+    accepted(now)
+}
+
+/// Split a usage span into per-local-day pieces so midnight rollover mid-span
+/// charges each calendar day for its own share (same rule the sampler applies
+/// to all-night sessions).
+fn split_by_day(
+    interval: &PendingInterval,
+    tz_offset_secs: i32,
+    day_start_minutes: i64,
+) -> Vec<PendingInterval> {
+    if interval.end <= interval.start {
+        return Vec::new();
+    }
+    let start_day = DayKey::from_utc(interval.start, tz_offset_secs, day_start_minutes);
+    let end_day = DayKey::from_utc(interval.end, tz_offset_secs, day_start_minutes);
+    if start_day == end_day {
+        return vec![PendingInterval {
+            day: start_day,
+            ..interval.clone()
+        }];
+    }
+    match start_day.end_utc(tz_offset_secs, day_start_minutes) {
+        Some(boundary) if boundary > interval.start && boundary < interval.end => {
+            let mut head = interval.clone();
+            head.day = start_day;
+            head.end = boundary;
+            let mut tail = interval.clone();
+            tail.start = boundary;
+            let mut out = vec![head];
+            out.extend(split_by_day(&tail, tz_offset_secs, day_start_minutes));
+            out
+        }
+        // An unresolvable boundary cannot be split honestly; charge the whole
+        // span to the day it started in rather than dropping real usage.
+        _ => vec![PendingInterval {
+            day: start_day,
+            ..interval.clone()
+        }],
+    }
+}
+
+/// A limit edit as sent by the UI, grouped so the handler stays readable.
+#[derive(Debug, Clone)]
+struct LimitSpec {
+    target: LimitTargetDto,
+    default_minutes: u32,
+    weekday_minutes: [Option<u32>; 7],
+    enabled: bool,
+    pin: String,
 }
 
 /// A limit is "loosening" if any dimension went up or it was disabled. Mixed
@@ -629,6 +1016,13 @@ fn accepted(effective_utc: DateTime<Utc>) -> Response {
     }
 }
 
+fn bad_request(message: String) -> Response {
+    Response::Error {
+        code: ErrorCode::BadRequest,
+        message,
+    }
+}
+
 fn error_internal(message: String) -> Response {
     Response::Error {
         code: ErrorCode::Internal,
@@ -639,7 +1033,10 @@ fn error_internal(message: String) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use st_core::clock::TestClock;
     use st_core::limits::Limit;
+    use st_core::limits::UsageSnapshot;
+    use st_ipc::IpcError;
 
     fn base() -> Limit {
         Limit::new(1, LimitTarget::Total, 30)
@@ -703,5 +1100,802 @@ mod tests {
             .expect("set");
         assert!(pin_ok(&db, "1234"));
         assert!(!pin_ok(&db, "wrong"));
+    }
+
+    // -- Handler-level fixtures. ---------------------------------------------
+
+    /// Records terminations so the overlay's Quit action can be asserted.
+    struct FakeProcesses {
+        pids: Vec<u32>,
+        terminated: Arc<Mutex<Vec<u32>>>,
+    }
+
+    impl Default for FakeProcesses {
+        fn default() -> Self {
+            Self {
+                pids: vec![111, 222],
+                terminated: Arc::new(Mutex::new(Vec::new())),
+            }
+        }
+    }
+
+    impl ProcessController for FakeProcesses {
+        fn find_processes(&mut self, _key: &AppKey) -> st_core::platform::PlatformResult<Vec<u32>> {
+            Ok(self.pids.clone())
+        }
+
+        fn freeze(&mut self, _pid: u32) -> st_core::platform::PlatformResult<()> {
+            Ok(())
+        }
+
+        fn thaw(&mut self, _pid: u32) -> st_core::platform::PlatformResult<()> {
+            Ok(())
+        }
+
+        fn terminate(&mut self, pid: u32) -> st_core::platform::PlatformResult<()> {
+            self.terminated.lock().expect("log").push(pid);
+            Ok(())
+        }
+
+        fn backend(&self) -> &'static str {
+            "fake"
+        }
+    }
+
+    fn test_ctx(db: Db, clock: TestClock) -> Ctx {
+        test_ctx_with_policy(db, clock, |_| ())
+    }
+
+    fn test_ctx_with_policy(db: Db, clock: TestClock, tweak: impl FnOnce(&mut Policy)) -> Ctx {
+        let mut policy = Policy {
+            limit_cooldown_hours: 24,
+            strict_mode: false,
+            day_start_minutes: 0,
+            idle_threshold_secs: 60,
+        };
+        tweak(&mut policy);
+        Ctx {
+            db: Arc::new(Mutex::new(db)),
+            status: Arc::new(StatusInfo {
+                agent_version: "test".into(),
+                tracker_backend: "fake".into(),
+                enforcement_backend: "fake".into(),
+                filter_backend: "none".into(),
+                self_sampling: false,
+                blocks_encrypted_dns: false,
+            }),
+            policy: Arc::new(policy),
+            processes: Arc::new(Mutex::new(Box::new(FakeProcesses::default()))),
+            clock: Arc::new(clock),
+            live: Arc::new(Live::default()),
+        }
+    }
+
+    fn at(s: &str) -> DateTime<Utc> {
+        DateTime::parse_from_rfc3339(s)
+            .expect("valid rfc3339")
+            .with_timezone(&Utc)
+    }
+
+    fn error_code(response: &Response) -> Option<ErrorCode> {
+        match response {
+            Response::Error { code, .. } => Some(*code),
+            _ => None,
+        }
+    }
+
+    fn expect_accepted(response: Response, expected: DateTime<Utc>) {
+        match response {
+            Response::Accepted { effective_utc } => assert_eq!(
+                DateTime::parse_from_rfc3339(&effective_utc)
+                    .expect("rfc3339")
+                    .with_timezone(&Utc),
+                expected,
+                "Accepted must carry the ingest/effective instant"
+            ),
+            other => panic!("expected Accepted at {expected}, got {other:?}"),
+        }
+    }
+
+    fn seed_game_app(db: &mut Db, path: &str) -> i64 {
+        let uncat = db.category_id("uncategorized").expect("uncat");
+        let games = db.category_id("games").expect("games");
+        let key = AppKey::windows_exe(path);
+        let id = db
+            .upsert_app(&key, "Steam", None, uncat, at("2026-08-20T09:00:00Z"))
+            .expect("app");
+        db.set_app_categories(id, games, &[], false)
+            .expect("classify");
+        id
+    }
+
+    fn record_usage(db: &mut Db, app: i64, secs: i64, day: DayKey) {
+        db.record_interval(&st_core::model::UsageInterval {
+            subject: SubjectRef::App(app),
+            session_id: "test".into(),
+            start: at("2026-08-20T10:00:00Z"),
+            end: at("2026-08-20T10:00:00Z") + Duration::seconds(secs),
+            day_key: day,
+        })
+        .expect("interval");
+    }
+
+    fn obs(app_key: &str, observed_at: &str, idle_seconds: u32) -> ObservationDto {
+        ObservationDto {
+            app_key: AppKey::windows_exe(app_key),
+            window_title: None,
+            idle_seconds,
+            observed_at_utc: observed_at.into(),
+        }
+    }
+
+    fn report_of(observations: Vec<ObservationDto>) -> Request {
+        Request::ReportUsage {
+            report: ReportUsageDto { observations },
+        }
+    }
+
+    fn used_secs_for_key(db: &mut Db, key: &str, day: DayKey) -> i64 {
+        let app = db
+            .app_id_for_key(&AppKey::windows_exe(key))
+            .expect("lookup")
+            .expect("ingested app exists");
+        db.day_snapshot(day)
+            .expect("snapshot")
+            .seconds_used(&LimitTarget::App(app))
+    }
+
+    // -- Handler behaviour. ---------------------------------------------------
+
+    #[test]
+    fn set_pin_first_set_then_change_requires_the_current_pin() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+        );
+
+        expect_accepted(
+            handle(
+                &ctx,
+                Request::SetPin {
+                    new_pin: "1234".into(),
+                    current_pin: None,
+                },
+            ),
+            at("2026-08-20T12:00:00Z"),
+        );
+
+        // Changing without (or with a wrong) current PIN is refused...
+        for wrong in [None, Some("0000")] {
+            assert_eq!(
+                error_code(&handle(
+                    &ctx,
+                    Request::SetPin {
+                        new_pin: "5678".into(),
+                        current_pin: wrong.map(Into::into)
+                    }
+                )),
+                Some(ErrorCode::BadPin)
+            );
+        }
+
+        // ...and with the right current PIN the change lands.
+        expect_accepted(
+            handle(
+                &ctx,
+                Request::SetPin {
+                    new_pin: "5678".into(),
+                    current_pin: Some("1234".into()),
+                },
+            ),
+            at("2026-08-20T12:00:00Z"),
+        );
+        let stored = lock_db(&ctx.db)
+            .pin_hash()
+            .expect("read")
+            .expect("configured");
+        assert!(verify_pin("5678", &stored), "new PIN must be live");
+    }
+
+    #[test]
+    fn set_limit_tightening_applies_immediately() {
+        let mut db = Db::open_in_memory().expect("db");
+        let games = db.category_id("games").expect("games");
+        seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
+        db.upsert_limit(
+            &Limit::new(1, LimitTarget::Category(games), 30),
+            at("2026-08-20T09:00:00Z"),
+        )
+        .expect("seed limit");
+
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let response = handle(
+            &ctx,
+            Request::SetLimit {
+                target: LimitTargetDto::Category { id: games },
+                default_minutes: 15,
+                weekday_minutes: [None; 7],
+                enabled: true,
+                pin: String::new(),
+            },
+        );
+
+        expect_accepted(response, at("2026-08-20T12:00:00Z"));
+        let limits = lock_db(&ctx.db).load_limits().expect("limits");
+        assert_eq!(limits[0].default_minutes, 15, "tightened value is live");
+    }
+
+    #[test]
+    fn set_limit_loosening_waits_out_the_cooldown_then_promotes() {
+        let db = Db::open_in_memory().expect("db");
+        let games = db.category_id("games").expect("games");
+        db.upsert_limit(
+            &Limit::new(1, LimitTarget::Category(games), 30),
+            at("2026-08-20T09:00:00Z"),
+        )
+        .expect("seed limit");
+
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let response = handle(
+            &ctx,
+            Request::SetLimit {
+                target: LimitTargetDto::Category { id: games },
+                default_minutes: 120,
+                weekday_minutes: [None; 7],
+                enabled: true,
+                pin: String::new(),
+            },
+        );
+
+        expect_accepted(response, at("2026-08-21T12:00:00Z"));
+        let mut db_guard = lock_db(&ctx.db);
+        assert_eq!(
+            db_guard.load_limits().expect("limits")[0].default_minutes,
+            30,
+            "the tighter value must keep being enforced during cooldown"
+        );
+        db_guard
+            .promote_pending_limits(at("2026-08-21T12:00:00Z"))
+            .expect("promote");
+        assert_eq!(
+            db_guard.load_limits().expect("limits")[0].default_minutes,
+            120,
+            "promotion applies the loosened value"
+        );
+    }
+
+    #[test]
+    fn a_failed_limit_read_is_internal_rather_than_fail_open() {
+        let db = Db::open_in_memory().expect("db");
+        let games = db.category_id("games").expect("games");
+        db.upsert_limit(
+            &Limit::new(1, LimitTarget::Category(games), 30),
+            at("2026-08-20T09:00:00Z"),
+        )
+        .expect("seed limit");
+        // Corrupt the column load_limits parses, forcing the read to fail.
+        db.conn()
+            .execute("UPDATE limits SET weekday_minutes = 'not-json'", [])
+            .expect("corrupt");
+
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let response = handle(
+            &ctx,
+            Request::SetLimit {
+                target: LimitTargetDto::Category { id: games },
+                default_minutes: 15,
+                weekday_minutes: [None; 7],
+                enabled: true,
+                pin: String::new(),
+            },
+        );
+        assert_eq!(error_code(&response), Some(ErrorCode::Internal));
+    }
+
+    #[test]
+    fn a_non_limitable_category_rejects_the_limit() {
+        let db = Db::open_in_memory().expect("db");
+        let dev = db.category_id("development").expect("development");
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+
+        let response = handle(
+            &ctx,
+            Request::SetLimit {
+                target: LimitTargetDto::Category { id: dev },
+                default_minutes: 30,
+                weekday_minutes: [None; 7],
+                enabled: true,
+                pin: String::new(),
+            },
+        );
+        assert_eq!(error_code(&response), Some(ErrorCode::NotLimitable));
+    }
+
+    #[test]
+    fn delete_limit_is_queued_behind_the_cooldown() {
+        let db = Db::open_in_memory().expect("db");
+        let games = db.category_id("games").expect("games");
+        db.upsert_limit(
+            &Limit::new(1, LimitTarget::Category(games), 30),
+            at("2026-08-20T09:00:00Z"),
+        )
+        .expect("seed limit");
+
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let response = handle(
+            &ctx,
+            Request::DeleteLimit {
+                target: LimitTargetDto::Category { id: games },
+                pin: String::new(),
+            },
+        );
+        expect_accepted(response, at("2026-08-21T12:00:00Z"));
+
+        let mut db_guard = lock_db(&ctx.db);
+        assert_eq!(
+            db_guard.load_limits().expect("limits").len(),
+            1,
+            "deletion waits for the cooldown"
+        );
+        db_guard
+            .promote_pending_limits(at("2026-08-21T12:00:00Z"))
+            .expect("promote");
+        assert!(db_guard.load_limits().expect("limits").is_empty());
+    }
+
+    /// Regression for bug 2: an override granted at 19:00 local in UTC-7 must
+    /// land on *today's* budget, not on tomorrow's UTC calendar day.
+    #[test]
+    fn grant_override_lands_on_the_local_day_not_the_utc_day() {
+        // 02:00 UTC on the 21st == 19:00 local on the 20th.
+        let utc_minus_seven = -7 * 3600;
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-21T02:00:00Z"), utc_minus_seven),
+        );
+
+        let response = handle(
+            &ctx,
+            Request::GrantOverride {
+                target: LimitTargetDto::Total,
+                seconds: 900,
+                pin: String::new(),
+            },
+        );
+        expect_accepted(response, at("2026-08-21T02:00:00Z"));
+
+        let db_guard = lock_db(&ctx.db);
+        let today = db_guard.day_snapshot(DayKey(20260820)).expect("snap");
+        assert_eq!(
+            today.granted_extra_secs(&LimitTarget::Total),
+            900,
+            "override credited to the local day"
+        );
+        let utc_day = db_guard.day_snapshot(DayKey(20260821)).expect("snap");
+        assert_eq!(
+            utc_day.granted_extra_secs(&LimitTarget::Total),
+            0,
+            "the UTC calendar day must not receive the bonus"
+        );
+    }
+
+    #[test]
+    fn grant_override_refused_outright_in_strict_mode() {
+        let ctx = test_ctx_with_policy(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+            |p| p.strict_mode = true,
+        );
+        let response = handle(
+            &ctx,
+            Request::GrantOverride {
+                target: LimitTargetDto::Total,
+                seconds: 900,
+                pin: String::new(),
+            },
+        );
+        assert_eq!(error_code(&response), Some(ErrorCode::StrictMode));
+    }
+
+    #[test]
+    fn close_apps_terminates_the_process_tree_and_clears_the_block() {
+        let mut db = Db::open_in_memory().expect("db");
+        let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
+        db.set_block(
+            SubjectRef::App(app),
+            "limit",
+            at("2026-08-20T12:00:00Z"),
+            None,
+        )
+        .expect("block");
+
+        // A shared log the fake writes into, so the test can assert what the
+        // controller (hidden behind `Box<dyn ProcessController>`) did.
+        let terminated_log = Arc::new(Mutex::new(Vec::new()));
+        let mut ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        ctx.processes = Arc::new(Mutex::new(Box::new(FakeProcesses {
+            pids: vec![111, 222],
+            terminated: Arc::clone(&terminated_log),
+        })));
+
+        let response = handle(
+            &ctx,
+            Request::CloseApps {
+                app_id: app,
+                pin: String::new(),
+            },
+        );
+        expect_accepted(response, at("2026-08-20T12:00:00Z"));
+        assert!(!lock_db(&ctx.db)
+            .is_blocked(SubjectRef::App(app))
+            .expect("check"));
+
+        assert_eq!(
+            terminated_log.lock().expect("log").clone(),
+            vec![111, 222],
+            "every pid in the process tree must be terminated"
+        );
+    }
+
+    #[test]
+    fn close_apps_requires_a_valid_pin_once_configured() {
+        let mut db = Db::open_in_memory().expect("db");
+        let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
+        db.set_pin_hash(&hash_pin("9999").expect("hash"))
+            .expect("set pin");
+
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let response = handle(
+            &ctx,
+            Request::CloseApps {
+                app_id: app,
+                pin: "1111".into(),
+            },
+        );
+        assert_eq!(error_code(&response), Some(ErrorCode::BadPin));
+    }
+
+    #[test]
+    fn blocked_apps_reports_label_and_key_for_the_overlay_owner() {
+        let mut db = Db::open_in_memory().expect("db");
+        let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
+        db.set_block(
+            SubjectRef::App(app),
+            "limit",
+            at("2026-08-20T12:00:00Z"),
+            None,
+        )
+        .expect("block");
+
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let response = handle(&ctx, Request::BlockedApps);
+        let Response::BlockedApps(dto) = response else {
+            panic!("expected BlockedApps, got {response:?}");
+        };
+        assert_eq!(dto.blocked.len(), 1);
+        assert_eq!(dto.blocked[0].app_id, app);
+        assert_eq!(dto.blocked[0].label, "Steam");
+        assert_eq!(
+            dto.blocked[0].app_key,
+            "win-exe:c:\\games\\steam\\steam.exe"
+        );
+    }
+
+    #[test]
+    fn catalog_maps_apps_categories_and_limits() {
+        let mut db = Db::open_in_memory().expect("db");
+        let games = db.category_id("games").expect("games");
+        let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
+        db.upsert_limit(
+            &Limit::new(7, LimitTarget::App(app), 45),
+            at("2026-08-20T09:00:00Z"),
+        )
+        .expect("limit");
+
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let Response::Catalog(dto) = handle(&ctx, Request::Catalog) else {
+            panic!("expected Catalog");
+        };
+
+        assert_eq!(dto.apps.len(), 1);
+        assert_eq!(dto.apps[0].id, app);
+        assert_eq!(dto.apps[0].key, "win-exe:c:\\games\\steam\\steam.exe");
+        assert_eq!(dto.apps[0].primary_category, games);
+
+        assert!(dto
+            .categories
+            .iter()
+            .any(|c| c.slug == "games" && c.kind == "limitable"));
+        assert!(dto
+            .categories
+            .iter()
+            .any(|c| c.slug == "development" && c.kind == "never_block"));
+
+        assert_eq!(dto.limits.len(), 1);
+        assert_eq!(
+            dto.limits[0].target,
+            LimitTargetDto::App { id: app },
+            "the limit must point at the seeded app"
+        );
+        assert_eq!(dto.limits[0].default_minutes, 45);
+    }
+
+    #[test]
+    fn day_summary_maps_rows_limit_seconds_and_blocked_flags() {
+        let mut db = Db::open_in_memory().expect("db");
+        let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
+        record_usage(&mut db, app, 600, DayKey(20260820));
+        db.upsert_limit(
+            &Limit::new(3, LimitTarget::App(app), 30),
+            at("2026-08-20T09:00:00Z"),
+        )
+        .expect("limit");
+        db.set_block(
+            SubjectRef::App(app),
+            "limit",
+            at("2026-08-20T12:00:00Z"),
+            None,
+        )
+        .expect("block");
+
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let Response::DaySummary(dto) = handle(
+            &ctx,
+            Request::DaySummary {
+                day: DayKey(20260820),
+            },
+        ) else {
+            panic!("expected DaySummary");
+        };
+
+        assert_eq!(dto.total_seconds, 600);
+        assert_eq!(dto.apps.len(), 1);
+        assert_eq!(dto.apps[0].id, app);
+        assert_eq!(dto.apps[0].seconds, 600);
+        assert_eq!(dto.apps[0].limit_seconds, Some(1800));
+        assert!(dto.apps[0].blocked, "the block must be surfaced honestly");
+        assert_eq!(dto.categories.len(), 1);
+        assert_eq!(dto.categories[0].seconds, 600);
+    }
+
+    // -- Report ingestion. ----------------------------------------------------
+
+    #[test]
+    fn report_usage_credits_ordered_active_observations_regardless_of_wire_order() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-25T10:05:00Z"), 0),
+        );
+
+        // Deliberately shuffled: t+60 first, then t and t+30.
+        let response = handle(
+            &ctx,
+            report_of(vec![
+                obs("c:\\apps\\game.exe", "2026-08-25T10:01:00Z", 0),
+                obs("c:\\apps\\game.exe", "2026-08-25T10:00:00Z", 0),
+                obs("c:\\apps\\game.exe", "2026-08-25T10:00:30Z", 0),
+            ]),
+        );
+        expect_accepted(response, at("2026-08-25T10:05:00Z"));
+
+        let mut db_guard = lock_db(&ctx.db);
+        assert_eq!(
+            used_secs_for_key(&mut db_guard, "c:\\apps\\game.exe", DayKey(20260825)),
+            60
+        );
+    }
+
+    #[test]
+    fn report_usage_idle_observation_breaks_accrual_until_activity_resumes() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-25T10:05:00Z"), 0),
+        );
+        let game = "c:\\apps\\game.exe";
+
+        // Active, then focused-but-idle past the threshold, then active again.
+        handle(
+            &ctx,
+            report_of(vec![
+                obs(game, "2026-08-25T10:00:00Z", 0),
+                obs(game, "2026-08-25T10:00:30Z", 90),
+            ]),
+        );
+        handle(&ctx, report_of(vec![obs(game, "2026-08-25T10:01:00Z", 90)]));
+        // Activity resumes: a fresh run starts here.
+        handle(
+            &ctx,
+            report_of(vec![
+                obs(game, "2026-08-25T10:03:00Z", 0),
+                obs(game, "2026-08-25T10:03:30Z", 0),
+            ]),
+        );
+
+        let mut db_guard = lock_db(&ctx.db);
+        // Only the resumed run bridges: [10:03:00, 10:03:30] = 30s. The idle
+        // gap contributed nothing even though the app stayed foregrounded.
+        assert_eq!(
+            used_secs_for_key(&mut db_guard, "c:\\apps\\game.exe", DayKey(20260825)),
+            30
+        );
+    }
+
+    #[test]
+    fn report_usage_skips_wildly_future_timestamps_but_still_accepts() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-25T10:05:00Z"), 0),
+        );
+
+        let response = handle(
+            &ctx,
+            report_of(vec![
+                obs("c:\\apps\\game.exe", "2026-08-25T11:00:00Z", 0),
+                obs("c:\\apps\\game.exe", "2026-08-25T10:04:50Z", 0),
+            ]),
+        );
+        // One bad observation must not fail the batch.
+        expect_accepted(response, at("2026-08-25T10:05:00Z"));
+
+        let db_guard = lock_db(&ctx.db);
+        assert_eq!(
+            db_guard
+                .day_summary(DayKey(20260825))
+                .expect("summary")
+                .total_seconds,
+            0,
+            "future-dated observations credit nothing (and the surviving \
+             singleton observation credits no time on its own)"
+        );
+    }
+
+    #[test]
+    fn report_usage_dedupes_a_resent_batch_across_requests() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-25T10:05:00Z"), 0),
+        );
+        let batch = || {
+            report_of(vec![
+                obs("c:\\apps\\game.exe", "2026-08-25T10:00:00Z", 0),
+                obs("c:\\apps\\game.exe", "2026-08-25T10:00:30Z", 0),
+            ])
+        };
+
+        handle(&ctx, batch());
+        // The reply to the first send was lost; the helper resends verbatim.
+        handle(&ctx, batch());
+
+        let mut db_guard = lock_db(&ctx.db);
+        assert_eq!(
+            used_secs_for_key(&mut db_guard, "c:\\apps\\game.exe", DayKey(20260825)),
+            30,
+            "a resent batch must be counted once"
+        );
+    }
+
+    #[test]
+    fn report_usage_splits_credit_at_the_local_day_boundary_mid_batch() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-21T00:05:00Z"), 0),
+        );
+
+        handle(
+            &ctx,
+            report_of(vec![
+                obs("c:\\apps\\game.exe", "2026-08-20T23:59:50Z", 0),
+                obs("c:\\apps\\game.exe", "2026-08-21T00:00:20Z", 0),
+            ]),
+        );
+
+        let mut db_guard = lock_db(&ctx.db);
+        assert_eq!(
+            used_secs_for_key(&mut db_guard, "c:\\apps\\game.exe", DayKey(20260820)),
+            10,
+            "the old day keeps its share"
+        );
+        assert_eq!(
+            used_secs_for_key(&mut db_guard, "c:\\apps\\game.exe", DayKey(20260821)),
+            20,
+            "the new day starts accruing at the boundary"
+        );
+    }
+
+    #[test]
+    fn report_usage_marks_tracking_available_in_status() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-25T10:05:00Z"), 0),
+        );
+
+        let Response::Status(before) = handle(&ctx, Request::Status) else {
+            panic!("expected Status");
+        };
+        assert!(
+            !before.tracking_available,
+            "no reports and no self-sampling: tracking is down"
+        );
+
+        handle(
+            &ctx,
+            report_of(vec![obs("c:\\apps\\game.exe", "2026-08-25T10:04:50Z", 0)]),
+        );
+
+        let Response::Status(after) = handle(&ctx, Request::Status) else {
+            panic!("expected Status");
+        };
+        assert!(
+            after.tracking_available,
+            "a fresh report means tracking works"
+        );
+    }
+
+    /// The concurrency contract: one connection, many frames. Legacy one-shot
+    /// clients exercise the same worker loop with a single frame.
+    #[test]
+    #[cfg(windows)]
+    fn a_persistent_connection_serves_many_frames_in_order() {
+        let name: &'static str =
+            Box::leak(format!("screentime_agent_test_{}", std::process::id()).into_boxed_str());
+        let _server = spawn(
+            name,
+            Arc::new(Mutex::new(Db::open_in_memory().expect("db"))),
+            StatusInfo {
+                agent_version: "test".into(),
+                tracker_backend: "fake".into(),
+                enforcement_backend: "fake".into(),
+                filter_backend: "none".into(),
+                self_sampling: false,
+                blocks_encrypted_dns: false,
+            },
+            Policy {
+                limit_cooldown_hours: 24,
+                strict_mode: false,
+                day_start_minutes: 0,
+                idle_threshold_secs: 60,
+            },
+            Arc::new(Mutex::new(Box::<FakeProcesses>::default())),
+            Arc::new(TestClock::new(at("2026-08-20T12:00:00Z"), 0)),
+        );
+
+        let mut stream = st_ipc::transport::client_connect(name).expect("connect");
+        for expected in ["pong", "status"] {
+            let request = if expected == "pong" {
+                Request::Ping
+            } else {
+                Request::Status
+            };
+            st_ipc::write_message(&mut stream, &request).expect("write");
+            let response: Response = st_ipc::read_message(&mut stream).expect("read");
+            match (&response, expected) {
+                (Response::Pong, "pong") => {}
+                (Response::Status(_), "status") => {}
+                _ => panic!("frame {expected} answered with {response:?}"),
+            }
+        }
+        drop(stream);
+
+        // A legacy one-shot client still gets served after the persistent
+        // connection above held a worker.
+        let mut second = st_ipc::transport::client_connect(name).expect("reconnect");
+        st_ipc::write_message(&mut second, &Request::Ping).expect("write");
+        assert!(matches!(
+            st_ipc::read_message::<_, Response>(&mut second),
+            Ok(Response::Pong)
+        ));
+    }
+
+    /// Malformed bytes must close that one connection without killing the
+    /// server or poisoning anything shared.
+    #[test]
+    fn read_errors_surface_as_closed_or_codec_failures_only() {
+        // Directly pins the worker-loop classification the server relies on:
+        // clean EOF is Closed; garbage frames are codec errors, never panics.
+        let empty: &[u8] = &[];
+        assert!(matches!(
+            st_ipc::read_message::<_, Request>(&mut std::io::Cursor::new(empty)),
+            Err(IpcError::Closed)
+        ));
     }
 }

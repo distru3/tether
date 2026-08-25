@@ -10,6 +10,7 @@ st-core.workspace = true
 tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+st-win32 = { path = "../st-win32" }
 windows = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_System_Diagnostics_ToolHelp",

@@ -54,11 +54,6 @@ impl Sampler {
         }
     }
 
-    #[allow(dead_code)] // wired to the UI/CLI reporting surface in M2
-    pub fn day_start_minutes(&self) -> i64 {
-        self.day_start_minutes
-    }
-
     /// Feed one observation. Returns any intervals that just closed.
     ///
     /// Returns a `Vec` because a single sample can close an interval *and*
@@ -110,7 +105,6 @@ impl Sampler {
 
     /// Close any open interval, e.g. on shutdown. Must be called before exit or
     /// the final session is lost.
-    #[allow(dead_code)] // wired to the shutdown handler in M2
     pub fn flush(&mut self) -> Option<PendingInterval> {
         self.close()
     }
