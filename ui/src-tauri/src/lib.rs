@@ -75,9 +75,10 @@ fn error_from(code: ErrorCode, message: String) -> CommandError {
 /// enum's `rename_all`; the serialization-stability test in st-ipc pins the
 /// exact tokens.
 fn serde_plain_string(code: ErrorCode) -> String {
-    let json = serde_json::to_value(code)
-        .expect("unit enum variant always serializes");
-    json.as_str().expect("unit variant serializes as string").into()
+    let json = serde_json::to_value(code).expect("unit enum variant always serializes");
+    json.as_str()
+        .expect("unit variant serializes as string")
+        .into()
 }
 
 type CmdResult<T> = Result<T, CommandError>;
@@ -191,7 +192,11 @@ fn delete_limit(target: st_ipc::LimitTargetDto, pin: String) -> CmdResult<String
 
 #[tauri::command]
 fn grant_override(target: st_ipc::LimitTargetDto, seconds: i64, pin: String) -> CmdResult<()> {
-    match ipc_client::request(st_ipc::Request::GrantOverride { target, seconds, pin }) {
+    match ipc_client::request(st_ipc::Request::GrantOverride {
+        target,
+        seconds,
+        pin,
+    }) {
         Ok(Response::Accepted { .. }) => Ok(()),
         Ok(Response::Error { code, message }) => Err(error_from(code, message)),
         Ok(_) => Err(CommandError::unexpected()),
