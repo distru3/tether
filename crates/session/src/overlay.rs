@@ -67,11 +67,11 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-    GetWindowLongPtrW, KillTimer, PostMessageW, PostQuitMessage, RegisterClassExW,
+    GetWindowLongPtrW, KillTimer, LoadCursorW, PostMessageW, PostQuitMessage, RegisterClassExW,
     SetLayeredWindowAttributes, SetTimer, SetWindowLongPtrW, SetWindowsHookExW, TranslateMessage,
-    UnhookWindowsHookEx, GWLP_USERDATA, LAYERED_WINDOW_ATTRIBUTES_FLAGS, MSG, WINDOWS_HOOK_ID,
-    WM_CLOSE, WM_DESTROY, WM_LBUTTONUP, WM_NCCREATE, WM_PAINT, WM_TIMER, WNDCLASSEXW,
-    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
+    UnhookWindowsHookEx, GWLP_USERDATA, IDC_ARROW, LAYERED_WINDOW_ATTRIBUTES_FLAGS, MSG,
+    WINDOWS_HOOK_ID, WM_CLOSE, WM_DESTROY, WM_LBUTTONUP, WM_NCCREATE, WM_PAINT, WM_TIMER,
+    WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
 };
 
 /// `WH_KEYBOARD_LL` is a `WINDOWS_HOOK_ID` constant in `WindowsAndMessaging`.
@@ -735,26 +735,17 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
         // The sheet.
         fill(hdc, &rect, PAPER);
 
-        // Masthead: brand left, verdict right, newspaper double rule below.
+        // Masthead: brand left, newspaper double rule below. The verdict lives
+        // only in the stamp — a second red word here used to sit inside the
+        // stamp's box.
         draw_tracked_caps(hdc, PAD, 24, "SCREENTIME", &fonts.mono, INK_SOFT, 3);
-        let blocked = "BLOCKED";
-        let (blocked_w, _) = text_extent(hdc, blocked, &fonts.mono);
-        draw_tracked_caps(
-            hdc,
-            cw - PAD - blocked_w - 6 * blocked.len() as i32,
-            24,
-            blocked,
-            &fonts.mono,
-            RED,
-            3,
-        );
         fill(
             hdc,
             &RECT {
                 left: PAD,
-                top: 62,
+                top: 72,
                 right: cw - PAD,
-                bottom: 65,
+                bottom: 75,
             },
             INK,
         );
@@ -762,24 +753,24 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
             hdc,
             &RECT {
                 left: PAD,
-                top: 69,
+                top: 79,
                 right: cw - PAD,
-                bottom: 70,
+                bottom: 80,
             },
             RULE_STRONG,
         );
 
-        // The stamp sits in the header band, clear of the headline.
-        draw_stamp(hdc, cw - PAD, 20, &fonts);
+        // The stamp sits alone in the header band, clear of everything.
+        draw_stamp(hdc, cw - PAD, 14, &fonts);
 
         // Headline figure and the app it convicts.
-        draw_text(hdc, PAD, 104, "Time's up.", &fonts.display, INK);
+        draw_text(hdc, PAD, 112, "Time's up.", &fonts.display, INK);
         let label = ellipsize(hdc, &state.label, &fonts.body, cw - PAD * 2);
-        draw_text(hdc, PAD, 172, &label, &fonts.body, INK_SOFT);
+        draw_text(hdc, PAD, 180, &label, &fonts.body, INK_SOFT);
         draw_text(
             hdc,
             PAD,
-            210,
+            218,
             "This app hit its standing order for today.",
             &fonts.italic,
             INK_SOFT,
@@ -874,6 +865,11 @@ fn run_overlay(
             cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(wnd_proc),
             hInstance: hinstance.into(),
+            // A NULL class cursor makes Windows loop the busy/app-starting
+            // spinner over the window: WM_SETCURSOR falls through to
+            // DefWindowProc, which has nothing to set, so the system cursor
+            // never settles. Own the arrow explicitly.
+            hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
             lpszClassName: class_name,
             ..Default::default()
         };
