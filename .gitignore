@@ -8,6 +8,9 @@ node_modules/
 dist/
 .vite/
 *.tsbuildinfo
+# tsc must never emit into src/ (noEmit is on; these would shadow the .tsx sources)
+ui/src/**/*.js
+ui/src/**/*.js.map
 
 # Local data / secrets
 *.db

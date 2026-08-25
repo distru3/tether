@@ -7,14 +7,12 @@
 
 use st_ipc::{transport, Request, Response};
 
-const PIPE_NAME: &str = "screentime";
-
 /// Performs one request/response round trip against the agent.
 ///
 /// Returns `None` when the agent is not running, so callers can present a
 /// graceful "disconnected" state instead of failing hard.
 pub fn request(request: Request) -> Result<Response, st_ipc::transport::TransportError> {
-    let mut stream = transport::client_connect(PIPE_NAME)?;
+    let mut stream = transport::client_connect(st_ipc::PIPE_NAME)?;
     st_ipc::write_message(&mut stream, &request)
         .map_err(|e| st_ipc::transport::TransportError::Io(std::io::Error::other(e)))?;
     let response = st_ipc::read_message::<_, Response>(&mut stream)
