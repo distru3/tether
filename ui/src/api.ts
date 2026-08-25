@@ -1,0 +1,96 @@
+import { invoke } from "@tauri-apps/api/core";
+
+import type { ErrorCode } from "./types/generated/ErrorCode";
+import type { CatalogDto } from "./types/generated/CatalogDto";
+import type { DaySummaryDto } from "./types/generated/DaySummaryDto";
+import type { LimitTargetDto } from "./types/generated/LimitTargetDto";
+import type { StatusDto } from "./types/generated/StatusDto";
+
+export type { ErrorCode };
+
+export const OVERRIDE_SECONDS = 15 * 60;
+
+export function getStatus(): Promise<StatusDto> {
+    return invoke("get_status");
+}
+
+export function getDaySummary(day: number): Promise<DaySummaryDto> {
+    return invoke("get_day_summary", { day });
+}
+
+export function getCatalog(): Promise<CatalogDto> {
+    return invoke("get_catalog");
+}
+
+export function setPin(newPin: string, currentPin: string | null): Promise<string> {
+    return invoke("set_pin", { newPin, currentPin });
+}
+
+export function setLimit(
+    target: LimitTargetDto,
+    defaultMinutes: number,
+    enabled: boolean,
+    pin: string,
+): Promise<string> {
+    return invoke("set_limit", { target, defaultMinutes, enabled, pin });
+}
+
+export function deleteLimit(target: LimitTargetDto, pin: string): Promise<string> {
+    return invoke("delete_limit", { target, pin });
+}
+
+export function grantOverride(target: LimitTargetDto, seconds: number, pin: string): Promise<void> {
+    return invoke("grant_override", { target, seconds, pin });
+}
+
+const COPY: Record<ErrorCode, string> = {
+    bad_pin: "That PIN doesn't match.",
+    cooldown_active: "Loosened limits take effect later — see the notice.",
+    strict_mode: "Overrides are disabled in strict mode.",
+    not_limitable: "That target can't carry a standing order.",
+    not_found: "That entry is no longer on the books.",
+    bad_request: "The request didn't parse — try again.",
+    internal: "Something went wrong on our side.",
+};
+
+export function mapErrorCode(code: string, message?: string): string {
+    switch (code) {
+        case "bad_pin":
+            return COPY.bad_pin;
+        case "cooldown_active":
+            return COPY.cooldown_active;
+        case "strict_mode":
+            return COPY.strict_mode;
+        case "not_limitable":
+            return COPY.not_limitable;
+        case "not_found":
+            return COPY.not_found;
+        case "bad_request":
+            return COPY.bad_request;
+        case "internal":
+            return COPY.internal;
+        case "unreachable":
+            return "Can't reach the screentime agent right now.";
+        case "unexpected_response":
+            return message !== undefined && message.trim().length > 0
+                ? message
+                : "Unexpected response from the backend.";
+        default:
+            return "Unexpected response from the backend.";
+    }
+}
+
+function errorFields(e: unknown): { code: string; message: string } | null {
+    if (typeof e !== "object" || e === null) return null;
+    const record = e as Record<string, unknown>;
+    if (typeof record.code !== "string") return null;
+    const message = typeof record.message === "string" ? record.message : "";
+    return { code: record.code, message };
+}
+
+export function describeError(e: unknown): string {
+    const fields = errorFields(e);
+    if (fields !== null) return mapErrorCode(fields.code, fields.message);
+    if (typeof e === "string" && e.includes("unreachable")) return mapErrorCode("unreachable");
+    return mapErrorCode("unexpected_response");
+}

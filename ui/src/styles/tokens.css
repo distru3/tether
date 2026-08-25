@@ -1,0 +1,37 @@
+/* ============================================================
+   tokens.css — "The Daily Ledger" design tokens
+   Print broadsheet / accounting ledger: light paper, ink,
+   ruled hairlines, sharp corners, typography-led.
+   ============================================================ */
+
+:root {
+    /* Paper surfaces */
+    --paper: #f6f2ea;
+    --paper-raised: #fbf8f2;
+    --paper-deep: #ece5d6;
+
+    /* Ink */
+    --ink: #211d1a;
+    --ink-soft: #57504a;
+    --ink-faint: #8d8578;
+
+    /* Rules (hairlines) */
+    --rule: #d8d0bf;
+    --rule-strong: #b3a992;
+
+    /* Accents */
+    --red: #a02c20;
+    --red-wash: rgba(160, 44, 32, 0.08);
+    --stamp-green: #3d6b45;
+
+    /* Type */
+    --font-display: Georgia, "Times New Roman", serif;
+    --font-body: Georgia, "Times New Roman", serif;
+    --font-utility: Consolas, "Cascadia Mono", monospace;
+
+    /* Data colors printed on paper sit one step duller */
+    --print-filter: saturate(0.7) contrast(0.92);
+
+    /* Elevation: offset solid shadow for modal slips */
+    --shadow-slip: 6px 6px 0 rgba(33, 29, 26, 0.12);
+}
