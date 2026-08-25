@@ -75,7 +75,7 @@ fn error_from(code: ErrorCode, message: String) -> CommandError {
 /// enum's `rename_all`; the serialization-stability test in st-ipc pins the
 /// exact tokens.
 fn serde_plain_string(code: ErrorCode) -> String {
-    let json = serde_json::to_value(&code)
+    let json = serde_json::to_value(code)
         .expect("unit enum variant always serializes");
     json.as_str().expect("unit variant serializes as string").into()
 }

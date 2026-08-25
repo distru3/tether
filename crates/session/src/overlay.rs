@@ -296,11 +296,11 @@ unsafe extern "system" fn wnd_proc(
             LRESULT(0)
         }
         WM_TIMER => {
-            if wparam.0 as usize == FADE_TIMER_ID {
+            if wparam.0 == FADE_TIMER_ID {
                 let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut OverlayState;
                 if !state.is_null() {
                     let st = &mut *state;
-                    st.alpha = st.alpha.saturating_add(FADE_ALPHA_STEP).min(255);
+                    st.alpha = st.alpha.saturating_add(FADE_ALPHA_STEP);
                     // SAFETY: our own hwnd with the layered flag set at creation.
                     let _ = SetLayeredWindowAttributes(
                         hwnd,
@@ -308,7 +308,7 @@ unsafe extern "system" fn wnd_proc(
                         st.alpha,
                         LAYERED_WINDOW_ATTRIBUTES_FLAGS(0x2), // LWA_ALPHA
                     );
-                    if st.alpha >= 255 {
+                    if st.alpha == u8::MAX {
                         let _ = KillTimer(hwnd, FADE_TIMER_ID);
                     }
                 }

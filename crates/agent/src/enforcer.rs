@@ -411,9 +411,9 @@ mod tests {
             st_core::limits::LimitTarget::Category(games),
             at("2026-08-20T12:00:00Z"),
         );
-        drop(enforcer);
-
-        // "Restart": brand-new enforcer state over the same database.
+        // Discard the first enforcer: everything below is a fresh instance over
+        // the same database — the "restart" under test.
+        let _ = enforcer;
         let mut restarted = Enforcer::new();
         restarted
             .tick(

@@ -161,12 +161,12 @@ impl Live {
 
     fn reported_within(&self, secs: i64, now: DateTime<Utc>) -> bool {
         lock_recover(&self.last_report, "last-report stamp")
-            .map_or(false, |t| (now - t).num_seconds() <= secs)
+            .is_some_and(|t| (now - t).num_seconds() <= secs)
     }
 
     fn note_focus(&self, key: AppKey, at: DateTime<Utc>) {
         let mut focus = lock_recover(&self.focus, "focus");
-        if focus.as_ref().map_or(true, |(_, t)| at >= *t) {
+        if focus.as_ref().is_none_or(|(_, t)| at >= *t) {
             *focus = Some((key, at));
         }
     }
