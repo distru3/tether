@@ -106,6 +106,15 @@ Write-Host "Copied daemons to $InstallDir"
 # times out (event 7009).
 $binPathQuoted = "`"$AgentDest`" --service"
 
+# PowerShell 5.1 cannot pass an argument containing BOTH embedded quotes and a
+# space to a native executable intact — it re-quotes the whole thing and sc.exe
+# responds with usage text + exit 1639. Routing through `cmd /D /C` hands sc a
+# pristine raw command line, exactly how the agent's own --install shim does it.
+function Invoke-ScRaw([string]$CommandLine) {
+    Write-Host "  $CommandLine"
+    cmd /D /C $CommandLine
+}
+
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existing) {
     Write-Host "Service $ServiceName exists; updating..."
@@ -113,10 +122,10 @@ if ($existing) {
         Stop-Service -Name $ServiceName
         $existing.WaitForStatus("Stopped", "00:00:15")
     }
-    & sc.exe config $ServiceName type= own start= auto binPath= $binPathQuoted
+    Invoke-ScRaw "sc.exe config $ServiceName type= own start= auto binPath= $binPathQuoted"
 } else {
     Write-Host "Creating service $ServiceName..."
-    & sc.exe create $ServiceName type= own start= auto binPath= $binPathQuoted DisplayName= "Screentime Agent"
+    Invoke-ScRaw "sc.exe create $ServiceName type= own start= auto binPath= $binPathQuoted DisplayName= `"Screentime Agent`""
 }
 if ($LASTEXITCODE -ne 0) { Fail "sc.exe failed to configure $ServiceName (exit $LASTEXITCODE)." }
 

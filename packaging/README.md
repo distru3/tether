@@ -51,9 +51,9 @@ launch falls into console mode (a daemon that never talks to the service
 controller) and every start times out with System-log event 7009:
 
 ```powershell
-sc.exe create ScreentimeAgent type= own start= auto `
-    binPath= "\"C:\Program Files\Screentime\screentime-agent.exe\" --service" `
-    DisplayName= "Screentime Agent"
+# PowerShell 5.1 re-quotes arguments containing embedded quotes + spaces, so
+# hand this line to cmd instead (or just use .\packaging\install.ps1):
+cmd /D /C 'sc.exe create ScreentimeAgent type= own start= auto binPath= "C:\Program Files\Screentime\screentime-agent.exe" --service DisplayName= "Screentime Agent"'
 sc.exe failure ScreentimeAgent reset= 86400 actions= restart/60000/restart/60000/restart/60000
 sc.exe start ScreentimeAgent
 ```
