@@ -101,20 +101,23 @@ Write-Host "Copied daemons to $InstallDir"
 # --- 4. Register / update the agent service ---------------------------------
 # sc.exe argument rules: a literal space after each '=', and the binPath must
 # keep embedded quotes so Windows keeps it one path despite spaces. The
-# --service flag rides OUTSIDE the quotes: without it SCM's launch falls into
-# console mode, never connects to the service controller, and every start
-# times out (event 7009).
-$binPathQuoted = "`"$AgentDest`" --service"
+# --service flag tells the daemon SCM launched it; without it every start
+# times out (event 7009) because the process runs in console mode.
+#
+# The path itself is converted to its 8.3 SHORT form below and registered
+# WITHOUT any quotes: a space-free binPath survives PowerShell, cmd and sc.exe
+# argument parsing byte-for-byte. Quoted long paths were mangled twice in the
+# field (PS 5.1 native-arg re-quoting, then cmd /C multi-quote stripping).
+$fso = New-Object -ComObject Scripting.FileSystemObject
+$shortExe = $fso.GetFile($AgentDest).ShortPath
+if ([string]::IsNullOrEmpty($shortExe) -or $shortExe -notmatch '\.exe$') {
+    Fail "Could not resolve an 8.3 short path for '$AgentDest' (short-name generation may be disabled on this volume). Register the service manually with a space-free install directory instead."
+}
+Write-Host "binPath will use short form: $shortExe"
 
 # PowerShell 5.1 cannot pass an argument containing BOTH embedded quotes and a
-# space to a native executable intact — it re-quotes the whole thing and sc.exe
-# responds with usage text + exit 1639. Routing through `cmd /D /C` hands sc a
-# pristine raw command line, exactly how the agent's own --install shim does it.
-function Invoke-ScRaw([string]$CommandLine) {
-    Write-Host "  $CommandLine"
-    cmd /D /C $CommandLine
-}
-
+# space to a native executable intact — but $binPathValue now contains neither,
+# so plain token-passing is exact.
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existing) {
     Write-Host "Service $ServiceName exists; updating..."
@@ -122,10 +125,10 @@ if ($existing) {
         Stop-Service -Name $ServiceName
         $existing.WaitForStatus("Stopped", "00:00:15")
     }
-    Invoke-ScRaw "sc.exe config $ServiceName type= own start= auto binPath= $binPathQuoted"
+    & sc.exe config $ServiceName 'type=' own 'start=' auto 'binPath=' $shortExe '--service'
 } else {
     Write-Host "Creating service $ServiceName..."
-    Invoke-ScRaw "sc.exe create $ServiceName type= own start= auto binPath= $binPathQuoted DisplayName= `"Screentime Agent`""
+    & sc.exe create $ServiceName 'type=' own 'start=' auto 'binPath=' $shortExe '--service' 'DisplayName=' 'Screentime Agent'
 }
 if ($LASTEXITCODE -ne 0) { Fail "sc.exe failed to configure $ServiceName (exit $LASTEXITCODE)." }
 

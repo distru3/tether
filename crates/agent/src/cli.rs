@@ -77,17 +77,18 @@ pub(crate) fn usage_text() -> String {
 /// The `sc.exe create` line `--install` runs.
 ///
 /// `sc.exe` parses options with the value AFTER the space following `=`, which
-/// is why the odd `binPath= "<exe>"` spacing is load-bearing. The executable
-/// path is quoted because the repo conventionally lives under a directory with
-/// spaces (OneDrive\Desktop\...).
+/// is why the odd `binPath= <exe>` spacing is load-bearing.
 ///
-/// The `--service` flag rides OUTSIDE the quoted path: without it, SCM's
-/// launch hits the console branch of [`decide`], runs a perfectly healthy
-/// daemon that never talks to the service controller, and every start times
-/// out with event 7009 (observed in the field 2026-08-26).
+/// `exe_path` MUST already be the 8.3 short form (see
+/// `st_win32::short_path`). History, twice over: a quoted long path first
+/// made SCM launches fall into console mode when the `--service` flag was
+/// missing entirely, and once the flag was added every quoting layer above sc
+/// (PowerShell native-arg passing, then `cmd /C` multi-quote stripping)
+/// mangled the string anyway. A space-free path needs no quotes anywhere, so
+/// the registration line is byte-stable through every invoker.
 pub(crate) fn install_create_command(exe_path: &std::path::Path) -> String {
     format!(
-        r#"sc.exe create {SERVICE_NAME} binPath= "{}" --service start= auto displayName= "{SERVICE_DISPLAY_NAME}""#,
+        r#"sc.exe create {SERVICE_NAME} binPath= {} --service start= auto displayName= "{SERVICE_DISPLAY_NAME}""#,
         exe_path.display()
     )
 }
@@ -154,14 +155,15 @@ mod tests {
     }
 
     #[test]
-    fn create_command_quotes_exe_uses_sc_spacing_and_carries_the_service_flag() {
-        let cmd = install_create_command(std::path::Path::new(r"C:\My Dir\screentime-agent.exe"));
-        // Pinned exactly: the flag sits OUTSIDE the quoted path — inside, it
-        // would become part of it and SCM launches would fall into console
-        // mode (event 7009 timeouts).
+    fn create_command_uses_a_bare_short_path_and_carries_the_service_flag() {
+        let cmd = install_create_command(std::path::Path::new(
+            r"C:\PROGRA~1\SCREEN~1\screentime-agent.exe",
+        ));
+        // Pinned exactly: no quotes anywhere around the path (short form, so
+        // none are needed), flag outside any quoting by construction.
         assert_eq!(
             cmd,
-            r#"sc.exe create ScreentimeAgent binPath= "C:\My Dir\screentime-agent.exe" --service start= auto displayName= "Screentime Agent""#
+            r#"sc.exe create ScreentimeAgent binPath= C:\PROGRA~1\SCREEN~1\screentime-agent.exe --service start= auto displayName= "Screentime Agent""#
         );
     }
 

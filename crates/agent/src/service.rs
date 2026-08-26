@@ -282,17 +282,24 @@ mod win {
     fn current_exe_for_sc() -> Result<PathBuf> {
         let exe = std::env::current_exe().context("resolving the agent executable path")?;
         let text = exe.to_string_lossy();
-        Ok(text.strip_prefix(r"\\?\").map(PathBuf::from).unwrap_or(exe))
+        let plain = text.strip_prefix(r"\\?\").map(PathBuf::from).unwrap_or(exe);
+        // 8.3 short form: a space-free binPath survives every quoting layer
+        // (Rust argv escaping, cmd, PowerShell) without special handling. If
+        // the volume has short-name generation disabled this fails loudly so
+        // install.ps1's FSO-based fallback story applies instead of silently
+        // registering an unstartable service.
+        st_win32::short_path(&plain)
+            .context("resolving the 8.3 short path (volume may have short names disabled)")
     }
 
     /// Run one `sc.exe` command line, echoing the command AND its output.
     ///
-    /// Routed through `cmd /D /C` on purpose: sc.exe parses options from the
-    /// RAW command line (values live after `binPath= ` and friends), and
-    /// Rust's argv quoting escapes embedded quotes around paths-with-spaces
-    /// into `\"` sequences sc.exe does not understand. cmd hands sc exactly
-    /// the documented syntax; `/D` skips AutoRun scripts so no user shell hook
-    /// can alter the outcome.
+    /// The command lines are built from SHORT paths (see
+    /// [`current_exe_for_sc`]) and therefore contain no quotes at all, so a
+    /// direct spawn is safe: Rust passes each token verbatim and sc.exe sees
+    /// exactly the documented `binPath= <path> --service` syntax. Do not
+    /// reintroduce quoted long paths here — they were mangled by both the
+    /// PowerShell and cmd quoting layers in the field.
     fn run_sc(command_line: &str) -> Result<std::process::Output> {
         println!("> {command_line}");
         let output = Command::new("cmd")

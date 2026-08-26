@@ -9,8 +9,10 @@
 //! implementation: fixes and audits land in one place. Existing crates adopt
 //! it later; nothing here depends on them.
 
+use std::os::windows::ffi::OsStrExt;
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE};
+use windows::Win32::Storage::FileSystem::GetShortPathNameW;
 use windows::Win32::System::Threading::{
     CreateMutexW, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
     PROCESS_QUERY_LIMITED_INFORMATION,
@@ -130,6 +132,42 @@ impl Drop for OwnedMutexHandle {
             let _ = CloseHandle(self.handle);
         }
     }
+}
+
+/// The 8.3 short form of `path`, when the volume still generates short names.
+///
+/// Why anyone wants this in 2026: `sc.exe`'s command-line parser and every
+/// quoting layer above it (PowerShell 5.1 native-arg passing, `cmd /C`
+/// multi-quote stripping) mangle a quoted path containing spaces — the service
+/// binPath field has been burned by exactly that twice. A short path like
+/// `C:\PROGRA~1\SCREEN~1\screentime-agent.exe` contains no spaces, so the
+/// registration string needs no quotes at all and survives every layer.
+///
+/// Fails when the file does not exist (short names are computed for existing
+/// files only) or the volume has 8dot3 generation disabled; callers must
+/// surface that as an actionable install error, not silently register a
+/// broken binPath.
+pub fn short_path(path: &std::path::Path) -> windows::core::Result<std::path::PathBuf> {
+    // First call measures; second copies. MAX_PATH is almost always enough
+    // for an 8.3 form, but honour the reported size instead of guessing.
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // First call measures; second copies. MAX_PATH is almost always enough
+    // for an 8.3 form, but honour the reported size instead of guessing.
+    let len = unsafe { GetShortPathNameW(PCWSTR(wide.as_ptr()), None) };
+    if len == 0 {
+        return Err(windows::core::Error::from_win32());
+    }
+    let mut out = vec![0u16; len as usize];
+    let written = unsafe { GetShortPathNameW(PCWSTR(wide.as_ptr()), Some(&mut out)) };
+    if written == 0 {
+        return Err(windows::core::Error::from_win32());
+    }
+    out.truncate(written as usize);
+    Ok(std::path::PathBuf::from(String::from_utf16_lossy(&out)))
 }
 
 /// Acquires the named mutex as a single-instance guard, or reports
@@ -293,6 +331,17 @@ mod tests {
         let path = process_image_path(std::process::id()).expect("self query must succeed");
         assert!(!path.is_empty());
         assert!(path.contains('\\'), "expected an absolute path, got {path}");
+    }
+
+    #[test]
+    fn short_path_resolves_to_an_existing_file_without_spaces() {
+        let exe = std::env::current_exe().expect("current exe");
+        let short = short_path(&exe).expect("8.3 form of an existing file");
+        assert!(short.exists(), "short path must still point at the file");
+        assert!(
+            !short.to_string_lossy().contains(' '),
+            "the entire point: {short:?} must not contain spaces"
+        );
     }
 
     #[test]
