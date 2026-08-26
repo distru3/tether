@@ -73,6 +73,10 @@ export function grantOverride(target: LimitTargetDto, seconds: number, pin: stri
     return invoke("grant_override", { target, seconds, pin });
 }
 
+export function categorizeApp(appId: number, primaryCategoryId: number, tagCategoryIds: number[]): Promise<void> {
+    return invoke("categorize", { appId, primary: primaryCategoryId, tags: tagCategoryIds });
+}
+
 const COPY: Record<ErrorCode, string> = {
     bad_pin: "That PIN doesn't match.",
     cooldown_active: "Loosened limits take effect later — see the notice.",

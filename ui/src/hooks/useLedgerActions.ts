@@ -180,12 +180,52 @@ export function useLedgerActions(deps: Deps) {
         return reply;
     }, []);
 
+    const [categorizeTarget, setCategorizeTarget] = useState<{
+        appId: number;
+        appName: string;
+        primaryId: number | null;
+        tagIds: number[];
+    } | null>(null);
+
+    const openCategorize = useCallback(
+        (appId: number, appName: string, primaryId: number | null, tagIds: number[]) => {
+            setCategorizeTarget({ appId, appName, primaryId, tagIds });
+        },
+        [],
+    );
+
+    const closeCategorize = useCallback(() => setCategorizeTarget(null), []);
+
+    const submitCategorize = useCallback(
+        (primaryId: number, tagIds: number[]) => {
+            if (categorizeTarget === null) return;
+            runExclusive(async () => {
+                await api.categorizeApp(categorizeTarget.appId, primaryId, tagIds);
+                depsRef.current.notify("success", `${categorizeTarget.appName} categorized.`);
+                depsRef.current.invalidate();
+                setCategorizeTarget(null);
+            });
+        },
+        [categorizeTarget, runExclusive],
+    );
+
+    const resetCategorize = useCallback(() => {
+        if (categorizeTarget === null) return;
+        runExclusive(async () => {
+            await api.categorizeApp(categorizeTarget.appId, 0, []);
+            depsRef.current.notify("info", `${categorizeTarget.appName} reset to auto-detect.`);
+            depsRef.current.invalidate();
+            setCategorizeTarget(null);
+        });
+    }, [categorizeTarget, runExclusive]);
+
     return {
         busy,
         editor,
         gate,
         gateError,
         pinSetupOpen,
+        categorizeTarget,
         openEditor,
         startNewOrder,
         closeEditor,
@@ -198,5 +238,9 @@ export function useLedgerActions(deps: Deps) {
         openPinSetup,
         closePinSetup,
         submitPinSetup,
+        openCategorize,
+        closeCategorize,
+        submitCategorize,
+        resetCategorize,
     };
 }

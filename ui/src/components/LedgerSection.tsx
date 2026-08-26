@@ -1,3 +1,4 @@
+import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
@@ -15,6 +16,8 @@ interface LedgerSectionProps {
     canLimit: (entry: UsageRowDto) => boolean;
     busy: boolean;
     onEdit: (target: LimitTargetDto, limit: LimitDto | null) => void;
+    onCategorize?: (appId: number, appName: string, primaryId: number | null, tagIds: number[]) => void;
+    catalog?: CatalogDto | null;
 }
 
 export function LedgerSection({
@@ -26,6 +29,8 @@ export function LedgerSection({
     canLimit,
     busy,
     onEdit,
+    onCategorize,
+    catalog,
 }: LedgerSectionProps) {
     if (entries.length === 0) return null;
 
@@ -53,27 +58,43 @@ export function LedgerSection({
                             <span className="lrow-leader" aria-hidden="true" />
                             <span className="lrow-time">{formatDuration(entry.seconds)}</span>
                             <span className="lrow-share">{sharePercent(entry.seconds, total)}%</span>
-                            {limit ? (
-                                <button
-                                    type="button"
-                                    className="chip"
-                                    disabled={busy}
-                                    title={`Edit the ${limit.default_minutes}m/day order`}
-                                    onClick={() => onEdit(limit.target, limit)}
-                                >
-                                    {limit.default_minutes}m/day
-                                </button>
-                            ) : canLimit(entry) ? (
-                                <button
-                                    type="button"
-                                    className="chip chip--ghost"
-                                    disabled={busy}
-                                    title="Set a daily order"
-                                    onClick={() => onEdit(target, null)}
-                                >
-                                    + set
-                                </button>
-                            ) : null}
+            {limit ? (
+                <button
+                    type="button"
+                    className="chip"
+                    disabled={busy}
+                    title={`Edit the ${limit.default_minutes}m/day order`}
+                    onClick={() => onEdit(limit.target, limit)}
+                >
+                    {limit.default_minutes}m/day
+                </button>
+            ) : canLimit(entry) ? (
+                <button
+                    type="button"
+                    className="chip chip--ghost"
+                    disabled={busy}
+                    title="Set a daily order"
+                    onClick={() => onEdit(target, null)}
+                >
+                    + set
+                </button>
+            ) : null}
+            {kind === "app" && onCategorize && catalog && (
+                <button
+                    type="button"
+                    className="chip chip--ghost"
+                    disabled={busy}
+                    title="Categorize this app"
+                    onClick={() => {
+                        const app = catalog.apps.find((a) => a.id === entry.id);
+                        if (app) {
+                            onCategorize(entry.id, entry.label, app.primary_category, app.tags);
+                        }
+                    }}
+                >
+                    ⚙
+                </button>
+            )}
                         </li>
                     );
                 })}

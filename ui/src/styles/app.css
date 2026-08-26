@@ -907,6 +907,36 @@ button {
     margin-top: 18px;
 }
 
+/* ---------- categorize dialog ---------- */
+
+.tag-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.tag-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.tag-item input[type="checkbox"] {
+    cursor: pointer;
+}
+
+.tag-item input[type="checkbox"]:disabled {
+    cursor: not-allowed;
+    opacity: 0.4;
+}
+
+.tag-item span {
+    user-select: none;
+}
+
 /* ---------- toasts ---------- */
 
 .toasts {

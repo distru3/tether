@@ -206,14 +206,45 @@ const SIGNATURES: &[(&str, &str, &[&str])] = &[
     ("screentime-agent.exe", "utilities-system", &[]),
 ];
 
-/// Classify an app by its key. Returns `None` for anything the table does not
-/// recognise, in which case the caller keeps the `uncategorized` default.
+/// Classify an app by its key. Tries in order:
+/// 1. Exact basename match against the signature table
+/// 2. Path-based detection (Steam/Epic/GOG/Xbox directories)
+/// 3. Name pattern matching (Unreal Engine, common game patterns)
+/// Returns `None` if nothing matches, in which case the caller keeps
+/// the `uncategorized` default.
 pub fn classify(key: &AppKey) -> Option<Classification> {
     let basename = key.basename().to_lowercase();
-    SIGNATURES
-        .iter()
-        .find(|(name, _, _)| *name == basename)
-        .map(|(_, primary, tags)| Classification { primary, tags })
+    
+    // Layer 1: Exact signature match
+    if let Some((_, primary, tags)) = SIGNATURES.iter().find(|(name, _, _)| *name == basename) {
+        return Some(Classification { primary, tags });
+    }
+    
+    // Layer 2: Path-based detection (Windows only for now)
+    if let AppKey::WindowsExe(path) = key {
+        let path_lower = path.to_lowercase();
+        
+        // Game launcher directories
+        if path_lower.contains("steam\\steamapps\\common\\") 
+            || path_lower.contains("epic games\\")
+            || path_lower.contains("gog galaxy\\games\\")
+            || path_lower.contains("xboxgames\\")
+            || path_lower.contains("battle.net\\")
+        {
+            return Some(Classification { primary: "games", tags: &[] });
+        }
+    }
+    
+    // Layer 3: Name pattern matching
+    if basename.ends_with("_win64-shipping.exe")
+        || basename.ends_with("_shipping.exe")
+        || basename.ends_with("_launcher.exe")
+        || basename.ends_with("_game.exe")
+    {
+        return Some(Classification { primary: "games", tags: &[] });
+    }
+    
+    None
 }
 
 #[cfg(test)]

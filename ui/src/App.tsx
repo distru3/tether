@@ -1,4 +1,5 @@
 import { BlockedBanner } from "./components/BlockedBanner";
+import { CategorizeDialog } from "./components/CategorizeDialog";
 import { Hero } from "./components/Hero";
 import { LedgerRule } from "./components/LedgerRule";
 import { LedgerSection } from "./components/LedgerSection";
@@ -74,6 +75,8 @@ export function App() {
                 canLimit={() => true}
                 busy={actions.busy}
                 onEdit={actions.openEditor}
+                onCategorize={actions.openCategorize}
+                catalog={catalog}
             />
 
             <LimitsPanel
@@ -113,6 +116,18 @@ export function App() {
                     busy={actions.busy}
                     onClose={actions.closePinSetup}
                     onSubmit={actions.submitPinSetup}
+                />
+            )}
+            {actions.categorizeTarget !== null && (
+                <CategorizeDialog
+                    appName={actions.categorizeTarget.appName}
+                    currentPrimaryId={actions.categorizeTarget.primaryId}
+                    currentTagIds={actions.categorizeTarget.tagIds}
+                    catalog={catalog}
+                    busy={actions.busy}
+                    onClose={actions.closeCategorize}
+                    onCategorize={actions.submitCategorize}
+                    onAutoDetect={actions.resetCategorize}
                 />
             )}
         </main>
