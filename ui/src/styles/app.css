@@ -25,6 +25,7 @@ body {
     font-family: var(--font-body);
     font-size: 15px;
     line-height: 1.55;
+    scrollbar-gutter: stable;
 }
 
 h1,
@@ -54,6 +55,29 @@ button {
     max-width: 720px;
     margin: 0 auto;
     padding: 32px 24px;
+    border: 1px solid var(--rule);
+}
+
+.maximized-inset {
+    padding: 8px;
+}
+
+::-webkit-scrollbar {
+    width: 10px;
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--rule-strong);
+    border-radius: 0;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--ink-soft);
+}
+
+::-webkit-scrollbar-corner {
+    background: var(--paper);
 }
 
 /* ---------- masthead + double rule ---------- */

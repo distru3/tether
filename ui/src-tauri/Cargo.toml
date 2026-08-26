@@ -23,5 +23,7 @@ serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2.1", features = [] }
 tauri-plugin-shell = "2.0"
+tauri-plugin-snap-layout = "1.0.9"
 tracing.workspace = true
 tracing-subscriber.workspace = true
+windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }

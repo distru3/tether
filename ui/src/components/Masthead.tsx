@@ -1,7 +1,10 @@
+import { useEffect } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { attach as attachSnapLayout } from "tauri-plugin-snap-layout";
 
 import { formatDateline } from "../format";
 import type { Phase } from "../hooks/useDashboard";
+import { useWindowChrome } from "../hooks/useWindowChrome";
 
 interface MastheadProps {
     phase: Phase;
@@ -11,6 +14,12 @@ interface MastheadProps {
 export function Masthead({ phase, now }: MastheadProps) {
     const settled = phase !== "connecting";
     const live = phase === "live";
+    const { isMaximized } = useWindowChrome();
+
+    useEffect(() => {
+        attachSnapLayout("win-maximize");
+    }, []);
+
     return (
         // The whole bar drags the frameless window; the control buttons are
         // separate elements so their clicks are their own.
@@ -42,11 +51,12 @@ export function Masthead({ phase, now }: MastheadProps) {
                 </button>
                 <button
                     type="button"
+                    id="win-maximize"
                     className="winbtn"
                     aria-label="Toggle maximize window"
                     onClick={() => void getCurrentWindow().toggleMaximize()}
                 >
-                    ▢
+                    {isMaximized ? "❐" : "▢"}
                 </button>
                 <button
                     type="button"
