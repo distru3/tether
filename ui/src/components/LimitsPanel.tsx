@@ -86,11 +86,17 @@ export function LimitsPanel({
             <button type="button" className="add-order" disabled={busy} onClick={onNew}>
                 + New standing order
             </button>
-            {!pinConfigured && (
+            {!pinConfigured ? (
                 <p className="panel-note panel-note--action">
                     Orders are ungated until you set a PIN.{" "}
                     <button type="button" className="textbtn" onClick={onOpenPinSetup}>
                         Set a PIN
+                    </button>
+                </p>
+            ) : (
+                <p className="panel-note panel-note--action">
+                    <button type="button" className="textbtn" onClick={onOpenPinSetup}>
+                        Manage PIN
                     </button>
                 </p>
             )}
