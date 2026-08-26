@@ -81,10 +81,10 @@ needed):
 ## Installing (service + autostart)
 
 For daily use, run the agent as a Windows service and start the session
-helper at logon:
+helper at logon. From an **elevated** PowerShell, in the repository root:
 
     # Elevated prompt:
-    packaging\install.ps1                    # end-to-end: build, service, autostart
+    .\packaging\install.ps1                    # end-to-end: build, service, autostart
 
     # Or step by step:
     target\release\screentime-agent.exe --install     # registers + starts via sc.exe

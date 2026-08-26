@@ -62,7 +62,9 @@ Write-Host "Install to: $InstallDir"
 foreach ($procName in @("screentime-agent", "screentime-session")) {
     $running = Get-Process -Name $procName -ErrorAction SilentlyContinue
     if (-not $running) { continue }
-    Write-Host "Stopping $procName ($($running.Count) process(es))..."
+    # @(...) is required: Get-Process returns a bare SCALAR for one match, and
+    # under Set-StrictMode 2 a scalar has no .Count in PowerShell 5.1.
+    Write-Host "Stopping $procName ($(@($running).Count) process(es))..."
     foreach ($p in $running) {
         if ($p.HasExited) { continue }
         $null = $p.CloseMainWindow()   # harmless if windowless
@@ -125,7 +127,17 @@ Write-Host "Enabling logon autostart for the session helper..."
 if ($LASTEXITCODE -ne 0) { Fail "screentime-session --autostart on failed (exit $LASTEXITCODE)." }
 
 # --- 6. Start the agent ------------------------------------------------------
-Start-Service -Name $ServiceName
+# A failed start is almost always visible in the service's own log first, so
+# route the user there instead of surfacing a bare terminating error.
+try {
+    Start-Service -Name $ServiceName -ErrorAction Stop
+} catch {
+    Fail @"
+Could not start the $ServiceName service: $($_.Exception.Message)
+Check the tail of C:\ProgramData\screentime\logs\ and the Windows event log
+(Application channel) for the service's own error.
+"@
+}
 
 # --- 7. Verification hints ---------------------------------------------------
 Write-Host ""
