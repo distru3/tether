@@ -198,13 +198,29 @@ fn remove_pin(credential: String) -> CmdResult<()> {
 fn set_limit(
     target: st_ipc::LimitTargetDto,
     default_minutes: u32,
+    weekday_minutes: Vec<Option<u32>>,
     enabled: bool,
     pin: String,
 ) -> CmdResult<String> {
+    // The wire format is a fixed Monday-first 7-slot array. The host stays
+    // dumb: exactly seven elements or the request is refused before any IPC
+    // traffic — no padding, no truncation.
+    let weekday_minutes: [Option<u32>; 7] = match weekday_minutes.try_into() {
+        Ok(array) => array,
+        Err(received) => {
+            return Err(CommandError {
+                code: "bad_request".into(),
+                message: format!(
+                    "weekday_minutes must be a 7-element array, got {}",
+                    received.len()
+                ),
+            });
+        }
+    };
     match ipc_client::request(st_ipc::Request::SetLimit {
         target,
         default_minutes,
-        weekday_minutes: [None; 7],
+        weekday_minutes,
         enabled,
         pin,
     }) {

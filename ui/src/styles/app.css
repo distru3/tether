@@ -2,8 +2,8 @@
    app.css — "The Daily Ledger"
    Sections: base · masthead · notices · hero · ledger rule ·
    sections & eyebrows · ledger rows · blocked banner ·
-   standing orders · buttons · forms · dialogs · toasts ·
-   motion & a11y
+   standing orders · buttons · forms · per-day overrides ·
+   dialogs · toasts · motion & a11y
    ============================================================ */
 
 /* ---------- base ---------- */
@@ -555,6 +555,14 @@ button {
     font-variant-numeric: tabular-nums;
 }
 
+.orow-varies {
+    font-family: var(--font-utility);
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    color: var(--ink-faint);
+    cursor: help;
+}
+
 .check-group {
     flex: none;
     display: inline-flex;
@@ -734,6 +742,91 @@ button {
 .pin-input::placeholder {
     color: var(--rule-strong);
     letter-spacing: 0.3em;
+}
+
+/* ---------- per-day overrides ---------- */
+
+.weekday-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 14px;
+    padding: 0;
+    border: none;
+    background: none;
+    font-family: var(--font-utility);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: color 120ms ease;
+}
+
+.weekday-toggle:hover:not(:disabled) {
+    color: var(--ink);
+}
+
+.weekday-toggle:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.weekday-chevron {
+    width: 10px;
+    text-align: center;
+}
+
+.weekday-count {
+    letter-spacing: 0.04em;
+    text-transform: none;
+    color: var(--ink-faint);
+}
+
+.weekday-grid {
+    margin-top: 4px;
+    border-bottom: 1px solid var(--rule);
+}
+
+.weekday-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 6px 0;
+}
+
+.weekday-row + .weekday-row {
+    border-top: 1px solid var(--rule);
+}
+
+.weekday-name {
+    flex: none;
+    width: 36px;
+    font-family: var(--font-utility);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+}
+
+.weekday-input {
+    flex: none;
+    width: 84px;
+    margin-left: auto;
+    padding: 3px 8px;
+    border: 1px solid var(--rule-strong);
+    border-radius: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--font-utility);
+    font-size: 13px;
+    font-variant-numeric: tabular-nums;
+}
+
+.weekday-input:disabled {
+    border-color: var(--rule);
+    background: transparent;
+    color: var(--ink-faint);
 }
 
 /* ---------- dialogs ---------- */

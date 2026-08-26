@@ -72,3 +72,16 @@ export function targetLabel(target: LimitTargetDto, catalog: CatalogDto | null):
             return catalog?.categories.find((c) => c.id === target.id)?.name ?? `Category #${target.id}`;
     }
 }
+
+/** Short labels for the Monday-first weekday slots used by limits. */
+export const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
+
+/** e.g. "Sat 120m · Sun 45m", or null when no day overrides its default. */
+export function describeWeekdayOverrides(weekdays: readonly (number | null)[]): string | null {
+    const parts: string[] = [];
+    for (let i = 0; i < WEEKDAY_SHORT.length && i < weekdays.length; i += 1) {
+        const minutes = weekdays[i];
+        if (minutes !== null && minutes !== undefined) parts.push(`${WEEKDAY_SHORT[i]} ${minutes}m`);
+    }
+    return parts.length > 0 ? parts.join(" · ") : null;
+}

@@ -10,6 +10,20 @@ export type { ErrorCode };
 
 export const OVERRIDE_SECONDS = 15 * 60;
 
+/**
+ * Monday-first per-day minute overrides, mirroring `LimitDto.weekday_minutes`:
+ * null on a day means "fall back to default_minutes that day".
+ */
+export type WeekdayMinutes = [
+    number | null,
+    number | null,
+    number | null,
+    number | null,
+    number | null,
+    number | null,
+    number | null,
+];
+
 export function getStatus(): Promise<StatusDto> {
     return invoke("get_status");
 }
@@ -44,10 +58,11 @@ export function removePin(credential: string): Promise<void> {
 export function setLimit(
     target: LimitTargetDto,
     defaultMinutes: number,
+    weekdayMinutes: WeekdayMinutes,
     enabled: boolean,
     pin: string,
 ): Promise<string> {
-    return invoke("set_limit", { target, defaultMinutes, enabled, pin });
+    return invoke("set_limit", { target, defaultMinutes, weekdayMinutes, enabled, pin });
 }
 
 export function deleteLimit(target: LimitTargetDto, pin: string): Promise<string> {

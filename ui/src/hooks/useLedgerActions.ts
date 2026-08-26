@@ -111,10 +111,10 @@ export function useLedgerActions(deps: Deps) {
     }, []);
 
     const submitEditor = useCallback(
-        (target: LimitTargetDto, minutes: number, enabled: boolean) => {
+        (target: LimitTargetDto, minutes: number, weekdayMinutes: api.WeekdayMinutes, enabled: boolean) => {
             if (busyRef.current) return;
             attempt(`Apply the order for ${targetLabel(target, depsRef.current.catalog)}`, async (pin) => {
-                const effective = await api.setLimit(target, minutes, enabled, pin);
+                const effective = await api.setLimit(target, minutes, weekdayMinutes, enabled, pin);
                 depsRef.current.notify("success", `Order recorded.${effectClause(effective)}`);
                 depsRef.current.invalidate();
                 closeEditor();
@@ -128,7 +128,15 @@ export function useLedgerActions(deps: Deps) {
             attempt(
                 `${next ? "Reinstate" : "Suspend"} the order for ${targetLabel(limit.target, depsRef.current.catalog)}`,
                 async (pin) => {
-                    const effective = await api.setLimit(limit.target, limit.default_minutes, next, pin);
+                    // Toggling is a re-issue of the same standing order: the
+                    // per-day overrides travel through untouched.
+                    const effective = await api.setLimit(
+                        limit.target,
+                        limit.default_minutes,
+                        limit.weekday_minutes,
+                        next,
+                        pin,
+                    );
                     depsRef.current.notify(
                         next ? "success" : "info",
                         `Order ${next ? "reinstated" : "suspended"}.${effectClause(effective)}`,

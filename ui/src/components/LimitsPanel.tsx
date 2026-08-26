@@ -1,7 +1,7 @@
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
-import { targetLabel } from "../format";
+import { describeWeekdayOverrides, targetLabel } from "../format";
 import { Section } from "./Section";
 
 interface LimitsPanelProps {
@@ -33,43 +33,54 @@ export function LimitsPanel({
                 <p className="panel-note">No standing orders yet.</p>
             ) : (
                 <ul>
-                    {limits.map((limit) => (
-                        <li key={limit.id} className="orow">
-                            <span className="orow-target">{targetLabel(limit.target, catalog)}</span>
-                            <span className="orow-amount">{limit.default_minutes}m / day</span>
-                            <span className="check-group">
-                                <input
-                                    type="checkbox"
-                                    id={`order-${limit.id}`}
-                                    className="check-input"
-                                    checked={limit.enabled}
-                                    disabled={busy}
-                                    onChange={(event) => onToggle(limit, event.target.checked)}
-                                />
-                                <label htmlFor={`order-${limit.id}`} className="check-label">
-                                    {limit.enabled ? "in force" : "suspended"}
-                                </label>
-                            </span>
-                            <span className="orow-actions">
-                                <button
-                                    type="button"
-                                    className="textbtn"
-                                    disabled={busy}
-                                    onClick={() => onEdit(limit.target, limit)}
-                                >
-                                    Edit
-                                </button>
-                                <button
-                                    type="button"
-                                    className="textbtn textbtn--red"
-                                    disabled={busy}
-                                    onClick={() => onRemove(limit.target)}
-                                >
-                                    Remove
-                                </button>
-                            </span>
-                        </li>
-                    ))}
+                    {limits.map((limit) => {
+                        const varies = describeWeekdayOverrides(limit.weekday_minutes);
+                        return (
+                            <li key={limit.id} className="orow">
+                                <span className="orow-target">{targetLabel(limit.target, catalog)}</span>
+                                <span className="orow-amount">
+                                    {limit.default_minutes}m / day
+                                    {varies !== null && (
+                                        <span className="orow-varies" title={`Per-day: ${varies}`}>
+                                            {" "}
+                                            · varies
+                                        </span>
+                                    )}
+                                </span>
+                                <span className="check-group">
+                                    <input
+                                        type="checkbox"
+                                        id={`order-${limit.id}`}
+                                        className="check-input"
+                                        checked={limit.enabled}
+                                        disabled={busy}
+                                        onChange={(event) => onToggle(limit, event.target.checked)}
+                                    />
+                                    <label htmlFor={`order-${limit.id}`} className="check-label">
+                                        {limit.enabled ? "in force" : "suspended"}
+                                    </label>
+                                </span>
+                                <span className="orow-actions">
+                                    <button
+                                        type="button"
+                                        className="textbtn"
+                                        disabled={busy}
+                                        onClick={() => onEdit(limit.target, limit)}
+                                    >
+                                        Edit
+                                    </button>
+                                    <button
+                                        type="button"
+                                        className="textbtn textbtn--red"
+                                        disabled={busy}
+                                        onClick={() => onRemove(limit.target)}
+                                    >
+                                        Remove
+                                    </button>
+                                </span>
+                            </li>
+                        );
+                    })}
                 </ul>
             )}
             <button type="button" className="add-order" disabled={busy} onClick={onNew}>
