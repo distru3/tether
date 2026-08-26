@@ -59,6 +59,7 @@
 //! [`cycle::MAX_OUTBOX_OBSERVATIONS`] so a permanently failing report path
 //! cannot grow memory without bound.
 
+mod autostart;
 mod backoff;
 mod cycle;
 mod link;
@@ -133,6 +134,18 @@ impl SessionState {
 }
 
 fn main() -> anyhow::Result<()> {
+    // Autostart CLI dispatch comes before EVERYTHING below — the
+    // single-instance guard included. Managing logon autostart must work
+    // while (or especially *because*) a helper is already running: `--autostart
+    // off` would otherwise be refused by the guard with "already running",
+    // and a registry query has no business creating log files either. With no
+    // arguments this branch does nothing at all, leaving the startup sequence
+    // byte-identical to before.
+    let cli_args: Vec<String> = std::env::args().skip(1).collect();
+    if let Some(exit_code) = autostart::handle_cli(&cli_args) {
+        std::process::exit(exit_code);
+    }
+
     // Single-instance guard BEFORE anything else (tracing included): a second
     // helper would sample the same desktop and double-count every observation,
     // while two overlays would fight over one keyboard hook and one desktop

@@ -1,0 +1,9 @@
+{
+    "$schema": "https://schema.tauri.app/config/2",
+    "bundle": {
+        "resources": {
+            "../../target/release/screentime-agent.exe": "bin/",
+            "../../target/release/screentime-session.exe": "bin/"
+        }
+    }
+}

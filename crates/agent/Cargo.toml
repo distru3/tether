@@ -29,6 +29,10 @@ st-enforce-win.workspace = true
 st-win32 = { path = "../st-win32" }
 # SetConsoleCtrlHandler for graceful Ctrl+C/service-stop handling.
 windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_Console"] }
+# Windows-service plumbing: SCM dispatcher (ServiceMain), STOP control
+# handling and status reporting. Hand-rolling StartServiceCtrlDispatcherW
+# marshalling is error-prone; this crate wraps exactly that surface.
+windows-service = "0.8"
 
 [target.'cfg(unix)'.dependencies]
 st-tracker-linux.workspace = true

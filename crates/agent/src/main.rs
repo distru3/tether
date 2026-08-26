@@ -1,7 +1,8 @@
 //! `screentime-agent` — the privileged component.
 //!
 //! Owns the database, the limits engine and all enforcement. Runs as a Windows
-//! Service or a systemd unit; during development it runs in the foreground.
+//! Service (`--service`, registered via `--install`) or in the foreground
+//! console mode; see [`cli`] for the full command surface.
 //!
 //! # Where usage comes from (M2 architecture)
 //!
@@ -19,11 +20,13 @@
 //! into the enforcer exactly as the old sampler did.
 
 mod classify;
+mod cli;
 mod enforcer;
 mod ipc_server;
 mod locks;
 mod platform;
 mod sampler;
+mod service;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -54,8 +57,10 @@ const CLOCK_TOLERANCE_SECS: i64 = 3;
 
 /// Exit status used exclusively for "another agent instance is already
 /// running". Distinct from generic failure (1) so supervisors and scripts can
-/// tell "port already taken by myself" apart from real startup errors.
-const EXIT_ALREADY_RUNNING: i32 = 2;
+/// tell "port already taken by myself" apart from real startup errors. The
+/// service wrapper forwards it as the Stopped exit code, keeping `sc query`
+/// diagnosable too.
+pub(crate) const EXIT_ALREADY_RUNNING: i32 = 2;
 
 /// Kernel name of the single-instance guard mutex.
 ///
@@ -73,15 +78,32 @@ const SINGLE_INSTANCE_MUTEX: &str = r"Global\screentime-agent";
 const MAX_LOG_FILES: usize = 14;
 
 fn main() -> Result<()> {
-    // Single-instance guard BEFORE anything else (tracing included): two
-    // agents would fight over \\.\pipe\screentime in ways that surface as
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    match cli::decide(&args) {
+        Ok(cli::Action::Console) => run_console(),
+        Ok(cli::Action::RunAsService) => service::run_as_service(),
+        Ok(cli::Action::Install) => service::install(),
+        Ok(cli::Action::Uninstall) => service::uninstall(),
+        Err(message) => {
+            eprintln!("{message}");
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Console mode: byte-for-byte the historical foreground daemon. The
+/// single-instance guard runs before anything else (tracing included) — see
+/// [`SINGLE_INSTANCE_MUTEX`] for why it must win every race.
+///
+/// The guard binding lives to the end of the function on purpose: dropping it
+/// would release the mutex mid-process and re-enable a second daemon.
+fn run_console() -> Result<()> {
+    // Two agents would fight over \\.\pipe\screentime in ways that surface as
     // silent weirdness, not errors. The subscriber does not exist yet at this
     // point, so the refusal is printed straight to stderr instead of logged.
-    // The binding lives to the end of `main` on purpose: dropping it would
-    // release the mutex mid-process and re-enable a second daemon.
     #[cfg(windows)]
-    let _single_instance = match st_win32::acquire_single_instance(SINGLE_INSTANCE_MUTEX) {
-        Ok(guard) => guard,
+    let _single_instance = match try_acquire_single_instance() {
+        Ok(guard) => Some(guard),
         Err(st_win32::AlreadyRunning) => {
             eprintln!(
                 "error: another screentime-agent is already running ({SINGLE_INSTANCE_MUTEX} held); exiting"
@@ -90,6 +112,29 @@ fn main() -> Result<()> {
         }
     };
 
+    run_daemon()
+}
+
+/// Non-dying single-instance acquisition for callers that must report failure
+/// through their own channel: [`run_console`] exits with
+/// [`EXIT_ALREADY_RUNNING`], while the service path reports Stopped carrying
+/// that code so `sc query` stays diagnosable.
+#[cfg(windows)]
+pub(crate) fn try_acquire_single_instance(
+) -> Result<st_win32::OwnedMutexHandle, st_win32::AlreadyRunning> {
+    st_win32::acquire_single_instance(SINGLE_INSTANCE_MUTEX)
+}
+
+/// THE startup-and-run path, shared by console mode and the Windows service
+/// ([`service`]): data dir, tracing, shutdown handlers, database, backends,
+/// IPC server and the 1 Hz loop. Both modes must stay byte-identical here —
+/// the service wrapper only wraps status reporting around this call.
+///
+/// Why the console ctrl handler is installed unconditionally: under a service
+/// there is no console to deliver events to, so the handler simply never
+/// fires — keeping ONE startup path beats splitting it per launch mode. The
+/// service's own stop control flips the same [`request_shutdown`] flag.
+fn run_daemon() -> Result<()> {
     let data_dir = data_dir()?;
     std::fs::create_dir_all(&data_dir)
         .with_context(|| format!("creating data directory {}", data_dir.display()))?;
@@ -408,10 +453,22 @@ fn persist_pending(
 // mid-interval and the last stretch of usage was simply lost (`Sampler::flush`
 // existed but was unreachable dead code).
 //
-// The handler itself must be async-signal-safe: it touches only an atomic.
+// The handlers themselves must be async-signal-safe: they touch only an
+// atomic. Both stop families — console ctrl events / Unix signals AND the
+// Windows service STOP control — funnel through [`request_shutdown`] so there
+// is exactly ONE flag and one graceful tail for every launch mode.
 // ---------------------------------------------------------------------------
 
 static SHUTDOWN: AtomicBool = AtomicBool::new(false);
+
+/// Ask the main loop to exit gracefully at its next tick.
+///
+/// Called from the console ctrl handler, the Unix signal handlers and the
+/// service control handler; async-signal-safe by construction (one atomic
+/// store).
+pub(crate) fn request_shutdown() {
+    SHUTDOWN.store(true, Ordering::Relaxed);
+}
 
 fn shutdown_requested() -> bool {
     SHUTDOWN.load(Ordering::Relaxed)
@@ -429,7 +486,7 @@ fn install_shutdown_handler() {
         match ctrl_type {
             CTRL_C_EVENT | CTRL_BREAK_EVENT | CTRL_CLOSE_EVENT | CTRL_LOGOFF_EVENT
             | CTRL_SHUTDOWN_EVENT => {
-                SHUTDOWN.store(true, Ordering::Relaxed);
+                request_shutdown();
                 BOOL(1)
             }
             _ => BOOL(0),
@@ -448,7 +505,7 @@ fn install_shutdown_handler() {
     use nix::sys::signal::{signal, SigHandler, Signal};
 
     unsafe extern "C" fn on_signal(_sig: i32) {
-        SHUTDOWN.store(true, Ordering::Relaxed);
+        request_shutdown();
     }
 
     for sig in [Signal::SIGINT, Signal::SIGTERM] {

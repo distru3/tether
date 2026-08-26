@@ -78,6 +78,22 @@ needed):
     npm install
     npm run tauri dev
 
+## Installing (service + autostart)
+
+For daily use, run the agent as a Windows service and start the session
+helper at logon:
+
+    # Elevated prompt:
+    packaging\install.ps1                    # end-to-end: build, service, autostart
+
+    # Or step by step:
+    target\release\screentime-agent.exe --install     # registers + starts via sc.exe
+    target\debug\screentime-session.exe --autostart on  # HKCU Run key, no elevation
+
+`--uninstall` / `--autostart off` reverse each. Logs live in
+`C:\ProgramData\screentime\logs\` (agent) and `%LOCALAPPDATA%\screentime\logs`
+(session). See `packaging/README.md` for the bundled-installer story.
+
 ## Milestones
 
 | M   | Scope                                                                  |

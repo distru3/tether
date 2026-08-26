@@ -6,11 +6,24 @@
 //! # Security posture
 //!
 //! The transport is local only. Never bind a TCP socket. On Windows the server
-//! side lives in the agent (a privileged service in production), so the pipe is
-//! created by the agent and the default DACL inherits from it; a hostile
-//! caller cannot open a pipe that was never created. Real peer authentication
-//! (pipe ACLs on Windows, `SO_PEERCRED` on Linux) is layered in when the agent
-//! runs at a raised privilege; during M1 both processes run as the same user.
+//! side lives in the agent, which in production runs as LocalSystem from a
+//! Windows service. That is exactly why the pipe is created with an EXPLICIT
+//! security descriptor ([`win::CLIENT_PIPE_SDDL`]): the default descriptor of a
+//! LocalSystem process can deny connect rights to ordinary user processes,
+//! leaving every session-helper and dashboard connection rejected before any
+//! protocol byte moves — a silent-deafness failure that looks identical to
+//! "agent not running" from the outside. The SDDL grants SYSTEM and
+//! Administrators full access plus generic read/write to Authenticated Users:
+//! sufficient for unprivileged clients to connect and exchange frames, still
+//! restricted to local logons because named pipes of this form are
+//! machine-local and never reachable over the network.
+//!
+//! Why AU read/write is an acceptable grant here: the pipe namespace is
+//! per-machine, so remote attackers are not in scope; frames are
+//! length-prefixed JSON parsed by the IPC layer, not executed; and the
+//! protocol itself gates every mutation behind the PIN (see the auth request in
+//! [`crate`]) — read/write socket access buys an attacker only what an
+//! unprivileged local user already has.
 //!
 //! The one-request-per-connection model is deliberate: the agent is
 //! authoritative and the UI is a thin client, so each UI command opens a
@@ -97,11 +110,17 @@ mod win {
     use super::{Result, TransportError};
     use std::io::{self, Read, Write};
     use windows::core::{Error as WinError, PCWSTR};
+    // HLOCAL/LocalFree: the SDDL converter allocates its descriptor with
+    // LocalAlloc, so the documented counterpart free lives in Foundation too.
     use windows::Win32::Foundation::{
-        CloseHandle, ERROR_BROKEN_PIPE, ERROR_FILE_NOT_FOUND, ERROR_NO_DATA, ERROR_PIPE_BUSY,
-        ERROR_PIPE_CONNECTED, ERROR_PIPE_NOT_CONNECTED, GENERIC_READ, GENERIC_WRITE, HANDLE,
-        INVALID_HANDLE_VALUE,
+        CloseHandle, LocalFree, ERROR_BROKEN_PIPE, ERROR_FILE_NOT_FOUND, ERROR_NO_DATA,
+        ERROR_PIPE_BUSY, ERROR_PIPE_CONNECTED, ERROR_PIPE_NOT_CONNECTED, GENERIC_READ,
+        GENERIC_WRITE, HANDLE, HLOCAL, INVALID_HANDLE_VALUE,
     };
+    use windows::Win32::Security::Authorization::{
+        ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    };
+    use windows::Win32::Security::{PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES};
     use windows::Win32::Storage::FileSystem::{
         CreateFileW, ReadFile, WriteFile, FILE_FLAGS_AND_ATTRIBUTES, FILE_SHARE_READ,
         FILE_SHARE_WRITE, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
@@ -110,6 +129,24 @@ mod win {
         ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_BYTE,
         PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
     };
+
+    /// SDDL for the server side of `\\.\pipe\screentime`.
+    ///
+    /// `D:P` starts a PROTECTED DACL: the inherited ACEs of whatever process
+    /// created the pipe are discarded, so the descriptor below is the whole
+    /// truth regardless of who runs the agent (a service's inherited ACL would
+    /// otherwise lock normal users out entirely — see the module docs).
+    ///
+    /// * `(A;;FA;;;SY)` / `(A;;FA;;;BA)` — SYSTEM and Administrators: full
+    ///   control. The privileged agent must always be able to manage its own
+    ///   pipe even if a future hardening pass tightens user rights.
+    /// * `(A;;GRGW;;;AU)` — Authenticated Users: generic read + write. This is
+    ///   precisely "may open the pipe and exchange framed JSON"; it does not
+    ///   include WRITE_DAC (cannot re-grant rights) or any of the service/pipe
+    ///   management bits. Every mutating request still has to clear the
+    ///   protocol-level PIN check, so this grant buys an unprivileged local
+    ///   client nothing it could not do through the intended UI.
+    pub(super) const CLIENT_PIPE_SDDL: &str = "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGW;;;AU)";
 
     /// Full NT path for a pipe name.
     fn pipe_path(name: &str) -> String {
@@ -125,13 +162,75 @@ mod win {
         (buf, ptr)
     }
 
+    /// Build the SECURITY_ATTRIBUTES handed to `CreateNamedPipeW`, converting
+    /// [`CLIENT_PIPE_SDDL`] into a real security descriptor.
+    ///
+    /// WHY per-call instead of cached in a static: the descriptor only has to
+    /// outlive the kernel's snapshot during pipe creation, and building it is
+    /// one `LocalAlloc` — negligible next to accepting a connection. That keeps
+    /// ownership trivial (free right after `CreateNamedPipeW`) instead of
+    /// inventing a process-lifetime holder with unsafe `Send`/`Sync`.
+    ///
+    /// Non-inheritable on purpose: the pipe handle must not leak into child
+    /// processes of the agent; clients always open the pipe by name.
+    pub(super) fn client_pipe_security_attributes() -> Result<SECURITY_ATTRIBUTES> {
+        // SDDL input must be UTF-16 for the W variant; keep the buffer alive
+        // until after the conversion call below.
+        let (_keep_alive, sddl) = wide(CLIENT_PIPE_SDDL);
+
+        let mut descriptor = PSECURITY_DESCRIPTOR(std::ptr::null_mut());
+        unsafe {
+            ConvertStringSecurityDescriptorToSecurityDescriptorW(
+                sddl,
+                SDDL_REVISION_1,
+                &mut descriptor,
+                None,
+            )
+        }
+        .map_err(|e| TransportError::Io(io::Error::new(io::ErrorKind::PermissionDenied, e)))?;
+
+        // The API documents a NULL descriptor as impossible when it reports
+        // success, but a null pointer passed into CreateNamedPipeW would
+        // silently fall back to the DEFAULT security descriptor — exactly the
+        // deafness this code exists to prevent. Fail loudly instead.
+        if descriptor.0.is_null() {
+            return Err(TransportError::Io(io::Error::other(
+                "SDDL conversion succeeded but produced a null security descriptor",
+            )));
+        }
+
+        Ok(SECURITY_ATTRIBUTES {
+            nLength: std::mem::size_of::<SECURITY_ATTRIBUTES>() as u32,
+            lpSecurityDescriptor: descriptor.0,
+            bInheritHandle: false.into(),
+        })
+    }
+
+    /// Release a security descriptor allocated by the SDDL conversion above.
+    /// The converter allocates with `LocalAlloc`, so `LocalFree` is the
+    /// documented counterpart; errors are ignored because a failed free leaks
+    /// one block at worst and there is no meaningful recovery.
+    fn free_security_descriptor(sa: &SECURITY_ATTRIBUTES) {
+        if !sa.lpSecurityDescriptor.is_null() {
+            unsafe {
+                LocalFree(HLOCAL(sa.lpSecurityDescriptor));
+            }
+        }
+    }
+
     /// Create one server-side instance of the pipe and wait for a client.
     ///
     /// Byte mode, not message mode: the IPC framing already length-prefixes, so
     /// relying on the OS to frame messages would be duplicating the job.
+    ///
+    /// The pipe carries an explicit protected DACL (see [`CLIENT_PIPE_SDDL`])
+    /// because the agent runs as LocalSystem in production, where the DEFAULT
+    /// descriptor can reject connects from unprivileged session helpers —
+    /// surfacing only as a deaf pipe with no error on either side.
     pub(super) fn accept(name: &str) -> Result<PipeStream> {
         let (_keep_alive, path) = wide(&pipe_path(name));
         let access = PIPE_ACCESS_DUPLEX as FILE_FLAGS_AND_ATTRIBUTES;
+        let sa = client_pipe_security_attributes()?;
         let handle = unsafe {
             CreateNamedPipeW(
                 path,
@@ -141,9 +240,13 @@ mod win {
                 16 * 1024,
                 16 * 1024,
                 0,
-                None,
+                Some(&sa),
             )
         };
+        // The kernel snapshots the descriptor while creating the pipe instance,
+        // so our copy is dead weight the moment CreateNamedPipeW returns —
+        // success or failure alike.
+        free_security_descriptor(&sa);
         if handle == INVALID_HANDLE_VALUE {
             return Err(TransportError::Io(io::Error::last_os_error()));
         }
@@ -287,8 +390,71 @@ mod win {
 
 #[cfg(all(test, windows))]
 mod tests {
+    use super::win::{client_pipe_security_attributes, CLIENT_PIPE_SDDL};
     use super::*;
     use std::io::{Read, Write};
+    // HLOCAL/LocalFree: the SDDL converter allocates its descriptor with
+    // LocalAlloc, so the documented counterpart free lives in Foundation too.
+    use windows::Win32::Foundation::{LocalFree, BOOL, HLOCAL};
+    use windows::Win32::Security::{
+        IsValidSecurityDescriptor, PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES,
+    };
+
+    /// The SDDL is the security contract for the whole IPC surface; assert its
+    /// ACE layout so an accidental edit (dropping the protected flag, granting
+    /// AU more than read/write) fails loudly here instead of silently widening
+    /// production access.
+    #[test]
+    fn pipe_sddl_is_protected_dacl_with_system_admin_full_and_users_read_write() {
+        assert_eq!(
+            CLIENT_PIPE_SDDL,
+            "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;GRGW;;;AU)"
+        );
+        assert!(
+            CLIENT_PIPE_SDDL.starts_with("D:P"),
+            "DACL must be protected"
+        );
+        assert!(
+            CLIENT_PIPE_SDDL.contains("(A;;FA;;;SY)"),
+            "SYSTEM needs full control"
+        );
+        assert!(
+            CLIENT_PIPE_SDDL.contains("(A;;FA;;;BA)"),
+            "Administrators need full control"
+        );
+        assert!(
+            CLIENT_PIPE_SDDL.contains("(A;;GRGW;;;AU)"),
+            "Authenticated Users get connect-level access only"
+        );
+        // Exactly one AU grant: no second, looser user ACE hiding at the end.
+        assert_eq!(CLIENT_PIPE_SDDL.matches(";;;AU)").count(), 1);
+    }
+
+    /// The SA must convert from SDDL into a well-formed, non-null descriptor —
+    /// a null descriptor passed to CreateNamedPipeW would silently revert to
+    /// the DEFAULT security descriptor and reintroduce the LocalSystem
+    /// deafness this module guards against. Pure builder check; no pipe needed.
+    #[test]
+    fn client_security_attributes_build_from_sddl_with_valid_non_null_descriptor() {
+        let sa = client_pipe_security_attributes().expect("SECURITY_ATTRIBUTES from SDDL");
+        assert!(!sa.lpSecurityDescriptor.is_null());
+        assert_eq!(
+            sa.nLength as usize,
+            std::mem::size_of::<SECURITY_ATTRIBUTES>()
+        );
+        assert_eq!(sa.bInheritHandle, BOOL(0), "handle must not be inheritable");
+
+        // Ask Windows itself whether the converted descriptor parses as valid;
+        // this catches malformed SDDL that conversion happened to accept.
+        unsafe {
+            assert_ne!(
+                IsValidSecurityDescriptor(PSECURITY_DESCRIPTOR(sa.lpSecurityDescriptor)),
+                BOOL(0),
+                "converted security descriptor must be valid"
+            );
+            LocalFree(HLOCAL(sa.lpSecurityDescriptor));
+        }
+    }
 
     /// Spin up a server thread, connect from the main thread, and confirm a
     /// request round-trips over a real named pipe.
