@@ -112,7 +112,7 @@ fn run_console() -> Result<()> {
         }
     };
 
-    run_daemon()
+    run_daemon("console")
 }
 
 /// Non-dying single-instance acquisition for callers that must report failure
@@ -134,7 +134,7 @@ pub(crate) fn try_acquire_single_instance(
 /// there is no console to deliver events to, so the handler simply never
 /// fires — keeping ONE startup path beats splitting it per launch mode. The
 /// service's own stop control flips the same [`request_shutdown`] flag.
-fn run_daemon() -> Result<()> {
+fn run_daemon(mode_label: &'static str) -> Result<()> {
     let data_dir = data_dir()?;
     std::fs::create_dir_all(&data_dir)
         .with_context(|| format!("creating data directory {}", data_dir.display()))?;
@@ -143,6 +143,7 @@ fn run_daemon() -> Result<()> {
     // see init_tracing for why letting it die early silently kills file logs.
     let _log_guard = init_tracing(&agent_log_dir(&data_dir));
     install_shutdown_handler();
+    tracing::info!(mode = mode_label, "agent entrypoint reached");
 
     let db_path = data_dir.join("screentime.db");
     let db =

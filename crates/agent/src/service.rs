@@ -188,7 +188,9 @@ mod win {
             }
         };
 
-        let outcome = run_daemon();
+        // The daemon owns tracing init, so the boot marker lands inside it
+        // (mode = "service"); anything logged before that init is lost.
+        let outcome = run_daemon("service");
 
         // Announce the stop window, then land the final state the way
         // `sc query` and event viewers expect: Win32(0) for a clean stop,
