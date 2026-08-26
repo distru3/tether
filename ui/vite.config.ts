@@ -16,9 +16,4 @@ export default defineConfig({
         outDir: "dist",
         emptyOutDir: true,
     },
-    // The snap-layout plugin ships its own JS guest that must not be bundled
-    // into the app chunk — it talks to the Rust side via a dedicated channel.
-    optimizeDeps: {
-        exclude: ["tauri-plugin-snap-layout"],
-    },
 });

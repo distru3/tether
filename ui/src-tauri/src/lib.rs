@@ -23,23 +23,22 @@ mod corners {
     use std::mem::size_of;
     use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Dwm::{
-        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND, DWMWCP_ROUND,
+        DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE, DWMWCP_DONOTROUND,
     };
 
-    pub(crate) const ROUND: i32 = DWMWCP_ROUND.0;
-    pub(crate) const DONOTROUND: i32 = DWMWCP_DONOTROUND.0;
+    pub(crate) const SQUARE: i32 = DWMWCP_DONOTROUND.0;
 
-    pub(crate) fn set_corner_preference(hwnd: HWND, pref: i32) {
+    pub(crate) fn set_square_corners(hwnd: HWND) {
         let result = unsafe {
             DwmSetWindowAttribute(
                 hwnd,
                 DWMWA_WINDOW_CORNER_PREFERENCE,
-                &pref as *const i32 as *const _,
+                &SQUARE as *const i32 as *const _,
                 size_of::<i32>() as u32,
             )
         };
         if let Err(e) = result {
-            tracing::debug!("DwmSetWindowAttribute({pref}) failed: {e}");
+            tracing::debug!("DwmSetWindowAttribute(SQUARE) failed: {e}");
         }
     }
 }
@@ -291,7 +290,6 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
-        .plugin(tauri_plugin_snap_layout::init().build())
         .invoke_handler(tauri::generate_handler![
             get_status,
             get_day_summary,
@@ -309,22 +307,7 @@ pub fn run() {
                 use tauri::Manager;
                 if let Some(window) = app.get_webview_window("main") {
                     let hwnd = window.hwnd().expect("main window HWND");
-                    corners::set_corner_preference(hwnd, corners::ROUND);
-                    let hwnd_raw = hwnd.0 as isize;
-                    let window_clone = window.clone();
-                    window.on_window_event(move |event| match event {
-                        tauri::WindowEvent::Resized(_)
-                        | tauri::WindowEvent::ScaleFactorChanged { .. } => {
-                            let h = windows::Win32::Foundation::HWND(hwnd_raw as *mut _);
-                            let pref = if window_clone.is_maximized().unwrap_or(false) {
-                                corners::DONOTROUND
-                            } else {
-                                corners::ROUND
-                            };
-                            corners::set_corner_preference(h, pref);
-                        }
-                        _ => {}
-                    });
+                    corners::set_square_corners(hwnd);
                 }
             }
             Ok(())

@@ -58,10 +58,6 @@ button {
     border: 1px solid var(--rule);
 }
 
-.maximized-inset {
-    padding: 8px;
-}
-
 ::-webkit-scrollbar {
     width: 10px;
     background: transparent;

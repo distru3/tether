@@ -13,8 +13,7 @@
   "dependencies": {
     "@tauri-apps/api": "^2.1.1",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "tauri-plugin-snap-layout": "^1.0.9"
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.1.0",

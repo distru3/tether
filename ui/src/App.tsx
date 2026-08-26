@@ -12,7 +12,6 @@ import { useDashboard } from "./hooks/useDashboard";
 import { useLedgerActions } from "./hooks/useLedgerActions";
 import { useNowMinute } from "./hooks/useNowMinute";
 import { useToasts } from "./hooks/useToasts";
-import { useWindowChrome } from "./hooks/useWindowChrome";
 import type { LimitDto } from "./types/generated/LimitDto";
 
 export function App() {
@@ -25,7 +24,6 @@ export function App() {
         notify: push,
         invalidate: refreshCatalog,
     });
-    const { isMaximized } = useWindowChrome();
 
     const loading = phase === "connecting" && summary === null;
     const total = summary?.total_seconds ?? 0;
@@ -38,7 +36,7 @@ export function App() {
     }
 
     return (
-        <main className={`sheet${isMaximized ? " maximized-inset" : ""}`}>
+        <main className="sheet">
             <Toasts toasts={toasts} dismiss={dismiss} />
             <Masthead phase={phase} now={now} />
             <div className="rule-double" />
