@@ -61,7 +61,6 @@ jobs:
                   node-version: "20"
                   cache: npm
                   cache-dependency-path: ui/package-lock.json
-            # `npm ci` requires a lockfile. Use `install` on the first run to
-            # generate one; switch to `ci` once `ui/package-lock.json` lands.
-            - run: npm install
+            # Lockfile is committed; `npm ci` keeps installs reproducible.
+            - run: npm ci
             - run: npm run build
