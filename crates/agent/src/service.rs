@@ -253,6 +253,11 @@ mod win {
         let exe = current_exe_for_sc()?;
         let created = run_sc(&cli::install_create_command(&exe))?;
         require_sc_success(&created)?;
+        // sc.exe cannot carry "--service" inside binPath (single-token option
+        // values), so the canonical ImagePath is written straight to the SCM
+        // database afterwards; see cli::install_imagepath_command.
+        let imagepath = run_sc(&cli::install_imagepath_command(&exe))?;
+        require_sc_success(&imagepath)?;
         let described = run_sc(&cli::install_description_command())?;
         require_sc_success(&described)?;
         println!(

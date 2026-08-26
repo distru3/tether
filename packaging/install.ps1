@@ -125,12 +125,21 @@ if ($existing) {
         Stop-Service -Name $ServiceName
         $existing.WaitForStatus("Stopped", "00:00:15")
     }
-    & sc.exe config $ServiceName 'type=' own 'start=' auto 'binPath=' $shortExe '--service'
+    & sc.exe config $ServiceName 'type=' own 'start=' auto
 } else {
     Write-Host "Creating service $ServiceName..."
-    & sc.exe create $ServiceName 'type=' own 'start=' auto 'binPath=' $shortExe '--service' 'DisplayName=' 'Screentime Agent'
+    & sc.exe create $ServiceName 'type=' own 'start=' auto 'binPath=' $shortExe 'DisplayName=' 'Screentime Agent'
 }
 if ($LASTEXITCODE -ne 0) { Fail "sc.exe failed to configure $ServiceName (exit $LASTEXITCODE)." }
+
+# sc.exe option values are SINGLE tokens: passing "path --service" makes sc
+# treat --service as an unknown option (exit 1639). The canonical ImagePath —
+# short path plus the --service flag — is therefore written straight into the
+# SCM database, byte-exact, where no command-line parser can touch it.
+$imagePath = "$shortExe --service"
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\$ServiceName" `
+    -Name ImagePath -Value $imagePath -Type ExpandString
+Write-Host "ImagePath set to: $imagePath"
 
 & sc.exe failure $ServiceName reset= 86400 actions= restart/60000/restart/60000/restart/60000
 if ($LASTEXITCODE -ne 0) { Fail "sc.exe failure-actions setup failed (exit $LASTEXITCODE)." }

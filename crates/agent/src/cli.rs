@@ -76,19 +76,31 @@ pub(crate) fn usage_text() -> String {
 
 /// The `sc.exe create` line `--install` runs.
 ///
-/// `sc.exe` parses options with the value AFTER the space following `=`, which
-/// is why the odd `binPath= <exe>` spacing is load-bearing.
+/// `sc.exe` parses options with the value AFTER the space following `=`, and
+/// each option value is a SINGLE token — a binPath of `<path> --service`
+/// makes sc treat the flag as an unknown option (usage dump, exit 1639). So
+/// creation registers the bare short path; [`install_imagepath_command`]
+/// then writes the canonical ImagePath (path + flag) directly into the SCM
+/// database.
 ///
 /// `exe_path` MUST already be the 8.3 short form (see
-/// `st_win32::short_path`). History, twice over: a quoted long path first
-/// made SCM launches fall into console mode when the `--service` flag was
-/// missing entirely, and once the flag was added every quoting layer above sc
-/// (PowerShell native-arg passing, then `cmd /C` multi-quote stripping)
-/// mangled the string anyway. A space-free path needs no quotes anywhere, so
-/// the registration line is byte-stable through every invoker.
+/// `st_win32::short_path`): a space-free path needs no quotes, which keeps
+/// this line byte-stable through every invoker (Rust argv escaping,
+/// PowerShell native-arg passing, cmd multi-quote stripping — each has
+/// mangled it in the field).
 pub(crate) fn install_create_command(exe_path: &std::path::Path) -> String {
     format!(
-        r#"sc.exe create {SERVICE_NAME} binPath= {} --service start= auto displayName= "{SERVICE_DISPLAY_NAME}""#,
+        r#"sc.exe create {SERVICE_NAME} binPath= {} start= auto displayName= "{SERVICE_DISPLAY_NAME}""#,
+        exe_path.display()
+    )
+}
+
+/// The `reg add` line that writes the real ImagePath: short path plus
+/// `--service`, quoted as one value. Exactly two quote characters, so even
+/// the cmd layer preserves them verbatim.
+pub(crate) fn install_imagepath_command(exe_path: &std::path::Path) -> String {
+    format!(
+        r#"reg add HKLM\SYSTEM\CurrentControlSet\Services\{SERVICE_NAME} /v ImagePath /t REG_EXPAND_SZ /d "{} --service" /f"#,
         exe_path.display()
     )
 }
@@ -155,15 +167,26 @@ mod tests {
     }
 
     #[test]
-    fn create_command_uses_a_bare_short_path_and_carries_the_service_flag() {
+    fn create_command_uses_a_bare_short_path_without_the_flag() {
         let cmd = install_create_command(std::path::Path::new(
             r"C:\PROGRA~1\SCREEN~1\screentime-agent.exe",
         ));
-        // Pinned exactly: no quotes anywhere around the path (short form, so
-        // none are needed), flag outside any quoting by construction.
+        // Pinned exactly: bare short path, no --service (sc would reject it as
+        // an unknown option); the flag lands via the ImagePath registry write.
         assert_eq!(
             cmd,
-            r#"sc.exe create ScreentimeAgent binPath= C:\PROGRA~1\SCREEN~1\screentime-agent.exe --service start= auto displayName= "Screentime Agent""#
+            r#"sc.exe create ScreentimeAgent binPath= C:\PROGRA~1\SCREEN~1\screentime-agent.exe start= auto displayName= "Screentime Agent""#
+        );
+    }
+
+    #[test]
+    fn imagepath_command_quotes_path_and_flag_as_one_registry_value() {
+        let cmd = install_imagepath_command(std::path::Path::new(
+            r"C:\PROGRA~1\SCREEN~1\screentime-agent.exe",
+        ));
+        assert_eq!(
+            cmd,
+            r#"reg add HKLM\SYSTEM\CurrentControlSet\Services\ScreentimeAgent /v ImagePath /t REG_EXPAND_SZ /d "C:\PROGRA~1\SCREEN~1\screentime-agent.exe --service" /f"#
         );
     }
 

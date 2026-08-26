@@ -51,14 +51,17 @@ launch falls into console mode (a daemon that never talks to the service
 controller) and every start times out with System-log event 7009:
 
 ```powershell
-# binPath uses the 8.3 SHORT form (no spaces -> no quoting layers to lose the
-# path through). Resolve it for your install dir like this:
+# sc.exe option values are single tokens: "--service" cannot ride inside
+# binPath (rejected as an unknown option). Create with the bare 8.3 short
+# path, then write the canonical ImagePath straight into the SCM database:
 $fso = New-Object -ComObject Scripting.FileSystemObject
 $short = $fso.GetFile('C:\Program Files\Screentime\screentime-agent.exe').ShortPath
 
 sc.exe create ScreentimeAgent type= own start= auto `
-    binPath= "$short --service" `
+    binPath= $short `
     DisplayName= "Screentime Agent"
+Set-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\ScreentimeAgent `
+    -Name ImagePath -Value "$short --service" -Type ExpandString
 sc.exe failure ScreentimeAgent reset= 86400 actions= restart/60000/restart/60000/restart/60000
 sc.exe start ScreentimeAgent
 ```
