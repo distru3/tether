@@ -15,6 +15,9 @@ st-ipc.workspace = true
 anyhow.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
+# Daily-rolling file logs: the helper is usually started detached from any
+# console, so stdout diagnostics would otherwise be lost entirely.
+tracing-appender = "0.2"
 # RFC 3339 stamps for `ObservationDto.observed_at_utc`. Zero-cost addition:
 # chrono is already in the dependency tree via st-core/st-storage/st-ipc, so
 # this pulls in no new code.

@@ -80,14 +80,28 @@ mod overlay {
     }
 }
 
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use st_core::model::AppKey;
 use st_ipc::{transport, ObservationDto, ReportUsageDto, Request, Response, PIPE_NAME};
+use tracing_appender::non_blocking::WorkerGuard;
+// SubscriberExt/Layer for stacking the two-layer registry in init_tracing.
+use tracing_subscriber::prelude::*;
 
 /// Cycle cadence. Matches the ~1 Hz the sampling contract promises.
 const POLL: Duration = Duration::from_millis(1000);
+
+/// Exit status used exclusively for "another session helper is already
+/// running". Distinct from generic failure so launchers and scripts can
+/// recognise the duplicate-startup case without parsing stderr.
+const EXIT_ALREADY_RUNNING: i32 = 2;
+
+/// How many daily log files to keep before the oldest is deleted; see the
+/// agent's identically named constant for why this is bounded at all.
+const MAX_LOG_FILES: usize = 14;
 
 /// First reconnect delay; doubled per consecutive failure up to [`CONNECT_CAP`].
 const CONNECT_BASE: Duration = Duration::from_millis(250);
@@ -119,12 +133,31 @@ impl SessionState {
 }
 
 fn main() -> anyhow::Result<()> {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info")),
-        )
-        .init();
+    // Single-instance guard BEFORE anything else (tracing included): a second
+    // helper would sample the same desktop and double-count every observation,
+    // while two overlays would fight over one keyboard hook and one desktop
+    // rectangle. The subscriber does not exist yet, so the refusal goes
+    // straight to stderr with the *why* spelled out for whoever launched it.
+    // The binding lives to the end of `main`: dropping it releases the mutex.
+    #[cfg(windows)]
+    let _single_instance = {
+        let mutex_name = single_instance_mutex_name();
+        match st_win32::acquire_single_instance(&mutex_name) {
+            Ok(guard) => guard,
+            Err(st_win32::AlreadyRunning) => {
+                eprintln!(
+                    "error: a screentime-session helper is already running in this login \
+                     session ({mutex_name} held); starting another would double-count usage \
+                     and stack two block overlays. Exiting."
+                );
+                std::process::exit(EXIT_ALREADY_RUNNING);
+            }
+        }
+    };
+
+    // Hold the returned WorkerGuard for the whole process (bound in `main`);
+    // see init_tracing for why letting it die early silently kills file logs.
+    let _log_guard = init_tracing(&session_log_dir());
 
     tracing::info!("screentime-session running (sampling front)");
 
@@ -486,4 +519,242 @@ fn request_agent(request: Request) -> anyhow::Result<Response> {
     let mut stream = transport::client_connect(PIPE_NAME)?;
     let response = link::round_trip(&mut stream, &request)?;
     Ok(response)
+}
+
+// ---------------------------------------------------------------------------
+// Startup plumbing: single-instance naming + two-layer logging.
+//
+// Mirrors the agent's setup on purpose: same EnvFilter semantics, same
+// daily-rolling shape, same WorkerGuard lifetime rule. The two binaries stay
+// deliberately independent (each owns its wiring), which is why this is a
+// small copy rather than shared code — st-win32 is Win32 plumbing, not a
+// logging facade.
+// ---------------------------------------------------------------------------
+
+/// Kernel mutex name for the helper's single-instance guard.
+///
+/// `Local\` on purpose — the opposite choice from the agent: the helper is
+/// one per LOGIN SESSION, because every desktop must sample its own
+/// foreground window, so the guard must NOT span sessions. The username is
+/// appended for fast user switching clarity; when it cannot be resolved the
+/// bare name still guarantees one-helper-per-session, the invariant that
+/// actually matters.
+fn single_instance_mutex_name() -> String {
+    single_instance_mutex_name_for(std::env::var("USERNAME").ok().as_deref())
+}
+
+/// Pure decision core of [`single_instance_mutex_name`].
+fn single_instance_mutex_name_for(username: Option<&str>) -> String {
+    match username {
+        Some(user) if !user.is_empty() => format!(r"Local\screentime-session-{user}"),
+        _ => r"Local\screentime-session".to_string(),
+    }
+}
+
+/// Resolves the helper's log directory from the environment.
+///
+/// Rules, in priority order:
+/// 1. `SCREENTIME_DATA_DIR` set → `<dir>/logs`. Dev parity: a developer
+///    pointing the agent at a scratch tree gets the helper's logs in the same
+///    place instead of scattered across user profiles.
+/// 2. Otherwise `%LOCALAPPDATA%` → `<LOCALAPPDATA>/screentime/logs`. The
+///    per-user location is correct in production because the helper runs
+///    unprivileged inside a login session; ProgramData would invite
+///    cross-user write contention.
+/// 3. No usable `LOCALAPPDATA` (stripped-down contexts) → `./screentime-logs`
+///    beside the working directory: last resort, still discoverable.
+///
+/// Resolution never fails outright — an unusable *directory* is handled by
+/// init_tracing's console-only fallback instead of refusing to start.
+fn session_log_dir() -> PathBuf {
+    resolve_log_dir(
+        std::env::var("SCREENTIME_DATA_DIR").ok().as_deref(),
+        std::env::var("LOCALAPPDATA").ok().as_deref(),
+    )
+}
+
+/// Pure decision core of [`session_log_dir`], parameterised so tests exercise
+/// the rules without touching process-global environment state. Blank values
+/// count as unset: an empty override silently resolving to a relative `logs`
+/// folder would scatter files unpredictably.
+fn resolve_log_dir(data_dir_env: Option<&str>, local_appdata_env: Option<&str>) -> PathBuf {
+    let data_dir = data_dir_env.filter(|v| !v.is_empty());
+    let local = local_appdata_env.filter(|v| !v.is_empty());
+    match data_dir {
+        Some(dir) => PathBuf::from(dir).join("logs"),
+        None => match local {
+            Some(base) => PathBuf::from(base).join("screentime").join("logs"),
+            None => PathBuf::from("screentime-logs"),
+        },
+    }
+}
+
+/// Installs the session helper's tracing stack: one filter, two destinations.
+///
+/// Console output serves interactive development; a daily-rolling file serves
+/// incidents — the helper is typically started detached from any console, so
+/// stdout diagnostics would otherwise vanish entirely. Both layers share ONE
+/// `RUST_LOG`-derived filter placed atop the registry stack so the file sees
+/// exactly what the console would.
+///
+/// # The classic tracing-appender trap (why this returns a guard)
+///
+/// `non_blocking` hands back a [`WorkerGuard`] owning the background writer
+/// thread; dropping it shuts that thread down and can lose buffered lines —
+/// most commonly by letting it die inside the init function as a temporary.
+/// `main` must therefore hold the return value for the whole process lifetime.
+///
+/// A broken log sink must never stop sampling: if the log directory cannot be
+/// created or opened, this falls back to console-only logging with a loud
+/// warning instead of failing startup.
+fn init_tracing(log_dir: &Path) -> Option<WorkerGuard> {
+    // Built once for both layers; RUST_LOG honoured, "info" when unset —
+    // unchanged from the previous console-only setup.
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+
+    match build_daily_appender(log_dir, "screentime-session.log") {
+        Ok(appender) => {
+            // Non-blocking on purpose: a slow disk must never delay the 1 Hz
+            // sampling/reporting cycle behind a logging syscall.
+            let (writer, guard) = tracing_appender::non_blocking(appender);
+            let stdout_layer = tracing_subscriber::fmt::layer();
+            let file_layer = tracing_subscriber::fmt::layer()
+                // ANSI colour codes belong on terminals, not incident logs.
+                .with_ansi(false)
+                .with_writer(writer);
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(stdout_layer)
+                .with(file_layer)
+                .init();
+            Some(guard)
+        }
+        Err(e) => {
+            // Console-only fallback, identical to the pre-file-logging setup;
+            // only after `.init()` does the warning below actually surface.
+            tracing_subscriber::fmt().with_env_filter(filter).init();
+            tracing::warn!(
+                error = %e,
+                dir = %log_dir.display(),
+                "file logging unavailable; continuing with console output only"
+            );
+            None
+        }
+    }
+}
+
+/// Creates `log_dir` and opens a daily-rolling appender named `base_name`.
+///
+/// Uses the builder form deliberately: the `rolling::daily` convenience
+/// constructor panics on an unusable directory, and startup must survive
+/// that (see init_tracing's fallback contract).
+fn build_daily_appender(
+    log_dir: &Path,
+    base_name: &str,
+) -> anyhow::Result<tracing_appender::rolling::RollingFileAppender> {
+    // Directory creation as its own step so the common failure (missing
+    // parent) names the directory rather than surfacing as an open error.
+    std::fs::create_dir_all(log_dir)
+        .with_context(|| format!("creating log directory {}", log_dir.display()))?;
+    tracing_appender::rolling::RollingFileAppender::builder()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        // The base name carries the extension so each day lands as
+        // `screentime-session.log.<yyyy-mm-dd>`.
+        .filename_prefix(base_name)
+        .max_log_files(MAX_LOG_FILES)
+        .build(log_dir)
+        .with_context(|| {
+            format!(
+                "opening daily rolling log {base_name} in {}",
+                log_dir.display()
+            )
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    #[test]
+    fn log_dir_prefers_screentime_data_dir_for_dev_parity() {
+        assert_eq!(
+            resolve_log_dir(Some(r"C:\dev\data"), Some(r"C:\Users\u\AppData\Local")),
+            PathBuf::from(r"C:\dev\data").join("logs")
+        );
+    }
+
+    #[test]
+    fn log_dir_defaults_to_localappdata_screentime_logs() {
+        assert_eq!(
+            resolve_log_dir(None, Some(r"C:\Users\u\AppData\Local")),
+            PathBuf::from(r"C:\Users\u\AppData\Local\screentime\logs")
+        );
+    }
+
+    #[test]
+    fn log_dir_without_any_env_falls_back_to_a_relative_folder() {
+        assert_eq!(
+            resolve_log_dir(None, None),
+            PathBuf::from("screentime-logs")
+        );
+    }
+
+    #[test]
+    fn blank_env_values_are_treated_as_unset_for_log_dir() {
+        assert_eq!(
+            resolve_log_dir(Some(""), Some("")),
+            PathBuf::from("screentime-logs")
+        );
+        assert_eq!(
+            resolve_log_dir(Some(""), Some(r"C:\Users\u\AppData\Local")),
+            PathBuf::from(r"C:\Users\u\AppData\Local\screentime\logs")
+        );
+    }
+
+    #[test]
+    fn session_log_dir_reads_the_real_environment() {
+        // Serialised against any future env-touching tests: env vars are
+        // process-global, and parallel test threads would race. The variable
+        // is restored so neighbouring tests observe pristine state.
+        static ENV_LOCK: Mutex<()> = Mutex::new(());
+        let _env = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+
+        const KEY: &str = "SCREENTIME_DATA_DIR";
+        let original = std::env::var(KEY).ok();
+        std::env::set_var(KEY, r"target\test-log-dir-scratch");
+        let resolved = session_log_dir();
+        match original {
+            Some(v) => std::env::set_var(KEY, v),
+            None => std::env::remove_var(KEY),
+        }
+
+        assert_eq!(
+            resolved,
+            PathBuf::from(r"target\test-log-dir-scratch").join("logs")
+        );
+    }
+
+    #[test]
+    fn guard_mutex_is_per_user_under_the_local_namespace() {
+        assert_eq!(
+            single_instance_mutex_name_for(Some("alice")),
+            r"Local\screentime-session-alice"
+        );
+    }
+
+    #[test]
+    fn guard_mutex_falls_back_to_a_bare_local_name_without_a_username() {
+        assert_eq!(
+            single_instance_mutex_name_for(None),
+            r"Local\screentime-session"
+        );
+        assert_eq!(
+            single_instance_mutex_name_for(Some("")),
+            r"Local\screentime-session"
+        );
+    }
 }

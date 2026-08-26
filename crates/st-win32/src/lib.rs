@@ -9,10 +9,11 @@
 //! implementation: fixes and audits land in one place. Existing crates adopt
 //! it later; nothing here depends on them.
 
-use windows::core::PWSTR;
-use windows::Win32::Foundation::{CloseHandle, HANDLE};
+use windows::core::{PCWSTR, PWSTR};
+use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE};
 use windows::Win32::System::Threading::{
-    OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    CreateMutexW, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
+    PROCESS_QUERY_LIMITED_INFORMATION,
 };
 
 /// Buffer ceiling for `QueryFullProcessImageNameW`, in UTF-16 code units.
@@ -71,6 +72,106 @@ impl Drop for OwnedProcessHandle {
             let _ = CloseHandle(self.handle);
         }
     }
+}
+
+// ---------------------------------------------------------------------------
+// Single-instance guards.
+//
+// Why a named kernel mutex rather than a lock file: a lock file can be left
+// behind by a crashed process (or by OneDrive sync), turning "am I alone?"
+// into stale-file heuristics. The kernel reaps mutexes the moment every
+// owning handle is gone, so the answer is always live and crash-safe.
+// ---------------------------------------------------------------------------
+
+/// Returned by [`acquire_single_instance`] when this process may not claim
+/// the guard: either another live process already owns it, or the mutex could
+/// not be created at all.
+///
+/// Deliberately one opaque case. The two call sites print their own
+/// operator-facing explanation (they know which name they tried), and any
+/// *unexpected* `CreateMutexW` failure — malformed name, access denied —
+/// collapses into the same answer on purpose: when exclusivity cannot be
+/// proven, refusing to start is exactly as correct as "someone else is
+/// running", because both prevent two daemons from silently fighting over
+/// one pipe. Hard creation failures are in practice limited to bad names,
+/// and ours are compile-time constants.
+#[derive(Debug)]
+pub struct AlreadyRunning;
+
+/// An owning wrapper around a Win32 mutex handle that calls `CloseHandle` on
+/// drop.
+///
+/// Why RAII matters doubly here: releasing the mutex is what *permits* the
+/// next process to start, so ownership must be pinned to a lifetime the
+/// programmer controls. Same pattern as [`OwnedProcessHandle`], but callers
+/// MUST keep the returned value alive for the whole process lifetime
+/// (binding it early in `main`) — dropping it early would silently re-enable
+/// a second daemon mid-run.
+#[derive(Debug)]
+pub struct OwnedMutexHandle {
+    handle: HANDLE,
+}
+
+impl OwnedMutexHandle {
+    /// Borrows the raw handle for passing to other Win32 calls.
+    pub fn as_raw(&self) -> HANDLE {
+        self.handle
+    }
+}
+
+impl Drop for OwnedMutexHandle {
+    fn drop(&mut self) {
+        // SAFETY: self.handle came from CreateMutexW (see
+        // acquire_single_instance's contract), so closing it here exactly once
+        // is correct. A CloseHandle failure has no recovery during drop; the
+        // OS abandons (and releases) the mutex once all handles close anyway,
+        // so ignoring the error cannot wedge future startups.
+        unsafe {
+            let _ = CloseHandle(self.handle);
+        }
+    }
+}
+
+/// Acquires the named mutex as a single-instance guard, or reports
+/// [`AlreadyRunning`].
+///
+/// `CreateMutexW` runs with `bInitialOwner = false`: the initial-owner flag
+/// carries an ownership race (a creator is not reliably the owner if another
+/// instance exits at the same instant), whereas the post-create
+/// `ERROR_ALREADY_EXISTS` probe is atomic and unambiguous. Note that Win32
+/// reports "already exists" through the thread's last error while still
+/// returning a valid handle, so the probe must run before anything else
+/// touches that state.
+///
+/// # Namespace guidance (callers choose; the name is taken verbatim)
+///
+/// Mutex names are case-insensitive and live in one of two kernel namespaces:
+/// `Global\…` spans every login session on the machine — right for a
+/// machine-wide service like the agent — while `Local\…` is private to the
+/// caller's login session, right for a per-user helper where different
+/// logged-in desktops must each run their own copy.
+pub fn acquire_single_instance(name: &str) -> Result<OwnedMutexHandle, AlreadyRunning> {
+    // NUL-terminated UTF-16 for the W-suffixed API; the buffer outlives the call.
+    let mut wide: Vec<u16> = name.encode_utf16().collect();
+    wide.push(0);
+
+    // SAFETY: `wide` is a NUL-terminated UTF-16 buffer alive across the call,
+    // passed read-only as PCWSTR, with default security attributes (None).
+    // On the Ok path the windows crate performs no further Win32 calls, so
+    // the GetLastError probe below still observes CreateMutexW's own status.
+    let handle =
+        unsafe { CreateMutexW(None, false, PCWSTR(wide.as_ptr())) }.map_err(|_| AlreadyRunning)?;
+
+    // SAFETY: reading the thread's last error; no other Win32 call has
+    // intervened since CreateMutexW above, so this still observes its status.
+    if unsafe { GetLastError() } == ERROR_ALREADY_EXISTS {
+        // Hand the duplicate handle straight back to the OS: the winner keeps
+        // the mutex, we just leave quietly.
+        drop(OwnedMutexHandle { handle });
+        return Err(AlreadyRunning);
+    }
+
+    Ok(OwnedMutexHandle { handle })
 }
 
 /// Opens a process with `PROCESS_QUERY_LIMITED_INFORMATION` access.
@@ -192,5 +293,28 @@ mod tests {
         let path = process_image_path(std::process::id()).expect("self query must succeed");
         assert!(!path.is_empty());
         assert!(path.contains('\\'), "expected an absolute path, got {path}");
+    }
+
+    #[test]
+    fn second_acquire_of_a_held_mutex_is_already_running() {
+        // The pid suffix keeps concurrent test invocations on the same machine
+        // from colliding; Local\ scope keeps them out of the global namespace.
+        let name = format!(r"Local\st-win32-test-double-acquire-{}", std::process::id());
+        let _guard = acquire_single_instance(&name).expect("first acquire of a fresh mutex");
+        assert!(
+            matches!(acquire_single_instance(&name), Err(AlreadyRunning)),
+            "second in-process acquire of a held mutex must report AlreadyRunning"
+        );
+    }
+
+    #[test]
+    fn dropping_the_guard_handle_allows_reacquire() {
+        let name = format!(r"Local\st-win32-test-reacquire-{}", std::process::id());
+        {
+            let _guard = acquire_single_instance(&name).expect("first acquire");
+            // RAII release happens here; the kernel must honour it promptly.
+        }
+        let reacquired = acquire_single_instance(&name).expect("reacquire after Drop must succeed");
+        drop(reacquired);
     }
 }

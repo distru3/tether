@@ -25,7 +25,7 @@ mod locks;
 mod platform;
 mod sampler;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration as StdDuration;
@@ -39,6 +39,9 @@ use st_core::model::SubjectRef;
 use st_core::platform::IdleState;
 use st_ipc::PIPE_NAME;
 use st_storage::Db;
+use tracing_appender::non_blocking::WorkerGuard;
+// SubscriberExt/Layer for stacking the two-layer registry in init_tracing.
+use tracing_subscriber::prelude::*;
 
 use crate::enforcer::Enforcer;
 use crate::ipc_server::{IpcServerHandle, StatusInfo};
@@ -49,13 +52,52 @@ use crate::sampler::{PendingInterval, Sampler};
 const POLL: StdDuration = StdDuration::from_secs(1);
 const CLOCK_TOLERANCE_SECS: i64 = 3;
 
+/// Exit status used exclusively for "another agent instance is already
+/// running". Distinct from generic failure (1) so supervisors and scripts can
+/// tell "port already taken by myself" apart from real startup errors.
+const EXIT_ALREADY_RUNNING: i32 = 2;
+
+/// Kernel name of the single-instance guard mutex.
+///
+/// `Global\` on purpose: the agent is one per MACHINE (it owns the database
+/// under ProgramData and serves `\\.\pipe\screentime`), so a second agent
+/// started inside another user's login session must still lose — a `Local\`
+/// name would let both run and fight over the pipe. Interactive users may
+/// create `Global\` objects without privilege ceremony here, and the mutex
+/// dies with its owning process, so a crash can never wedge future startups.
+const SINGLE_INSTANCE_MUTEX: &str = r"Global\screentime-agent";
+
+/// How many daily log files to keep before the oldest is deleted. Bounded on
+/// purpose: an unattended service writing dailies forever would eventually
+/// fill the disk it is supposed to be protecting.
+const MAX_LOG_FILES: usize = 14;
+
 fn main() -> Result<()> {
-    init_tracing();
-    install_shutdown_handler();
+    // Single-instance guard BEFORE anything else (tracing included): two
+    // agents would fight over \\.\pipe\screentime in ways that surface as
+    // silent weirdness, not errors. The subscriber does not exist yet at this
+    // point, so the refusal is printed straight to stderr instead of logged.
+    // The binding lives to the end of `main` on purpose: dropping it would
+    // release the mutex mid-process and re-enable a second daemon.
+    #[cfg(windows)]
+    let _single_instance = match st_win32::acquire_single_instance(SINGLE_INSTANCE_MUTEX) {
+        Ok(guard) => guard,
+        Err(st_win32::AlreadyRunning) => {
+            eprintln!(
+                "error: another screentime-agent is already running ({SINGLE_INSTANCE_MUTEX} held); exiting"
+            );
+            std::process::exit(EXIT_ALREADY_RUNNING);
+        }
+    };
 
     let data_dir = data_dir()?;
     std::fs::create_dir_all(&data_dir)
         .with_context(|| format!("creating data directory {}", data_dir.display()))?;
+
+    // Hold the returned WorkerGuard for the whole process (bound in `main`);
+    // see init_tracing for why letting it die early silently kills file logs.
+    let _log_guard = init_tracing(&agent_log_dir(&data_dir));
+    install_shutdown_handler();
 
     let db_path = data_dir.join("screentime.db");
     let db =
@@ -434,11 +476,115 @@ fn data_dir() -> Result<PathBuf> {
     }
 }
 
-fn init_tracing() {
+/// The agent's rolling-log home: `<data_dir>/logs`, next to the database it
+/// diagnoses. Keeping logs beside the data dir means one `SCREENTIME_DATA_DIR`
+/// override relocates an entire incident bundle.
+fn agent_log_dir(data_dir: &Path) -> PathBuf {
+    data_dir.join("logs")
+}
+
+/// Installs the tracing stack: one filter, two destinations.
+///
+/// # Why two layers
+///
+/// Console output serves interactive development; a daily-rolling file serves
+/// incidents — the agent usually runs hidden or as a Windows service, where
+/// stdout is discarded by whoever spawned it and post-mortem diagnosis would
+/// otherwise have nothing to read. Both layers share ONE `RUST_LOG`-derived
+/// [`tracing_subscriber::EnvFilter`], placed at the top of the registry stack
+/// so it governs every layer below: the file sees exactly what the console
+/// would.
+///
+/// # The classic tracing-appender trap (why this returns a guard)
+///
+/// `non_blocking` hands back a [`WorkerGuard`] owning the background writer
+/// thread. Dropping that guard shuts the thread down and can lose buffered
+/// lines — most commonly by letting it die inside the init function as a
+/// temporary. `main` must therefore hold the return value for the whole
+/// process lifetime.
+///
+/// A broken log sink must never take the tracker down: if the log directory
+/// cannot be created or opened, this falls back to console-only logging with
+/// a loud warning instead of failing startup.
+fn init_tracing(log_dir: &Path) -> Option<WorkerGuard> {
+    // Built once for both layers (see doc above); RUST_LOG honoured, "info"
+    // when unset — unchanged from the previous console-only setup.
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
-    tracing_subscriber::fmt()
-        .with_env_filter(filter)
-        .with_target(false)
-        .init();
+
+    match build_daily_appender(log_dir, "screentime-agent.log") {
+        Ok(appender) => {
+            // Non-blocking on purpose: a slow or full disk must never stall
+            // the 1 Hz enforcement tick behind a logging syscall.
+            let (writer, guard) = tracing_appender::non_blocking(appender);
+            let stdout_layer = tracing_subscriber::fmt::layer().with_target(false);
+            let file_layer = tracing_subscriber::fmt::layer()
+                .with_target(false)
+                // ANSI colour codes belong on terminals, not incident logs.
+                .with_ansi(false)
+                .with_writer(writer);
+            tracing_subscriber::registry()
+                .with(filter)
+                .with(stdout_layer)
+                .with(file_layer)
+                .init();
+            Some(guard)
+        }
+        Err(e) => {
+            // Console-only fallback, identical to the pre-file-logging setup;
+            // only after `.init()` does the warning below actually surface.
+            tracing_subscriber::fmt()
+                .with_env_filter(filter)
+                .with_target(false)
+                .init();
+            tracing::warn!(
+                error = %e,
+                dir = %log_dir.display(),
+                "file logging unavailable; continuing with console output only"
+            );
+            None
+        }
+    }
+}
+
+/// Creates `log_dir` and opens a daily-rolling appender named `base_name`.
+///
+/// Uses the builder form deliberately: the `rolling::daily` convenience
+/// constructor panics on an unusable directory, and startup must survive
+/// that (see init_tracing's fallback contract).
+fn build_daily_appender(
+    log_dir: &Path,
+    base_name: &str,
+) -> anyhow::Result<tracing_appender::rolling::RollingFileAppender> {
+    // Directory creation as its own step so the common failure (missing
+    // parent) names the directory rather than surfacing as an open error.
+    std::fs::create_dir_all(log_dir)
+        .with_context(|| format!("creating log directory {}", log_dir.display()))?;
+    tracing_appender::rolling::RollingFileAppender::builder()
+        .rotation(tracing_appender::rolling::Rotation::DAILY)
+        // The base name carries the extension so each day lands as
+        // `screentime-agent.log.<yyyy-mm-dd>` — globbing `*.log.*` finds every
+        // rotation while today's file still reads as screentime-agent.log.NN.
+        .filename_prefix(base_name)
+        .max_log_files(MAX_LOG_FILES)
+        .build(log_dir)
+        .with_context(|| {
+            format!(
+                "opening daily rolling log {base_name} in {}",
+                log_dir.display()
+            )
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn agent_log_dir_is_logs_under_the_data_dir() {
+        assert_eq!(
+            agent_log_dir(Path::new(r"C:\ProgramData\screentime")),
+            PathBuf::from(r"C:\ProgramData\screentime").join("logs")
+        );
+    }
 }
