@@ -45,11 +45,14 @@ Copy-Item target\release\screentime-session.exe "C:\Program Files\Screentime\"
 ### 3. Register the agent as a Windows service (elevation required)
 
 `sc.exe` syntax is unforgiving: there must be a **space after each `=`**, and
-the binary path must be quoted because of `Program Files`:
+the binary path must be quoted because of `Program Files`. The `--service`
+flag is **mandatory and rides outside the quotes** — without it the SCM's
+launch falls into console mode (a daemon that never talks to the service
+controller) and every start times out with System-log event 7009:
 
 ```powershell
 sc.exe create ScreentimeAgent type= own start= auto `
-    binPath= "\"C:\Program Files\Screentime\screentime-agent.exe\"" `
+    binPath= "\"C:\Program Files\Screentime\screentime-agent.exe\" --service" `
     DisplayName= "Screentime Agent"
 sc.exe failure ScreentimeAgent reset= 86400 actions= restart/60000/restart/60000/restart/60000
 sc.exe start ScreentimeAgent

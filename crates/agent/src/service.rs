@@ -119,6 +119,11 @@ mod win {
     /// to nobody under the SCM. They are surfaced via status reports (exit
     /// codes) plus best-effort tracing/eprintln.
     fn service_entry(_arguments: Vec<OsString>) {
+        // First line the service instance ever writes: if a start ever times
+        // out (event 7009), this line's presence — or absence — in
+        // {data_dir}\logs tells you whether the binary reached its entrypoint
+        // at all before SCM lost patience.
+        tracing::info!("service entrypoint entered");
         if let Err(e) = service_body() {
             eprintln!("service error: {e:#}");
         }

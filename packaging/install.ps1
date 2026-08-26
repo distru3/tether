@@ -100,8 +100,11 @@ Write-Host "Copied daemons to $InstallDir"
 
 # --- 4. Register / update the agent service ---------------------------------
 # sc.exe argument rules: a literal space after each '=', and the binPath must
-# keep embedded quotes so Windows keeps it one path despite spaces.
-$binPathQuoted = "`"$AgentDest`""
+# keep embedded quotes so Windows keeps it one path despite spaces. The
+# --service flag rides OUTSIDE the quotes: without it SCM's launch falls into
+# console mode, never connects to the service controller, and every start
+# times out (event 7009).
+$binPathQuoted = "`"$AgentDest`" --service"
 
 $existing = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
 if ($existing) {

@@ -80,9 +80,14 @@ pub(crate) fn usage_text() -> String {
 /// is why the odd `binPath= "<exe>"` spacing is load-bearing. The executable
 /// path is quoted because the repo conventionally lives under a directory with
 /// spaces (OneDrive\Desktop\...).
+///
+/// The `--service` flag rides OUTSIDE the quoted path: without it, SCM's
+/// launch hits the console branch of [`decide`], runs a perfectly healthy
+/// daemon that never talks to the service controller, and every start times
+/// out with event 7009 (observed in the field 2026-08-26).
 pub(crate) fn install_create_command(exe_path: &std::path::Path) -> String {
     format!(
-        r#"sc.exe create {SERVICE_NAME} binPath= "{}" start= auto displayName= "{SERVICE_DISPLAY_NAME}""#,
+        r#"sc.exe create {SERVICE_NAME} binPath= "{}" --service start= auto displayName= "{SERVICE_DISPLAY_NAME}""#,
         exe_path.display()
     )
 }
@@ -149,13 +154,15 @@ mod tests {
     }
 
     #[test]
-    fn create_command_quotes_exe_and_uses_sc_option_spacing() {
+    fn create_command_quotes_exe_uses_sc_spacing_and_carries_the_service_flag() {
         let cmd = install_create_command(std::path::Path::new(r"C:\My Dir\screentime-agent.exe"));
-        // binPath value must be quoted (spaces) with sc.exe's `= ` spacing.
-        assert!(cmd.contains(r#"binPath= "C:\My Dir\screentime-agent.exe""#));
-        assert!(cmd.starts_with(&format!("sc.exe create {SERVICE_NAME} ")));
-        assert!(cmd.contains("start= auto"));
-        assert!(cmd.contains(&format!(r#"displayName= "{SERVICE_DISPLAY_NAME}""#)));
+        // Pinned exactly: the flag sits OUTSIDE the quoted path — inside, it
+        // would become part of it and SCM launches would fall into console
+        // mode (event 7009 timeouts).
+        assert_eq!(
+            cmd,
+            r#"sc.exe create ScreentimeAgent binPath= "C:\My Dir\screentime-agent.exe" --service start= auto displayName= "Screentime Agent""#
+        );
     }
 
     #[test]
