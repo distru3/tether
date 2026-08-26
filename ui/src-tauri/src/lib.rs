@@ -146,13 +146,48 @@ fn get_catalog() -> CmdResult<st_ipc::CatalogDto> {
     }
 }
 
+/// The reply to a successful PIN set or recovery: the one-time recovery code
+/// minted for the new vault. The agent stores only its hash, so this is the
+/// only chance the UI ever has to show it.
+#[derive(Debug, Clone, Serialize)]
+pub struct PinVaultOut {
+    pub recovery_code: String,
+}
+
 #[tauri::command]
-fn set_pin(new_pin: String, current_pin: Option<String>) -> CmdResult<String> {
+fn set_pin(new_pin: String, current_pin: Option<String>) -> CmdResult<PinVaultOut> {
     match ipc_client::request(st_ipc::Request::SetPin {
         new_pin,
         current_pin,
     }) {
-        Ok(Response::Accepted { effective_utc }) => Ok(effective_utc),
+        Ok(Response::PinVault { recovery_code }) => Ok(PinVaultOut { recovery_code }),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
+/// Replace a forgotten PIN with its one-time recovery code. Returns the fresh
+/// code minted for the new vault.
+#[tauri::command]
+fn recover_pin(recovery_code: String, new_pin: String) -> CmdResult<PinVaultOut> {
+    match ipc_client::request(st_ipc::Request::RecoverPin {
+        recovery_code,
+        new_pin,
+    }) {
+        Ok(Response::PinVault { recovery_code }) => Ok(PinVaultOut { recovery_code }),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
+/// Dismantle the vault. `credential` may be the current PIN or the standing
+/// recovery code.
+#[tauri::command]
+fn remove_pin(credential: String) -> CmdResult<()> {
+    match ipc_client::request(st_ipc::Request::RemovePin { credential }) {
+        Ok(Response::Accepted { .. }) => Ok(()),
         Ok(Response::Error { code, message }) => Err(error_from(code, message)),
         Ok(_) => Err(CommandError::unexpected()),
         Err(e) => Err(CommandError::unreachable(e)),
@@ -219,6 +254,8 @@ pub fn run() {
             get_day_summary,
             get_catalog,
             set_pin,
+            recover_pin,
+            remove_pin,
             set_limit,
             delete_limit,
             grant_override

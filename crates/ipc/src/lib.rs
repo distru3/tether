@@ -110,11 +110,22 @@ pub enum Request {
         pin: String,
     },
     /// Set or change the PIN. `current_pin` must match the existing PIN once
-    /// one is configured; the first set (no PIN yet) can pass `None`.
+    /// one is configured; the first set (no PIN yet) can pass `None`. The
+    /// reply carries a fresh recovery code (see [`Response::PinVault`]).
     SetPin {
         new_pin: String,
         current_pin: Option<String>,
     },
+    /// Replace a forgotten PIN using its recovery code. Rotates both the PIN
+    /// and the recovery code; the reply carries the NEW code.
+    RecoverPin {
+        recovery_code: String,
+        new_pin: String,
+    },
+    /// Dismantle the vault entirely. `credential` may be either the current
+    /// PIN or the current recovery code — removing the gate must require the
+    /// same proof of ownership as changing it.
+    RemovePin { credential: String },
     /// Usage reported by the session helper, which is the only component able
     /// to see the focused window. See [`ReportUsageDto`] for the contract.
     ReportUsage { report: ReportUsageDto },
@@ -137,6 +148,14 @@ pub enum Response {
     /// own send clock to detect and compensate for skew.
     Accepted {
         effective_utc: String,
+    },
+    /// Acknowledgement for the PIN vault operations ([`Request::SetPin`] and
+    /// [`Request::RecoverPin`]). `recovery_code` is the freshly minted
+    /// one-time code: the agent stores only its hash, so this reply is the
+    /// ONLY place the plaintext ever appears and the UI must surface it for
+    /// the user to write down. Codes rotate on every vault change.
+    PinVault {
+        recovery_code: String,
     },
     Error {
         code: ErrorCode,

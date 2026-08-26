@@ -54,6 +54,26 @@ impl Db {
         self.set_setting("pin_hash", hash)
     }
 
+    /// Recovery-code hash. Present exactly while a PIN vault exists; rotated
+    /// on every PIN set/change and cleared with the vault.
+    pub fn recovery_hash(&self) -> Result<Option<String>> {
+        self.setting("recovery_hash")
+    }
+
+    pub fn set_recovery_hash(&self, hash: &str) -> Result<()> {
+        self.set_setting("recovery_hash", hash)
+    }
+
+    /// Wipe the whole vault: PIN and recovery code together, so no half-state
+    /// ("PIN gone but a stale recovery code still unlocks") can exist.
+    pub fn clear_pin_vault(&self) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM settings WHERE key IN ('pin_hash', 'recovery_hash')",
+            [],
+        )?;
+        Ok(())
+    }
+
     /// Append to the append-only audit log.
     pub fn audit(&self, now: DateTime<Utc>, kind: &str, detail: Option<&str>) -> Result<()> {
         self.conn.execute(
@@ -78,6 +98,16 @@ mod tests {
             db.pin_hash().expect("some").as_deref(),
             Some("$argon2id$v=19$m=19456,t=2,p=1$fake")
         );
+    }
+
+    #[test]
+    fn clearing_the_vault_removes_pin_and_recovery_together() {
+        let db = Db::open_in_memory().expect("open");
+        db.set_pin_hash("pin").expect("set pin");
+        db.set_recovery_hash("recovery").expect("set recovery");
+        db.clear_pin_vault().expect("clear");
+        assert_eq!(db.pin_hash().expect("read"), None);
+        assert_eq!(db.recovery_hash().expect("read"), None);
     }
 
     #[test]

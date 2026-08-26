@@ -22,8 +22,23 @@ export function getCatalog(): Promise<CatalogDto> {
     return invoke("get_catalog");
 }
 
-export function setPin(newPin: string, currentPin: string | null): Promise<string> {
+export interface PinVaultReply {
+    recovery_code: string;
+}
+
+/** Set or change the PIN. The reply carries the one-time recovery code. */
+export function setPin(newPin: string, currentPin: string | null): Promise<PinVaultReply> {
     return invoke("set_pin", { newPin, currentPin });
+}
+
+/** Replace a forgotten PIN with its recovery code; a fresh code comes back. */
+export function recoverPin(recoveryCode: string, newPin: string): Promise<PinVaultReply> {
+    return invoke("recover_pin", { recoveryCode, newPin });
+}
+
+/** Dismantle the vault; the credential may be the PIN or the recovery code. */
+export function removePin(credential: string): Promise<void> {
+    return invoke("remove_pin", { credential });
 }
 
 export function setLimit(

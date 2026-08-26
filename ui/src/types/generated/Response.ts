@@ -5,4 +5,4 @@ import type { DaySummaryDto } from "./DaySummaryDto";
 import type { ErrorCode } from "./ErrorCode";
 import type { StatusDto } from "./StatusDto";
 
-export type Response = { "type": "pong" } | { "type": "day_summary" } & DaySummaryDto | { "type": "status" } & StatusDto | { "type": "catalog" } & CatalogDto | { "type": "blocked_apps" } & BlockedAppsDto | { "type": "accepted", effective_utc: string, } | { "type": "error", code: ErrorCode, message: string, };
+export type Response = { "type": "pong" } | { "type": "day_summary" } & DaySummaryDto | { "type": "status" } & StatusDto | { "type": "catalog" } & CatalogDto | { "type": "blocked_apps" } & BlockedAppsDto | { "type": "accepted", effective_utc: string, } | { "type": "pin_vault", recovery_code: string, } | { "type": "error", code: ErrorCode, message: string, };

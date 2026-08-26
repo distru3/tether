@@ -165,9 +165,11 @@ export function useLedgerActions(deps: Deps) {
     const closePinSetup = useCallback(() => setPinSetupOpen(false), []);
 
     const submitPinSetup = useCallback(async (newPin: string, currentPin: string) => {
-        await api.setPin(newPin, currentPin.length > 0 ? currentPin : null);
-        setPinSetupOpen(false);
-        depsRef.current.notify("success", "PIN saved.");
+        const reply = await api.setPin(newPin, currentPin.length > 0 ? currentPin : null);
+        depsRef.current.notify("success", "PIN saved — note the recovery code.");
+        // The dialog stays open to display the one-time recovery code; it
+        // closes when the user confirms they wrote the code down.
+        return reply;
     }, []);
 
     return {

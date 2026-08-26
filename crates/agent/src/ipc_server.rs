@@ -39,7 +39,7 @@ use st_core::clock::Clock;
 use st_core::daykey::DayKey;
 use st_core::limits::LimitTarget;
 use st_core::model::{AppKey, SubjectRef};
-use st_core::pin::{hash_pin, verify_pin};
+use st_core::pin::{generate_recovery_code, hash_pin, normalize_recovery_code, verify_pin};
 use st_core::platform::ProcessController;
 use st_ipc::{
     transport, ErrorCode, LimitTargetDto, ObservationDto, ReportUsageDto, Request, Response,
@@ -383,6 +383,11 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
             new_pin,
             current_pin,
         } => set_pin(ctx, &new_pin, current_pin.as_deref()),
+        Request::RecoverPin {
+            recovery_code,
+            new_pin,
+        } => recover_pin(ctx, &recovery_code, &new_pin),
+        Request::RemovePin { credential } => remove_pin(ctx, &credential),
         Request::SetLimit {
             target,
             default_minutes,
@@ -614,7 +619,9 @@ fn set_pin(ctx: &Ctx, new_pin: &str, current_pin: Option<&str>) -> Response {
     match db.pin_hash() {
         Ok(Some(stored)) => {
             let current = current_pin.unwrap_or("");
-            if !verify_pin(current, &stored) {
+            // Changing an existing vault accepts either the current PIN or
+            // the standing recovery code — same ownership proof either way.
+            if !verify_pin(current, &stored) && !recovery_ok(&db, current) {
                 return Response::Error {
                     code: ErrorCode::BadPin,
                     message: "current PIN does not match".into(),
@@ -624,12 +631,87 @@ fn set_pin(ctx: &Ctx, new_pin: &str, current_pin: Option<&str>) -> Response {
         Ok(None) => {}
         Err(e) => return error_internal(format!("read pin: {e}")),
     }
-    match hash_pin(new_pin) {
-        Ok(hash) => match db.set_pin_hash(&hash) {
-            Ok(()) => accepted(ctx.clock.now_utc()),
-            Err(e) => error_internal(format!("store pin: {e}")),
+    rotate_vault(&db, new_pin)
+}
+
+/// Replace a forgotten PIN via its recovery code. Only the code unlocks this
+/// path — by definition the user does not have the PIN — and the vault is
+/// rotated so the used code stops working immediately.
+fn recover_pin(ctx: &Ctx, recovery_code: &str, new_pin: &str) -> Response {
+    if new_pin.is_empty() {
+        return Response::Error {
+            code: ErrorCode::BadPin,
+            message: "PIN cannot be empty".into(),
+        };
+    }
+    let db = lock_db(&ctx.db);
+    match db.recovery_hash() {
+        Ok(Some(_)) => {}
+        Ok(None) => {
+            return Response::Error {
+                code: ErrorCode::NotFound,
+                message: "no PIN vault is configured".into(),
+            }
+        }
+        Err(e) => return error_internal(format!("read recovery: {e}")),
+    }
+    if !recovery_ok(&db, recovery_code) {
+        return Response::Error {
+            code: ErrorCode::BadPin,
+            message: "recovery code does not match".into(),
+        };
+    }
+    rotate_vault(&db, new_pin)
+}
+
+/// Dismantle the vault. Requires the same ownership proof as changing it
+/// (PIN or recovery code); idempotent when no vault exists.
+fn remove_pin(ctx: &Ctx, credential: &str) -> Response {
+    let db = lock_db(&ctx.db);
+    let authorized = match db.pin_hash() {
+        Ok(None) => true,
+        Ok(Some(stored)) => verify_pin(credential, &stored) || recovery_ok(&db, credential),
+        Err(e) => return error_internal(format!("read pin: {e}")),
+    };
+    if !authorized {
+        return Response::Error {
+            code: ErrorCode::BadPin,
+            message: "wrong PIN or recovery code".into(),
+        };
+    }
+    match db
+        .clear_pin_vault()
+        .and_then(|()| db.audit(ctx.clock.now_utc(), "pin_removed", None))
+    {
+        Ok(()) => accepted(ctx.clock.now_utc()),
+        Err(e) => error_internal(format!("clear vault: {e}")),
+    }
+}
+
+/// Store a new PIN together with a freshly minted recovery code.
+///
+/// The plaintext code exists exactly once — inside the [`Response::PinVault`]
+/// returned here — because only its hash is persisted. Every rotation retires
+/// the previous code, so stale codes from earlier eras are inert.
+fn rotate_vault(db: &Db, new_pin: &str) -> Response {
+    let pin_hash = match hash_pin(new_pin) {
+        Ok(h) => h,
+        Err(e) => return error_internal(format!("hash pin: {e}")),
+    };
+    let code = generate_recovery_code();
+    let canonical = normalize_recovery_code(&code);
+    let recovery_hash = match hash_pin(&canonical) {
+        Ok(h) => h,
+        Err(e) => return error_internal(format!("hash recovery: {e}")),
+    };
+    match db
+        .set_pin_hash(&pin_hash)
+        .and_then(|()| db.set_recovery_hash(&recovery_hash))
+    {
+        Ok(()) => Response::PinVault {
+            recovery_code: code,
         },
-        Err(e) => error_internal(format!("hash pin: {e}")),
+        Err(e) => error_internal(format!("store vault: {e}")),
     }
 }
 
@@ -1017,6 +1099,16 @@ fn pin_ok(db: &Db, pin: &str) -> bool {
     }
 }
 
+/// Whether `code` matches the standing recovery code. Input is normalised so
+/// lowercase / missing dashes / stray spaces still verify against the paper
+/// form.
+fn recovery_ok(db: &Db, code: &str) -> bool {
+    match db.recovery_hash() {
+        Ok(Some(stored)) => verify_pin(&normalize_recovery_code(code), &stored),
+        _ => false,
+    }
+}
+
 fn dto_to_target(dto: &LimitTargetDto) -> Option<LimitTarget> {
     match dto {
         LimitTargetDto::App { id } => Some(LimitTarget::App(*id)),
@@ -1297,6 +1389,15 @@ mod tests {
 
     // -- Handler behaviour. ---------------------------------------------------
 
+    /// Pull the one-time code out of a PinVault reply, failing loudly on any
+    /// other variant.
+    fn expect_vault(response: Response) -> String {
+        match response {
+            Response::PinVault { recovery_code } => recovery_code,
+            other => panic!("expected PinVault, got {other:?}"),
+        }
+    }
+
     #[test]
     fn set_pin_first_set_then_change_requires_the_current_pin() {
         let ctx = test_ctx(
@@ -1304,16 +1405,13 @@ mod tests {
             TestClock::new(at("2026-08-20T12:00:00Z"), 0),
         );
 
-        expect_accepted(
-            handle(
-                &ctx,
-                Request::SetPin {
-                    new_pin: "1234".into(),
-                    current_pin: None,
-                },
-            ),
-            at("2026-08-20T12:00:00Z"),
-        );
+        let first_code = expect_vault(handle(
+            &ctx,
+            Request::SetPin {
+                new_pin: "1234".into(),
+                current_pin: None,
+            },
+        ));
 
         // Changing without (or with a wrong) current PIN is refused...
         for wrong in [None, Some("0000")] {
@@ -1330,21 +1428,134 @@ mod tests {
         }
 
         // ...and with the right current PIN the change lands.
-        expect_accepted(
-            handle(
-                &ctx,
-                Request::SetPin {
-                    new_pin: "5678".into(),
-                    current_pin: Some("1234".into()),
-                },
-            ),
-            at("2026-08-20T12:00:00Z"),
-        );
+        let second_code = expect_vault(handle(
+            &ctx,
+            Request::SetPin {
+                new_pin: "5678".into(),
+                current_pin: Some("1234".into()),
+            },
+        ));
         let stored = lock_db(&ctx.db)
             .pin_hash()
             .expect("read")
             .expect("configured");
         assert!(verify_pin("5678", &stored), "new PIN must be live");
+        assert_ne!(
+            first_code, second_code,
+            "every vault rotation must retire the old recovery code"
+        );
+    }
+
+    #[test]
+    fn a_recovery_code_resets_a_forgotten_pin_and_rotates_itself() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+        );
+        let code = expect_vault(handle(
+            &ctx,
+            Request::SetPin {
+                new_pin: "1234".into(),
+                current_pin: None,
+            },
+        ));
+
+        // Wrong code refused; right code — even sloppily typed — accepted.
+        assert_eq!(
+            error_code(&handle(
+                &ctx,
+                Request::RecoverPin {
+                    recovery_code: "AAAA-BBBB-CCCC-DDDD".into(),
+                    new_pin: "9999".into()
+                }
+            )),
+            Some(ErrorCode::BadPin)
+        );
+        expect_vault(handle(
+            &ctx,
+            Request::RecoverPin {
+                // Lowercase, no dashes, stray spaces: must still verify.
+                recovery_code: format!(" {} ", code.replace('-', "").to_lowercase()),
+                new_pin: "9999".into(),
+            },
+        ));
+
+        let db_guard = lock_db(&ctx.db);
+        let stored = db_guard.pin_hash().expect("read").expect("configured");
+        assert!(verify_pin("9999", &stored), "recovered PIN must be live");
+
+        // Rotation retired the used code...
+        drop(db_guard);
+        assert_eq!(
+            error_code(&handle(
+                &ctx,
+                Request::RecoverPin {
+                    recovery_code: code.clone(),
+                    new_pin: "1111".into()
+                }
+            )),
+            Some(ErrorCode::BadPin)
+        );
+
+        // ...but a later change can present either the current PIN or the
+        // standing recovery code; each rotation mints a fresh code.
+        let fresh = expect_vault(handle(
+            &ctx,
+            Request::SetPin {
+                new_pin: "2222".into(),
+                current_pin: Some("9999".into()),
+            },
+        ));
+        assert_ne!(fresh, code);
+    }
+
+    #[test]
+    fn removing_the_pin_requires_a_credential_and_clears_the_whole_vault() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+        );
+        let code = expect_vault(handle(
+            &ctx,
+            Request::SetPin {
+                new_pin: "1234".into(),
+                current_pin: None,
+            },
+        ));
+
+        assert_eq!(
+            error_code(&handle(
+                &ctx,
+                Request::RemovePin {
+                    credential: "0000".into()
+                }
+            )),
+            Some(ErrorCode::BadPin),
+            "no credential, no removal"
+        );
+
+        // The recovery code is as good as the PIN for standing down the gate.
+        expect_accepted(
+            handle(&ctx, Request::RemovePin { credential: code }),
+            at("2026-08-20T12:00:00Z"),
+        );
+        // Scoped so the guard cannot deadlock the idempotent call below.
+        {
+            let db_guard = lock_db(&ctx.db);
+            assert_eq!(db_guard.pin_hash().expect("read"), None);
+            assert_eq!(db_guard.recovery_hash().expect("read"), None);
+        }
+
+        // Idempotent when no vault exists.
+        expect_accepted(
+            handle(
+                &ctx,
+                Request::RemovePin {
+                    credential: String::new(),
+                },
+            ),
+            at("2026-08-20T12:00:00Z"),
+        );
     }
 
     #[test]
