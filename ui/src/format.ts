@@ -44,6 +44,7 @@ export function sharePercent(seconds: number, total: number): number {
 }
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] as const;
+const FULL_WEEKDAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"] as const;
 const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const;
 
 export function formatDateline(d: Date): string {
@@ -71,6 +72,27 @@ export function targetLabel(target: LimitTargetDto, catalog: CatalogDto | null):
         case "category":
             return catalog?.categories.find((c) => c.id === target.id)?.name ?? `Category #${target.id}`;
     }
+}
+
+export function dayKeyToDate(key: number): Date {
+    return new Date(Math.floor(key / 10000), Math.floor((key % 10000) / 100) - 1, key % 100, 12);
+}
+
+/** Whole local days of ±delta from a day key. Noon-based so DST never skips it. */
+export function shiftDay(key: number, delta: number): number {
+    return todayKey(new Date(dayKeyToDate(key).getTime() + delta * 86400000));
+}
+
+/** Dateline above the hero when browsing history: "TUESDAY · AUG 24". */
+export function formatDayLabel(key: number): string {
+    const d = dayKeyToDate(key);
+    return `${FULL_WEEKDAYS[d.getDay()]} · ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** Compact ledger bar label: "07·23". */
+export function chartBarLabel(key: number): string {
+    const d = dayKeyToDate(key);
+    return `${pad2(d.getMonth() + 1)}·${pad2(d.getDate())}`;
 }
 
 /** Short labels for the Monday-first weekday slots used by limits. */

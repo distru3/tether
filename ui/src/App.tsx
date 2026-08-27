@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 import { BlockedBanner } from "./components/BlockedBanner";
 import { CategorizeDialog } from "./components/CategorizeDialog";
 import { Hero } from "./components/Hero";
@@ -9,6 +11,7 @@ import { Masthead } from "./components/Masthead";
 import { PinGate } from "./components/PinGate";
 import { PinSetupDialog } from "./components/PinSetupDialog";
 import { Toasts } from "./components/Toasts";
+import { WeeklyChart } from "./components/WeeklyChart";
 import { useDashboard } from "./hooks/useDashboard";
 import { useLedgerActions } from "./hooks/useLedgerActions";
 import { useNowMinute } from "./hooks/useNowMinute";
@@ -16,7 +19,21 @@ import { useToasts } from "./hooks/useToasts";
 import type { LimitDto } from "./types/generated/LimitDto";
 
 export function App() {
-    const { phase, statusInfo, summary, catalog, lastError, refreshCatalog } = useDashboard();
+    const {
+        phase,
+        statusInfo,
+        summary,
+        catalog,
+        lastError,
+        refreshCatalog,
+        viewDay,
+        isViewingToday,
+        week,
+        weekLoading,
+        goPrevDay,
+        goNextDay,
+        goToday,
+    } = useDashboard();
     const now = useNowMinute();
     const { toasts, push, dismiss } = useToasts();
     const actions = useLedgerActions({
@@ -26,11 +43,38 @@ export function App() {
         invalidate: refreshCatalog,
     });
 
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+            const target = event.target;
+            if (
+                target instanceof HTMLElement &&
+                (target.tagName === "INPUT" ||
+                    target.tagName === "SELECT" ||
+                    target.tagName === "TEXTAREA" ||
+                    target.isContentEditable)
+            ) {
+                return;
+            }
+            if (event.key === "ArrowLeft") goPrevDay();
+            else goNextDay();
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [goPrevDay, goNextDay]);
+
     const loading = phase === "connecting" && summary === null;
     const total = summary?.total_seconds ?? 0;
     const categories = (summary?.categories ?? []).filter((row) => row.seconds > 0);
     const apps = (summary?.apps ?? []).filter((row) => row.seconds > 0);
     const blocked = (summary?.apps ?? []).filter((row) => row.blocked);
+
+    const pastDayEmpty =
+        !isViewingToday &&
+        summary !== null &&
+        summary.total_seconds === 0 &&
+        week !== null &&
+        week.days.some((day) => day.day === viewDay && day.total_seconds === 0);
 
     function limitFor(kind: "app" | "category", id: number): LimitDto | undefined {
         return catalog?.limits.find((limit) => limit.target.kind === kind && limit.target.id === id);
@@ -51,33 +95,51 @@ export function App() {
                 <p className="notice notice--dim">Retrying the ledger · {lastError}</p>
             )}
 
-            <Hero summary={summary} loading={loading} />
-            <LedgerRule summary={summary} loading={loading} now={now} />
+            <Hero
+                summary={summary}
+                loading={loading}
+                viewDay={viewDay}
+                isViewingToday={isViewingToday}
+                goPrevDay={goPrevDay}
+                goNextDay={goNextDay}
+                goToday={goToday}
+            />
+            {pastDayEmpty ? (
+                <p className="empty-day">No usage recorded for this day.</p>
+            ) : (
+                <LedgerRule summary={summary} loading={loading} now={now} />
+            )}
+
+            <WeeklyChart week={week} viewDay={viewDay} loading={weekLoading} />
 
             <BlockedBanner blocked={blocked} busy={actions.busy} onOverride={actions.override} />
 
-            <LedgerSection
-                label="By category"
-                kind="category"
-                entries={categories}
-                total={total}
-                limitFor={limitFor}
-                canLimit={(entry) => catalog?.categories.find((c) => c.id === entry.id)?.kind === "limitable"}
-                busy={actions.busy}
-                onEdit={actions.openEditor}
-            />
-            <LedgerSection
-                label="By application"
-                kind="app"
-                entries={apps}
-                total={total}
-                limitFor={limitFor}
-                canLimit={() => true}
-                busy={actions.busy}
-                onEdit={actions.openEditor}
-                onCategorize={actions.openCategorize}
-                catalog={catalog}
-            />
+            {!pastDayEmpty && (
+                <>
+                    <LedgerSection
+                        label="By category"
+                        kind="category"
+                        entries={categories}
+                        total={total}
+                        limitFor={limitFor}
+                        canLimit={(entry) => catalog?.categories.find((c) => c.id === entry.id)?.kind === "limitable"}
+                        busy={actions.busy}
+                        onEdit={actions.openEditor}
+                    />
+                    <LedgerSection
+                        label="By application"
+                        kind="app"
+                        entries={apps}
+                        total={total}
+                        limitFor={limitFor}
+                        canLimit={() => true}
+                        busy={actions.busy}
+                        onEdit={actions.openEditor}
+                        onCategorize={actions.openCategorize}
+                        catalog={catalog}
+                    />
+                </>
+            )}
 
             <LimitsPanel
                 limits={catalog?.limits ?? []}

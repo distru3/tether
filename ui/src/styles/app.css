@@ -1,9 +1,9 @@
 /* ============================================================
    app.css — "The Daily Ledger"
-   Sections: base · masthead · notices · hero · ledger rule ·
-   sections & eyebrows · ledger rows · blocked banner ·
-   standing orders · buttons · forms · per-day overrides ·
-   dialogs · toasts · motion & a11y
+   Sections: base · masthead · notices · hero · hero day nav ·
+   ledger rule · weekly chart · empty day · sections & eyebrows ·
+   ledger rows · blocked banner · standing orders · buttons ·
+   forms · per-day overrides · dialogs · toasts · motion & a11y
    ============================================================ */
 
 /* ---------- base ---------- */
@@ -79,11 +79,19 @@ button {
 /* ---------- masthead + double rule ---------- */
 
 .masthead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
     display: flex;
     justify-content: space-between;
     align-items: baseline;
     gap: 16px;
-    padding-bottom: 10px;
+    /* The negative top margin cancels the extra top padding in the resting
+       layout, so only the pinned state gains breathing room under the edge. */
+    margin-top: -10px;
+    padding: 10px 0;
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
 }
 
 /* Frameless-window chrome: the masthead doubles as the drag region and hosts
@@ -217,7 +225,10 @@ button {
     border: 1.5px solid var(--red);
 }
 
+/* Kept clear of the masthead's pinned underline so the heavy rule still reads
+   as its own element instead of a third stroke fused to the hairline. */
 .rule-double {
+    margin-top: 6px;
     border-top: 3px solid var(--ink);
 }
 
@@ -295,6 +306,56 @@ button {
     margin-top: 14px;
 }
 
+/* ---------- hero day nav ---------- */
+
+/* Only appears while browsing a past day: the dateline pinpoints which day
+   the figure belongs to, with a "Today" chip to step back. */
+
+.hero-toolbar {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+
+.hero-datelabel {
+    font-family: var(--font-display);
+    font-style: italic;
+    font-size: 17px;
+    color: var(--ink-soft);
+}
+
+.hero-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+}
+
+.daynav {
+    flex: none;
+    padding: 2px 8px;
+    border: none;
+    border-radius: 0;
+    background: transparent;
+    font-family: var(--font-utility);
+    font-size: 24px;
+    line-height: 1;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: color 120ms ease;
+}
+
+.daynav:hover:not(:disabled) {
+    color: var(--ink);
+}
+
+.daynav:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
 /* ---------- ledger rule (the band) ---------- */
 
 .ledger {
@@ -357,6 +418,111 @@ button {
     font-variant-numeric: tabular-nums;
 }
 
+/* ---------- weekly chart ---------- */
+
+.week-comp {
+    margin-bottom: 10px;
+    font-family: var(--font-utility);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+}
+
+.week-comp--worse {
+    color: var(--red);
+}
+
+.week-comp--better {
+    color: var(--ink-soft);
+}
+
+.week-comp--flat {
+    color: var(--ink);
+}
+
+.week-comp--na {
+    color: var(--ink-faint);
+}
+
+.week {
+    display: flex;
+    gap: 10px;
+}
+
+.week-col {
+    flex: 1 1 0;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.week-tick {
+    height: 3px;
+    width: 40%;
+    margin: 0 auto;
+    background: var(--red);
+}
+
+.week-track {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    height: 96px;
+    border: 1px solid var(--rule-strong);
+    background: var(--paper);
+}
+
+/* Bars are ink on paper; the browsed day prints red. */
+
+.week-bar {
+    display: block;
+    width: 100%;
+    background: var(--ink);
+    transition: height 0.6s linear;
+}
+
+.week-bar--selected {
+    background: var(--red);
+}
+
+.week-label {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    font-family: var(--font-utility);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-align: center;
+    color: var(--ink-soft);
+    font-variant-numeric: tabular-nums;
+}
+
+.week-label--zero {
+    color: var(--ink-faint);
+}
+
+.skel-bar {
+    width: 100%;
+    height: 100%;
+}
+
+.skel-label {
+    width: 42px;
+    height: 10px;
+}
+
+/* ---------- empty day ---------- */
+
+.empty-day {
+    margin-top: 18px;
+    text-align: center;
+    font-style: italic;
+    font-size: 16px;
+    color: var(--ink-faint);
+}
+
 /* ---------- sections & eyebrows ---------- */
 
 .section {
@@ -389,13 +555,40 @@ button {
     font-style: normal;
 }
 
+.note-faint {
+    color: var(--ink-faint);
+}
+
 /* ---------- ledger rows (entries with leaders) ---------- */
 
 .lrow {
     display: flex;
+    flex-direction: column;
+    padding: 9px 0;
+}
+
+.lrow-line {
+    display: flex;
     align-items: baseline;
     gap: 10px;
-    padding: 9px 0;
+}
+
+/* Limit meter: 3px of ink beneath the row, red once the day's order is spent. */
+
+.lrow-bar {
+    height: 3px;
+    margin-top: 5px;
+    background: var(--paper-deep);
+}
+
+.lrow-bar-fill {
+    height: 100%;
+    background: var(--ink);
+    transition: width 0.6s linear;
+}
+
+.lrow-bar-fill--over {
+    background: var(--red);
 }
 
 .lrow + .lrow {
@@ -499,6 +692,44 @@ button {
     cursor: default;
 }
 
+/* Category chip: the app's primary category in place of a gear button. */
+
+.catchip {
+    flex: none;
+    align-self: center;
+    max-width: 132px;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    padding: 2px 6px;
+    border: 1px solid var(--rule-strong);
+    border-radius: 0;
+    background: transparent;
+    font-family: var(--font-utility);
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    cursor: pointer;
+    transition: background-color 120ms ease;
+}
+
+.catchip:hover:not(:disabled) {
+    background: var(--paper-deep);
+}
+
+.catchip:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+/* Dashed + faint flags the rows that still need a human's decision. */
+
+.catchip--uncat {
+    color: var(--ink-faint);
+    border-style: dashed;
+}
+
 /* ---------- blocked banner + stamp ---------- */
 
 .blocked-banner {
@@ -543,6 +774,18 @@ button {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+}
+
+.blocked-reset {
+    flex: none;
+    align-self: center;
+    margin-left: auto;
+    font-family: var(--font-utility);
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    color: var(--red);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
 }
 
 /* ---------- standing orders ---------- */

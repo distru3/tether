@@ -160,6 +160,20 @@ fn get_day_summary(day: i32) -> CmdResult<st_ipc::DaySummaryDto> {
     }
 }
 
+/// Weekly dashboard payload: the 7 local days ending at `endDay` (inclusive)
+/// plus the previous week's total, fetched from the agent.
+#[tauri::command]
+fn get_weekly_summary(end_day: i32) -> CmdResult<st_ipc::WeeklySummaryDto> {
+    match ipc_client::request(st_ipc::Request::WeeklySummary {
+        end_day: st_core::daykey::DayKey(end_day),
+    }) {
+        Ok(Response::WeeklySummary(dto)) => Ok(dto),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
 /// Everything the limit editor needs: apps, categories and current limits.
 #[tauri::command]
 fn get_catalog() -> CmdResult<st_ipc::CatalogDto> {
@@ -293,6 +307,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_status,
             get_day_summary,
+            get_weekly_summary,
             get_catalog,
             set_pin,
             recover_pin,

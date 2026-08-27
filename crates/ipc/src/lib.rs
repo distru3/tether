@@ -63,6 +63,9 @@ pub enum Request {
     Ping,
     /// Dashboard payload for one day.
     DaySummary { day: DayKey },
+    /// Dashboard payload for the 7 days ending at `end_day` (inclusive),
+    /// plus the previous week's total for the week-over-week comparison.
+    WeeklySummary { end_day: DayKey },
     /// Enforcement state and which capabilities are actually available, so the
     /// UI can be honest about degraded modes.
     Status,
@@ -136,6 +139,7 @@ pub enum Request {
 pub enum Response {
     Pong,
     DaySummary(DaySummaryDto),
+    WeeklySummary(WeeklySummaryDto),
     Status(StatusDto),
     Catalog(CatalogDto),
     BlockedApps(BlockedAppsDto),
@@ -276,6 +280,28 @@ pub struct UsageRowDto {
     #[ts(as = "Option<i32>")]
     pub limit_seconds: Option<i64>,
     pub blocked: bool,
+}
+
+/// Seven-day trend for the dashboard: one grand total per day plus the
+/// previous week's total, so the UI can render a week of bars and a
+/// week-over-week delta in a single round trip.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct WeeklySummaryDto {
+    /// Exactly seven entries covering the 7 days ending at the requested
+    /// `end_day` (inclusive), ordered oldest → newest. Days without usage
+    /// appear as zero, never as holes — the chart always has seven bars.
+    pub days: Vec<DailyTotalDto>,
+    /// Total seconds for the 7 days immediately before `days`.
+    #[ts(as = "i32")]
+    pub previous_week_total: i64,
+}
+
+/// One day's grand total inside a [`WeeklySummaryDto`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct DailyTotalDto {
+    pub day: DayKey,
+    #[ts(as = "i32")]
+    pub total_seconds: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -492,6 +518,50 @@ mod tests {
             read_message::<_, Request>(&mut cursor),
             Ok(Request::BlockedApps)
         ));
+    }
+
+    #[test]
+    fn weekly_summary_request_round_trips() {
+        let mut buf = Vec::new();
+        write_message(
+            &mut buf,
+            &Request::WeeklySummary {
+                end_day: DayKey(20260823),
+            },
+        )
+        .expect("write");
+        let mut cursor = Cursor::new(buf);
+        assert!(matches!(
+            read_message::<_, Request>(&mut cursor),
+            Ok(Request::WeeklySummary { end_day }) if end_day == DayKey(20260823)
+        ));
+    }
+
+    #[test]
+    fn weekly_summary_response_serialises_with_the_type_tag_and_stable_fields() {
+        // Wire-visible shape: the UI charts `days` and renders the delta from
+        // `previous_week_total`, so both field names are contract.
+        let response = Response::WeeklySummary(WeeklySummaryDto {
+            days: vec![
+                DailyTotalDto {
+                    day: DayKey(20260817),
+                    total_seconds: 0,
+                },
+                DailyTotalDto {
+                    day: DayKey(20260818),
+                    total_seconds: 3600,
+                },
+            ],
+            previous_week_total: 7200,
+        });
+        let json = serde_json::to_string(&response).expect("serialise");
+        assert!(
+            json.contains("\"type\":\"weekly_summary\""),
+            "tag missing: {json}"
+        );
+        assert!(json.contains("\"day\":20260817"));
+        assert!(json.contains("\"total_seconds\":3600"));
+        assert!(json.contains("\"previous_week_total\":7200"));
     }
 
     #[test]

@@ -376,6 +376,7 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
         Request::Ping => Response::Pong,
         Request::Status => status_response(ctx),
         Request::DaySummary { day } => day_summary(ctx, day),
+        Request::WeeklySummary { end_day } => weekly_summary(ctx, end_day),
         Request::Catalog => catalog(ctx),
         Request::BlockedApps => blocked_apps(ctx),
         Request::CloseApps { app_id, pin } => close_apps(ctx, app_id, &pin),
@@ -501,6 +502,29 @@ fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
                 blocked: false,
             })
             .collect(),
+    })
+}
+
+/// Seven-day trend plus the previous week's total. The storage layer already
+/// guarantees the shape the wire promises (seven zero-filled days, oldest
+/// first), so this handler is pure mapping.
+fn weekly_summary(ctx: &Ctx, end_day: DayKey) -> Response {
+    let db = lock_db(&ctx.db);
+    let summary = match db.weekly_summary(end_day) {
+        Ok(summary) => summary,
+        Err(e) => return error_internal(format!("weekly summary query failed: {e}")),
+    };
+
+    Response::WeeklySummary(st_ipc::WeeklySummaryDto {
+        days: summary
+            .days
+            .into_iter()
+            .map(|d| st_ipc::DailyTotalDto {
+                day: d.day,
+                total_seconds: d.total_seconds,
+            })
+            .collect(),
+        previous_week_total: summary.previous_week_total,
     })
 }
 
@@ -1960,6 +1984,53 @@ mod tests {
         assert!(dto.apps[0].blocked, "the block must be surfaced honestly");
         assert_eq!(dto.categories.len(), 1);
         assert_eq!(dto.categories[0].seconds, 600);
+    }
+
+    #[test]
+    fn weekly_summary_maps_seven_zero_filled_days_oldest_first_with_previous_week_total() {
+        let mut db = Db::open_in_memory().expect("db");
+        let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
+        // One day inside the reported week (2026-08-28..09-03, crossing the
+        // month boundary), one day in the previous week (..08-27).
+        record_usage(&mut db, app, 600, DayKey(20260829));
+        record_usage(&mut db, app, 1200, DayKey(20260827));
+
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let Response::WeeklySummary(dto) = handle(
+            &ctx,
+            Request::WeeklySummary {
+                end_day: DayKey(20260903),
+            },
+        ) else {
+            panic!("expected WeeklySummary");
+        };
+
+        assert_eq!(dto.days.len(), 7, "always exactly seven days");
+        assert_eq!(dto.days[0].day, DayKey(20260828), "oldest first");
+        assert_eq!(
+            dto.days[0].total_seconds, 0,
+            "empty day is zero, not missing"
+        );
+        assert_eq!(dto.days[1].day, DayKey(20260829));
+        assert_eq!(dto.days[1].total_seconds, 600);
+        assert_eq!(dto.days[6].day, DayKey(20260903), "end day is last");
+        assert_eq!(dto.days[6].total_seconds, 0);
+        assert_eq!(dto.previous_week_total, 1200);
+    }
+
+    #[test]
+    fn weekly_summary_with_an_invalid_day_key_is_an_internal_error() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+        );
+        let response = handle(
+            &ctx,
+            Request::WeeklySummary {
+                end_day: DayKey(20260230), // February 30th does not exist.
+            },
+        );
+        assert_eq!(error_code(&response), Some(ErrorCode::Internal));
     }
 
     // -- Report ingestion. ----------------------------------------------------

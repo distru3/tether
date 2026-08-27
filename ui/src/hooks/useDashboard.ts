@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { describeError, getCatalog, getDaySummary, getStatus } from "../api";
-import { todayKey } from "../format";
+import { describeError, getCatalog, getDaySummary, getStatus, getWeeklySummary } from "../api";
+import { shiftDay, todayKey } from "../format";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import type { StatusDto } from "../types/generated/StatusDto";
+import type { WeeklySummaryDto } from "../types/generated/WeeklySummaryDto";
 
 export type Phase = "connecting" | "live" | "offline";
 
@@ -13,6 +14,10 @@ export type Phase = "connecting" | "live" | "offline";
 // makes the ledger feel like it is counting rather than refreshing.
 const POLL_MS = 1000;
 const CATALOG_MS = 60000;
+// The weekly trend is a seven-day aggregate scan, so it refreshes on a slower
+// visibility-gated 30 s cadence, plus an immediate refetch whenever the
+// browsed day changes (fetchWeek is keyed on viewDay).
+const WEEK_MS = 30000;
 
 export interface Dashboard {
     phase: Phase;
@@ -21,7 +26,15 @@ export interface Dashboard {
     catalog: CatalogDto | null;
     lastError: string | null;
     todayKey: number;
+    viewDay: number;
+    isViewingToday: boolean;
+    week: WeeklySummaryDto | null;
+    weekLoading: boolean;
     refreshCatalog: () => void;
+    setViewDay: (day: number) => void;
+    goPrevDay: () => void;
+    goNextDay: () => void;
+    goToday: () => void;
 }
 
 export function useDashboard(): Dashboard {
@@ -31,9 +44,16 @@ export function useDashboard(): Dashboard {
     const [catalog, setCatalog] = useState<CatalogDto | null>(null);
     const [lastError, setLastError] = useState<string | null>(null);
     const [dayKey, setDayKey] = useState<number>(() => todayKey());
+    const [viewDay, setViewDayRaw] = useState<number>(() => todayKey());
+    const [followingToday, setFollowingToday] = useState(true);
+    const [week, setWeek] = useState<WeeklySummaryDto | null>(null);
+    const [weekLoading, setWeekLoading] = useState(false);
 
     const pollSeq = useRef(0);
     const catalogSeq = useRef(0);
+    const weekSeq = useRef(0);
+
+    const isViewingToday = viewDay === todayKey();
 
     const poll = useCallback(async () => {
         const ticket = ++pollSeq.current;
@@ -41,7 +61,7 @@ export function useDashboard(): Dashboard {
             const status = await getStatus();
             if (ticket !== pollSeq.current) return;
             setStatusInfo(status);
-            const nextSummary = await getDaySummary(todayKey());
+            const nextSummary = await getDaySummary(viewDay);
             if (ticket !== pollSeq.current) return;
             setSummary(nextSummary);
             setPhase("live");
@@ -51,7 +71,7 @@ export function useDashboard(): Dashboard {
             setPhase("offline");
             setLastError(describeError(error));
         }
-    }, []);
+    }, [viewDay]);
 
     const refreshCatalog = useCallback(() => {
         const ticket = ++catalogSeq.current;
@@ -60,6 +80,41 @@ export function useDashboard(): Dashboard {
                 if (ticket === catalogSeq.current) setCatalog(next);
             })
             .catch(() => {});
+    }, []);
+
+    const fetchWeek = useCallback(async () => {
+        const ticket = ++weekSeq.current;
+        setWeekLoading(true);
+        try {
+            const next = await getWeeklySummary(viewDay);
+            if (ticket !== weekSeq.current) return;
+            setWeek(next);
+        } catch {
+            if (ticket !== weekSeq.current) return;
+        } finally {
+            if (ticket === weekSeq.current) setWeekLoading(false);
+        }
+    }, [viewDay]);
+
+    const setViewDay = useCallback((day: number) => {
+        setViewDayRaw(day);
+        setFollowingToday(day === todayKey());
+    }, []);
+
+    const goPrevDay = useCallback(() => {
+        setViewDay(shiftDay(viewDay, -1));
+    }, [viewDay, setViewDay]);
+
+    const goNextDay = useCallback(() => {
+        const next = shiftDay(viewDay, 1);
+        if (next > todayKey()) return;
+        setViewDay(next);
+    }, [viewDay, setViewDay]);
+
+    const goToday = useCallback(() => {
+        const today = todayKey();
+        setViewDayRaw(today);
+        setFollowingToday(true);
     }, []);
 
     useEffect(() => {
@@ -92,6 +147,17 @@ export function useDashboard(): Dashboard {
     }, [refreshCatalog]);
 
     useEffect(() => {
+        void fetchWeek();
+    }, [fetchWeek]);
+
+    useEffect(() => {
+        const timer = window.setInterval(() => {
+            if (!document.hidden) void fetchWeek();
+        }, WEEK_MS);
+        return () => window.clearInterval(timer);
+    }, [fetchWeek]);
+
+    useEffect(() => {
         let handle = 0;
         const schedule = () => {
             const midnight = new Date();
@@ -99,6 +165,7 @@ export function useDashboard(): Dashboard {
             handle = window.setTimeout(
                 () => {
                     setDayKey(todayKey());
+                    if (followingToday) setViewDayRaw(todayKey());
                     void poll();
                     schedule();
                 },
@@ -107,7 +174,23 @@ export function useDashboard(): Dashboard {
         };
         schedule();
         return () => window.clearTimeout(handle);
-    }, [poll]);
+    }, [followingToday, poll]);
 
-    return { phase, statusInfo, summary, catalog, lastError, todayKey: dayKey, refreshCatalog };
+    return {
+        phase,
+        statusInfo,
+        summary,
+        catalog,
+        lastError,
+        todayKey: dayKey,
+        viewDay,
+        isViewingToday,
+        week,
+        weekLoading,
+        refreshCatalog,
+        setViewDay,
+        goPrevDay,
+        goNextDay,
+        goToday,
+    };
 }

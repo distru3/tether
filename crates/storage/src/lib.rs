@@ -27,7 +27,9 @@ mod taxonomy;
 mod usage;
 
 pub use crate::limits::LimitRow;
-pub use crate::reporting::{CategoryRow, DaySnapshot, DaySummary, UsageRow};
+pub use crate::reporting::{
+    CategoryRow, DailyTotal, DaySnapshot, DaySummary, UsageRow, WeeklySummary,
+};
 
 use std::path::Path;
 
@@ -52,6 +54,8 @@ pub enum StorageError {
     UnknownCategory(String),
     #[error("app not found: {0}")]
     AppNotFound(i64),
+    #[error("invalid day key: {0}")]
+    InvalidDay(i32),
 }
 
 /// The agent's single SQLite handle. All queries go through it so that WAL

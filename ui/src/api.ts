@@ -5,6 +5,7 @@ import type { CatalogDto } from "./types/generated/CatalogDto";
 import type { DaySummaryDto } from "./types/generated/DaySummaryDto";
 import type { LimitTargetDto } from "./types/generated/LimitTargetDto";
 import type { StatusDto } from "./types/generated/StatusDto";
+import type { WeeklySummaryDto } from "./types/generated/WeeklySummaryDto";
 
 export type { ErrorCode };
 
@@ -30,6 +31,10 @@ export function getStatus(): Promise<StatusDto> {
 
 export function getDaySummary(day: number): Promise<DaySummaryDto> {
     return invoke("get_day_summary", { day });
+}
+
+export function getWeeklySummary(endDay: number): Promise<WeeklySummaryDto> {
+    return invoke("get_weekly_summary", { endDay });
 }
 
 export function getCatalog(): Promise<CatalogDto> {
