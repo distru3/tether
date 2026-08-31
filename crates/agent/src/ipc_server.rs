@@ -125,6 +125,8 @@ pub struct Policy {
     pub day_start_minutes: i64,
     /// Idle seconds beyond which focused time stops accruing.
     pub idle_threshold_secs: i64,
+    /// Whether to show the remaining time HUD on limited apps.
+    pub show_hud_overlay: bool,
 }
 
 /// Runtime-updated facts shared between IPC workers and the main loop.
@@ -401,7 +403,7 @@ fn add_manual_block(ctx: &Ctx, domain: &str) -> Response {
             message: "Database error".into(),
         };
     }
-    Response::Accepted {
+    Response::Accepted { hud: None,
         effective_utc: ctx.clock.now_utc().to_rfc3339(),
     }
 }
@@ -422,7 +424,7 @@ fn remove_manual_block(ctx: &Ctx, domain: &str) -> Response {
             tracing::error!(error = %e, "failed to remove manual block");
         }
     }
-    Response::Accepted {
+    Response::Accepted { hud: None,
         effective_utc: ctx.clock.now_utc().to_rfc3339(),
     }
 }
@@ -446,6 +448,13 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
             new_pin,
         } => recover_pin(ctx, &recovery_code, &new_pin),
         Request::RemovePin { credential } => remove_pin(ctx, &credential),
+        Request::SetSetting { key, value } => {
+            let mut db_guard = lock_db(&ctx.db);
+            if let Err(e) = db_guard.conn().execute("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value)) {
+                tracing::error!(error = %e, "setting save failed");
+            }
+            Response::Accepted { effective_utc: now.to_rfc3339(), hud: None }
+        },
         Request::SetLimit {
             target,
             default_minutes,
@@ -504,6 +513,7 @@ fn status_response(ctx: &Ctx) -> Response {
         blocks_encrypted_dns: ctx.status.blocks_encrypted_dns,
         strict_mode: ctx.policy.strict_mode,
         pin_configured,
+        show_hud_overlay: ctx.policy.show_hud_overlay,
         path_level: false,
         wildcard_domains: false,
     })
@@ -867,7 +877,7 @@ fn set_limit(ctx: &Ctx, spec: LimitSpec, now: DateTime<Utc>) -> Response {
         )
     };
     match result {
-        Ok(()) => Response::Accepted {
+        Ok(()) => Response::Accepted { hud: None,
             effective_utc: effective.to_rfc3339(),
         },
         Err(e) => error_internal(format!("set limit: {e}")),
@@ -890,7 +900,7 @@ fn delete_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str, now: DateTime<Utc>
     // standing an order down. The enforcer's next evaluation tick thaws
     // whatever the deleted order had frozen.
     match db.delete_limit_by_target(&target) {
-        Ok(()) => Response::Accepted {
+        Ok(()) => Response::Accepted { hud: None,
             effective_utc: now.to_rfc3339(),
         },
         Err(e) => error_internal(format!("delete limit: {e}")),
@@ -911,7 +921,7 @@ fn cancel_pending_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str) -> Respons
     match db.cancel_pending_limit(&target) {
         Ok(()) => {
             // we just use the current time from clock
-            Response::Accepted {
+            Response::Accepted { hud: None,
                 effective_utc: ctx.clock.now_utc().to_rfc3339(),
             }
         },
@@ -1262,7 +1272,7 @@ fn pending_limit_to_dto(row: &st_storage::PendingLimitRow) -> Option<st_ipc::Pen
 }
 
 fn accepted(effective_utc: DateTime<Utc>) -> Response {
-    Response::Accepted {
+    Response::Accepted { hud: None,
         effective_utc: effective_utc.to_rfc3339(),
     }
 }
@@ -1409,6 +1419,7 @@ mod tests {
                 strict_mode: false,
                 day_start_minutes: 0,
                 idle_threshold_secs: 60,
+                show_hud_overlay: true,
             }),
             processes: Arc::new(Mutex::new(Box::new(FakeProcesses::default()))),
             clock: Arc::new(clock),
@@ -1422,6 +1433,7 @@ mod tests {
             strict_mode: false,
             day_start_minutes: 0,
             idle_threshold_secs: 60,
+            show_hud_overlay: true,
         };
         tweak(&mut policy);
         Ctx {
@@ -1456,7 +1468,7 @@ mod tests {
 
     fn expect_accepted(response: Response, expected: DateTime<Utc>) {
         match response {
-            Response::Accepted { effective_utc } => assert_eq!(
+            Response::Accepted { hud: None, effective_utc } => assert_eq!(
                 DateTime::parse_from_rfc3339(&effective_utc)
                     .expect("rfc3339")
                     .with_timezone(&Utc),
@@ -1898,15 +1910,15 @@ mod tests {
 
         let db_guard = lock_db(&ctx.db);
         let today = db_guard.day_snapshot(DayKey(20260820)).expect("snap");
+        let expires = today.active_timer_expires_utc(&LimitTarget::Total).expect("timer expires");
         assert_eq!(
-            today.granted_extra_secs(&LimitTarget::Total),
+            expires.signed_duration_since(at("2026-08-21T02:00:00Z")).num_seconds(),
             900,
             "override credited to the local day"
         );
         let utc_day = db_guard.day_snapshot(DayKey(20260821)).expect("snap");
-        assert_eq!(
-            utc_day.granted_extra_secs(&LimitTarget::Total),
-            0,
+        assert!(
+            utc_day.active_timer_expires_utc(&LimitTarget::Total).is_none(),
             "the UTC calendar day must not receive the bonus"
         );
     }
@@ -2329,6 +2341,7 @@ mod tests {
                 strict_mode: false,
                 day_start_minutes: 0,
                 idle_threshold_secs: 60,
+                show_hud_overlay: true,
             },
             Arc::new(Mutex::new(Box::<FakeProcesses>::default())),
             Arc::new(TestClock::new(at("2026-08-20T12:00:00Z"), 0)),

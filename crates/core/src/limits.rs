@@ -59,6 +59,8 @@ impl Limit {
     }
 }
 
+use chrono::{DateTime, Utc};
+
 /// Today's consumption, supplied by the storage layer.
 ///
 /// A trait rather than a struct so that the engine stays free of SQL and can be
@@ -67,11 +69,9 @@ pub trait UsageSnapshot {
     /// Seconds already spent against this target today.
     fn seconds_used(&self, target: &LimitTarget) -> i64;
 
-    /// Extra seconds granted by a PIN-approved override ("+15 minutes").
-    /// Overrides are additive and expire at the day boundary like everything
-    /// else.
-    fn granted_extra_secs(&self, _target: &LimitTarget) -> i64 {
-        0
+    /// The absolute time at which the active wall-clock timer expires for this target.
+    fn active_timer_expires_utc(&self, _target: &LimitTarget) -> Option<DateTime<Utc>> {
+        None
     }
 }
 
@@ -180,8 +180,7 @@ impl LimitEngine {
             .filter(|l| l.enabled && applies_to(l, app, categories))
             .map(|l| Budget {
                 target: l.target,
-                allowed_secs: l.allowed_secs_for_weekday(weekday)
-                    + usage.granted_extra_secs(&l.target),
+                allowed_secs: l.allowed_secs_for_weekday(weekday),
                 used_secs: usage.seconds_used(&l.target),
             })
             .collect();
@@ -202,6 +201,7 @@ impl LimitEngine {
         blockable: bool,
         weekday: usize,
         usage: &dyn UsageSnapshot,
+        now: DateTime<Utc>,
     ) -> Decision {
         if !blockable {
             return Decision::Allow {
@@ -222,7 +222,20 @@ impl LimitEngine {
             };
         };
 
-        let remaining = budget.remaining_secs();
+        let mut remaining = budget.remaining_secs();
+
+        // If there's an active wall-clock timer, it unconditionally bypasses the budget
+        // for the duration of the timer.
+        if let Some(expires_utc) = usage.active_timer_expires_utc(&budget.target) {
+            let timer_remaining = expires_utc.signed_duration_since(now).num_seconds();
+            if timer_remaining > 0 {
+                // If the timer gives more time than the budget, use it. If the budget
+                // still has more time than the timer, the timer is basically redundant,
+                // but we are in a timer state. The timer overrides the block.
+                remaining = remaining.max(timer_remaining);
+            }
+        }
+
         if remaining <= 0 {
             return Decision::Block {
                 binding: budget.target,
@@ -279,8 +292,8 @@ mod tests {
         fn seconds_used(&self, target: &LimitTarget) -> i64 {
             self.used.get(target).copied().unwrap_or(0)
         }
-        fn granted_extra_secs(&self, target: &LimitTarget) -> i64 {
-            self.granted.get(target).copied().unwrap_or(0)
+        fn active_timer_expires_utc(&self, target: &LimitTarget) -> Option<DateTime<Utc>> {
+            self.granted.get(target).map(|&secs| Utc::now() + chrono::Duration::seconds(secs))
         }
     }
 
@@ -295,7 +308,7 @@ mod tests {
         let engine = LimitEngine::with_default_warnings(vec![]);
         let usage = FakeUsage::default();
         assert!(matches!(
-            engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage),
+            engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage, chrono::Utc::now()),
             Decision::Allow { binding: None, .. }
         ));
     }
@@ -310,7 +323,7 @@ mod tests {
         let usage = FakeUsage::default().used(LimitTarget::Category(SOCIAL), 30 * 60);
 
         assert_eq!(
-            engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage),
+            engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage, chrono::Utc::now()),
             Decision::Block {
                 binding: LimitTarget::Category(SOCIAL)
             }
@@ -330,7 +343,7 @@ mod tests {
             .used(LimitTarget::Category(SHORTFORM), 16 * 60);
 
         assert_eq!(
-            engine.evaluate(TIKTOK, &[SOCIAL, SHORTFORM], true, MONDAY, &usage),
+            engine.evaluate(TIKTOK, &[SOCIAL, SHORTFORM], true, MONDAY, &usage, chrono::Utc::now()),
             Decision::Block {
                 binding: LimitTarget::Category(SHORTFORM)
             }
@@ -346,7 +359,7 @@ mod tests {
         let usage = FakeUsage::default().used(LimitTarget::Category(SHORTFORM), 20 * 60);
 
         assert!(engine
-            .evaluate(TIKTOK, &[SHORTFORM], true, MONDAY, &usage)
+            .evaluate(TIKTOK, &[SHORTFORM], true, MONDAY, &usage, chrono::Utc::now())
             .is_blocked());
     }
 
@@ -357,7 +370,7 @@ mod tests {
         let usage = FakeUsage::default().used(LimitTarget::Total, 120 * 60);
 
         assert_eq!(
-            engine.evaluate(999, &[SOCIAL], true, MONDAY, &usage),
+            engine.evaluate(999, &[SOCIAL], true, MONDAY, &usage, chrono::Utc::now()),
             Decision::Block {
                 binding: LimitTarget::Total
             }
@@ -371,7 +384,7 @@ mod tests {
         let usage = FakeUsage::default().used(LimitTarget::Total, 500 * 60);
 
         // e.g. the terminal, the file manager, or this app itself.
-        assert!(!engine.evaluate(42, &[], false, MONDAY, &usage).is_blocked());
+        assert!(!engine.evaluate(42, &[], false, MONDAY, &usage, chrono::Utc::now()).is_blocked());
     }
 
     #[test]
@@ -384,7 +397,7 @@ mod tests {
 
         // 4 minutes left -> the 5-minute warning, not the 10-minute one.
         let usage = FakeUsage::default().used(LimitTarget::Category(SOCIAL), 26 * 60);
-        match engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage) {
+        match engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage, chrono::Utc::now()) {
             Decision::Warn {
                 threshold_secs,
                 remaining_secs,
@@ -398,7 +411,7 @@ mod tests {
 
         // 30 seconds left -> the 1-minute warning.
         let usage = FakeUsage::default().used(LimitTarget::Category(SOCIAL), 29 * 60 + 30);
-        match engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage) {
+        match engine.evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage, chrono::Utc::now()) {
             Decision::Warn { threshold_secs, .. } => assert_eq!(threshold_secs, 60),
             other => panic!("expected Warn, got {other:?}"),
         }
@@ -413,11 +426,11 @@ mod tests {
 
         // Blocked on a Monday...
         assert!(engine
-            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage)
+            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage, chrono::Utc::now())
             .is_blocked());
         // ...but fine on a Sunday.
         assert!(!engine
-            .evaluate(TIKTOK, &[SOCIAL], true, SUNDAY, &usage)
+            .evaluate(TIKTOK, &[SOCIAL], true, SUNDAY, &usage, chrono::Utc::now())
             .is_blocked());
     }
 
@@ -432,7 +445,7 @@ mod tests {
 
         let usage = FakeUsage::default().used(target, 31 * 60);
         assert!(engine
-            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage)
+            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage, chrono::Utc::now())
             .is_blocked());
 
         // "+15 minutes", PIN approved.
@@ -440,7 +453,7 @@ mod tests {
             .used(target, 31 * 60)
             .granted(target, 15 * 60);
         assert!(!engine
-            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage)
+            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage, chrono::Utc::now())
             .is_blocked());
     }
 
@@ -452,7 +465,7 @@ mod tests {
         let usage = FakeUsage::default().used(LimitTarget::Category(SOCIAL), 99 * 60);
 
         assert!(!engine
-            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage)
+            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &usage, chrono::Utc::now())
             .is_blocked());
     }
 
@@ -464,7 +477,7 @@ mod tests {
             0,
         )]);
         assert!(engine
-            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &FakeUsage::default())
+            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &FakeUsage::default(), chrono::Utc::now())
             .is_blocked());
     }
 

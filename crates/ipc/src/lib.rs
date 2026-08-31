@@ -143,6 +143,10 @@ pub enum Request {
     RemovePin {
         credential: String,
     },
+    SetSetting {
+        key: String,
+        value: String,
+    },
     /// Usage reported by the session helper, which is the only component able
     /// to see the focused window. See [`ReportUsageDto`] for the contract.
     ReportUsage {
@@ -201,6 +205,13 @@ pub enum Request {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct HudStateDto {
+    #[ts(as = "i32")]
+    pub remaining_secs: i64,
+    pub is_timer: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
     Pong,
@@ -218,6 +229,7 @@ pub enum Response {
     /// own send clock to detect and compensate for skew.
     Accepted {
         effective_utc: String,
+        hud: Option<HudStateDto>,
     },
     /// Acknowledgement for the PIN vault operations ([`Request::SetPin`] and
     /// [`Request::RecoverPin`]). `recovery_code` is the freshly minted
@@ -396,6 +408,7 @@ pub struct StatusDto {
     pub blocks_encrypted_dns: bool,
     pub strict_mode: bool,
     pub pin_configured: bool,
+    pub show_hud_overlay: bool,
     /// The active filter can enforce wildcard (subdomain) rules. True only when
     /// the DNS-proxy backend is genuinely applied, not just present.
     pub wildcard_domains: bool,
@@ -888,6 +901,7 @@ mod tests {
 
         let ack = serde_json::to_string(&Response::Accepted {
             effective_utc: "2026-08-25T10:01:00Z".into(),
+            hud: None,
         })
         .expect("serialise");
         assert!(ack.contains("\"type\":\"accepted\""), "tag missing: {ack}");

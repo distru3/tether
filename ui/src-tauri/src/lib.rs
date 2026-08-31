@@ -225,6 +225,11 @@ fn recover_pin(recovery_code: String, new_pin: String) -> CmdResult<PinVaultOut>
 /// Dismantle the vault. `credential` may be the current PIN or the standing
 /// recovery code.
 #[tauri::command]
+fn set_setting(key: String, value: String) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::SetSetting { key, value })
+}
+
+#[tauri::command]
 fn remove_pin(credential: String) -> CmdResult<()> {
     match ipc_client::request(st_ipc::Request::RemovePin { credential }) {
         Ok(Response::Accepted { .. }) => Ok(()),
@@ -264,7 +269,7 @@ fn set_limit(
         enabled,
         pin,
     }) {
-        Ok(Response::Accepted { effective_utc }) => Ok(effective_utc),
+        Ok(Response::Accepted { effective_utc, .. }) => Ok(effective_utc),
         Ok(Response::Error { code, message }) => Err(error_from(code, message)),
         Ok(_) => Err(CommandError::unexpected()),
         Err(e) => Err(CommandError::unreachable(e)),
@@ -274,7 +279,7 @@ fn set_limit(
 #[tauri::command]
 fn delete_limit(target: st_ipc::LimitTargetDto, pin: String) -> CmdResult<String> {
     match ipc_client::request(st_ipc::Request::DeleteLimit { target, pin }) {
-        Ok(Response::Accepted { effective_utc }) => Ok(effective_utc),
+        Ok(Response::Accepted { effective_utc, .. }) => Ok(effective_utc),
         Ok(Response::Error { code, message }) => Err(error_from(code, message)),
         Ok(_) => Err(CommandError::unexpected()),
         Err(e) => Err(CommandError::unreachable(e)),
@@ -473,6 +478,7 @@ pub fn run() {
             set_pin,
             recover_pin,
             remove_pin,
+            set_setting,
             set_limit,
             delete_limit,
             grant_override,

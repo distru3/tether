@@ -16,6 +16,10 @@ pub(crate) const MIGRATIONS: &[(i64, &str)] = &[
         3,
         include_str!("../migrations/0003_total_target_uniqueness.sql"),
     ),
+    (
+        4,
+        include_str!("../migrations/0004_wall_clock_timers.sql"),
+    ),
 ];
 
 impl Db {
@@ -101,7 +105,7 @@ mod tests {
             .conn()
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 3, "upgrade must reach the latest migration");
+        assert_eq!(version, 4, "upgrade must reach the latest migration");
 
         // The 0002 table now exists and is empty but usable.
         let pending: i64 = db
@@ -167,7 +171,7 @@ mod tests {
             .conn()
             .query_row("PRAGMA user_version", [], |row| row.get(0))
             .expect("version");
-        assert_eq!(version, 3);
+        assert_eq!(version, 4);
 
         drop(db);
         let _ = std::fs::remove_dir_all(&dir);

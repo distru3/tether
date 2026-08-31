@@ -5,7 +5,7 @@ export type StatusDto = { agent_version: string, tracker_backend: string, enforc
  * False under Wayland, or wherever the tracker cannot see the focused
  * window. The UI must show a banner rather than an empty dashboard.
  */
-tracking_available: boolean, blocks_encrypted_dns: boolean, strict_mode: boolean, pin_configured: boolean, 
+tracking_available: boolean, blocks_encrypted_dns: boolean, strict_mode: boolean, pin_configured: boolean, show_hud_overlay: boolean, 
 /**
  * The active filter can enforce wildcard (subdomain) rules. True only when
  * the DNS-proxy backend is genuinely applied, not just present.

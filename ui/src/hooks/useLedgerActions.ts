@@ -230,8 +230,22 @@ export function useLedgerActions(deps: Deps) {
         });
     }, [categorizeTarget, runExclusive]);
 
+    const setSetting = useCallback(async (key: string, value: string) => {
+        try {
+            setBusy(true);
+            await api.setSetting(key, value);
+            deps.invalidate();
+            deps.notify("success", "Setting saved.");
+        } catch (e) {
+            deps.notify("error", String(e));
+        } finally {
+            setBusy(false);
+        }
+    }, [deps]);
+
     return {
         busy,
+        setSetting,
         editor,
         gate,
         gateError,

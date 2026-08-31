@@ -14,7 +14,7 @@
 
 use std::collections::HashMap;
 
-use chrono::Duration;
+use chrono::{DateTime, Duration, Utc};
 use rusqlite::params;
 use st_core::category::CategoryKind;
 use st_core::daykey::DayKey;
@@ -26,8 +26,8 @@ use crate::taxonomy::kind_to_str;
 /// One day's usage, ready to feed the limits engine.
 pub struct DaySnapshot {
     pub day: DayKey,
-    used: HashMap<LimitTarget, i64>,
-    granted: HashMap<LimitTarget, i64>,
+    pub used: HashMap<LimitTarget, i64>,
+    pub timer_expires_utc: HashMap<LimitTarget, DateTime<Utc>>,
 }
 
 /// Dashboard-shaped usage for one day. Storage returns this; the agent maps it
@@ -79,8 +79,8 @@ impl UsageSnapshot for DaySnapshot {
         self.used.get(target).copied().unwrap_or(0)
     }
 
-    fn granted_extra_secs(&self, target: &LimitTarget) -> i64 {
-        self.granted.get(target).copied().unwrap_or(0)
+    fn active_timer_expires_utc(&self, target: &LimitTarget) -> Option<DateTime<Utc>> {
+        self.timer_expires_utc.get(target).copied()
     }
 }
 
@@ -133,10 +133,10 @@ impl Db {
         )?;
         used.insert(LimitTarget::Total, total);
 
-        // Active overrides.
-        let mut granted: HashMap<LimitTarget, i64> = HashMap::new();
+        // Active overrides (wall-clock timers).
+        let mut timer_expires_utc: HashMap<LimitTarget, DateTime<Utc>> = HashMap::new();
         let mut stmt = self.conn.prepare(
-            "SELECT target_type, target_id, SUM(granted_secs)
+            "SELECT target_type, target_id, MAX(expires_utc)
              FROM overrides WHERE day_key = ?1
              GROUP BY target_type, target_id",
         )?;
@@ -144,16 +144,20 @@ impl Db {
             Ok((
                 r.get::<_, String>(0)?,
                 r.get::<_, Option<i64>>(1)?,
-                r.get::<_, i64>(2)?,
+                r.get::<_, Option<String>>(2)?,
             ))
         })? {
-            let (target_type, target_id, secs) = row?;
+            let (target_type, target_id, expires_str) = row?;
             if let Some(target) = row_to_target(&target_type, target_id) {
-                granted.insert(target, secs);
+                if let Some(s) = expires_str {
+                    if let Ok(dt) = s.parse::<DateTime<Utc>>() {
+                        timer_expires_utc.insert(target, dt);
+                    }
+                }
             }
         }
 
-        Ok(DaySnapshot { day, used, granted })
+        Ok(DaySnapshot { day, used, timer_expires_utc })
     }
 
     /// Dashboard rows for one day: per-app and per-primary-category usage,

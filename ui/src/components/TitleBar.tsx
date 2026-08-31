@@ -32,10 +32,10 @@ export function TitleBar() {
                 </div>
                 <span className="titlebar-title" data-tauri-drag-region>Screentime</span>
             </div>
-            
+
             <div className="titlebar-controls">
-                <button 
-                    className="titlebar-btn" 
+                <button
+                    className="titlebar-btn"
                     onClick={() => appWindow.minimize()}
                     title="Minimize"
                 >
@@ -43,8 +43,8 @@ export function TitleBar() {
                         <path d="M1 5H9" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
                     </svg>
                 </button>
-                <button 
-                    className="titlebar-btn" 
+                <button
+                    className="titlebar-btn"
                     onClick={() => appWindow.toggleMaximize()}
                     title={isMaximized ? "Restore Down" : "Maximize"}
                 >
@@ -59,8 +59,8 @@ export function TitleBar() {
                         </svg>
                     )}
                 </button>
-                <button 
-                    className="titlebar-btn titlebar-btn-close" 
+                <button
+                    className="titlebar-btn titlebar-btn-close"
                     onClick={() => appWindow.hide()}
                     title="Close"
                 >
@@ -72,3 +72,4 @@ export function TitleBar() {
         </div>
     );
 }
+

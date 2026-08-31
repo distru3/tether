@@ -232,6 +232,7 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
             strict_mode,
             day_start_minutes,
             idle_threshold_secs: idle_threshold as i64,
+            show_hud_overlay: lock_db(&db).setting("show_hud_overlay").ok().flatten().map(|v| v != "false").unwrap_or(true),
         },
         processes,
         clock.clone(),

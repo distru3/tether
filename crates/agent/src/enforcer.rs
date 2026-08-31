@@ -155,6 +155,7 @@ impl Enforcer {
             blockable,
             today.weekday_index().unwrap_or(0),
             &snapshot,
+            now,
         );
 
         match decision {

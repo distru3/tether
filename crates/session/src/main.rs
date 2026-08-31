@@ -67,6 +67,8 @@ mod snapshot;
 
 #[cfg(windows)]
 mod overlay;
+#[cfg(windows)]
+mod hud;
 
 /// Non-Windows shim: overlays are Win32 work, and the agent transport does not
 /// exist off-Windows yet either. Keeping the type present lets this binary
@@ -78,6 +80,14 @@ mod overlay {
 
     impl OverlayRun {
         pub fn dismiss_and_join(self) {}
+    }
+}
+#[cfg(not(windows))]
+mod hud {
+    pub struct HudOverlayRun;
+    impl HudOverlayRun {
+        pub fn dismiss(self) {}
+        pub fn update(&self, _r: i64, _t: bool) {}
     }
 }
 
@@ -123,7 +133,8 @@ struct SessionState {
     /// Tracks ReportUsage health across cycles purely to log *transitions*
     /// once instead of spamming a warning every second while the agent lacks
     /// ingest support.
-    usage_flowing: Option<bool>,
+    pub usage_flowing: Option<bool>,
+    pub hud: Option<st_ipc::HudStateDto>,
 }
 
 impl SessionState {
@@ -193,9 +204,11 @@ fn main() -> anyhow::Result<()> {
         blocked_fetched_at: None,
         prev_focused: None,
         usage_flowing: None,
+        hud: None,
     };
     // App id paired with its live overlay thread handle.
     let mut active: Option<(i64, overlay::OverlayRun)> = None;
+    let mut active_hud: Option<(i64, hud::HudOverlayRun)> = None;
 
     loop {
         let tick = Instant::now();
@@ -295,6 +308,27 @@ fn main() -> anyhow::Result<()> {
         }
         sess.prev_focused = focused;
 
+        // -- 7. HUD reconcile -------------------------------------------------
+        #[cfg(windows)]
+        {
+            if let Some(hud_state) = &sess.hud {
+                if active_hud.is_none() {
+                    if let Some(snap) = snapshot::focused_snapshot() {
+                        if snap.rect.2 > 0 && snap.rect.3 > 0 {
+                            active_hud = Some((0, hud::spawn_hud_overlay(snap.rect)));
+                        }
+                    }
+                }
+                if let Some((_, ref run)) = active_hud {
+                    run.update(hud_state.remaining_secs, hud_state.is_timer);
+                }
+            } else {
+                if let Some((_, run)) = active_hud.take() {
+                    run.dismiss();
+                }
+            }
+        }
+
         // Hold the cadence even when a cycle's work took real time.
         let spent = tick.elapsed();
         if spent < POLL {
@@ -359,13 +393,14 @@ fn run_frames(
         observations: outbox.clone(),
     };
     match link::round_trip(stream, &Request::ReportUsage { report }) {
-        Ok(Response::Accepted { effective_utc }) => {
+        Ok(Response::Accepted { effective_utc, hud }) => {
             log_ingest_ack(&effective_utc, sent_at);
             outbox.clear();
             if sess.usage_flowing != Some(true) {
                 tracing::info!("usage reporting acknowledged by agent");
             }
             sess.usage_flowing = Some(true);
+            sess.hud = hud;
         }
         // Whole-batch discard + idempotency makes retaining correct.
         Ok(Response::Error { code, message }) => {

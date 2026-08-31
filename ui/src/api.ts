@@ -60,6 +60,10 @@ export function removePin(credential: string): Promise<void> {
     return invoke("remove_pin", { credential });
 }
 
+export function setSetting(key: string, value: string): Promise<void> {
+    return invoke("set_setting", { key, value });
+}
+
 export function setLimit(
     target: LimitTargetDto,
     defaultMinutes: number,

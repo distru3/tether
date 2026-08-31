@@ -5,9 +5,10 @@ import type { CatalogDto } from "./CatalogDto";
 import type { DaySummaryDto } from "./DaySummaryDto";
 import type { ErrorCode } from "./ErrorCode";
 import type { FocusSessionDto } from "./FocusSessionDto";
+import type { HudStateDto } from "./HudStateDto";
 import type { ScheduleDto } from "./ScheduleDto";
 import type { SchedulesDto } from "./SchedulesDto";
 import type { StatusDto } from "./StatusDto";
 import type { WeeklySummaryDto } from "./WeeklySummaryDto";
 
-export type Response = { "type": "pong" } | { "type": "day_summary" } & DaySummaryDto | { "type": "weekly_summary" } & WeeklySummaryDto | { "type": "status" } & StatusDto | { "type": "catalog" } & CatalogDto | { "type": "blocked_apps" } & BlockedAppsDto | { "type": "accepted", effective_utc: string, } | { "type": "pin_vault", recovery_code: string, } | { "type": "error", code: ErrorCode, message: string, } | { "type": "schedules" } & SchedulesDto | { "type": "schedule_created" } & ScheduleDto | { "type": "allowlist" } & AllowlistDto | { "type": "focus_session", session: FocusSessionDto | null, } | { "type": "manual_blocks", domains: Array<string>, };
+export type Response = { "type": "pong" } | { "type": "day_summary" } & DaySummaryDto | { "type": "weekly_summary" } & WeeklySummaryDto | { "type": "status" } & StatusDto | { "type": "catalog" } & CatalogDto | { "type": "blocked_apps" } & BlockedAppsDto | { "type": "accepted", effective_utc: string, hud: HudStateDto | null, } | { "type": "pin_vault", recovery_code: string, } | { "type": "error", code: ErrorCode, message: string, } | { "type": "schedules" } & SchedulesDto | { "type": "schedule_created" } & ScheduleDto | { "type": "allowlist" } & AllowlistDto | { "type": "focus_session", session: FocusSessionDto | null, } | { "type": "manual_blocks", domains: Array<string>, };

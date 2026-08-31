@@ -572,7 +572,7 @@ mod tests {
         let weekday = day.weekday_index().expect("weekday");
 
         assert!(engine
-            .evaluate(app, &[shortform], true, weekday, &snap)
+            .evaluate(app, &[shortform], true, weekday, &snap, chrono::Utc::now())
             .is_blocked());
     }
 

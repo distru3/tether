@@ -25,10 +25,20 @@ impl Db {
         reason: Option<&str>,
     ) -> Result<()> {
         let (target_type, target_id) = target_to_row(target);
+        // We write expires_utc = now + seconds.
+        let expires_utc = now + chrono::Duration::seconds(seconds);
         self.conn.execute(
-            "INSERT INTO overrides (target_type, target_id, day_key, granted_secs, granted_utc, reason)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-            params![target_type, target_id, day.0, seconds, now.to_rfc3339(), reason],
+            "INSERT INTO overrides (target_type, target_id, day_key, granted_secs, granted_utc, reason, expires_utc)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            params![
+                target_type,
+                target_id,
+                day.0,
+                seconds,
+                now.to_rfc3339(),
+                reason,
+                expires_utc.to_rfc3339()
+            ],
         )?;
         self.audit(now, "override_granted", reason)
     }
@@ -154,7 +164,8 @@ mod tests {
         db.grant_override(&target, day, 15 * 60, now(), Some("test"))
             .expect("grant");
         let snap = db.day_snapshot(day).expect("snapshot");
-        assert_eq!(snap.granted_extra_secs(&target), 15 * 60);
+        let expires = snap.active_timer_expires_utc(&target).expect("timer expires");
+        assert_eq!(expires.signed_duration_since(now()).num_seconds(), 15 * 60);
     }
 
     /// The production schema CHECKs `subject_type`, so simulate a future or
