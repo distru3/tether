@@ -42,9 +42,8 @@ use st_core::model::{AppKey, SubjectRef};
 use st_core::pin::{generate_recovery_code, hash_pin, normalize_recovery_code, verify_pin};
 use st_core::platform::ProcessController;
 use st_ipc::{
-    transport, AllowlistDto, BlockRuleDto, BlockRulesDto, BlockedAppsDto, CatalogDto, DaySummaryDto,
-    ErrorCode, FocusSessionDto, LimitTargetDto, ObservationDto, ReportUsageDto, Request, Response,
-    ScheduleDto, SchedulesDto, StatusDto, UsageRowDto, WeeklySummaryDto,
+    transport, ErrorCode, LimitTargetDto, ObservationDto, ReportUsageDto,
+    Request, Response, StatusDto, UsageRowDto,
 };
 use st_storage::{Db, LimitRow};
 
@@ -403,7 +402,8 @@ fn add_manual_block(ctx: &Ctx, domain: &str) -> Response {
             message: "Database error".into(),
         };
     }
-    Response::Accepted { hud: None,
+    Response::Accepted {
+        hud: None,
         effective_utc: ctx.clock.now_utc().to_rfc3339(),
     }
 }
@@ -424,7 +424,8 @@ fn remove_manual_block(ctx: &Ctx, domain: &str) -> Response {
             tracing::error!(error = %e, "failed to remove manual block");
         }
     }
-    Response::Accepted { hud: None,
+    Response::Accepted {
+        hud: None,
         effective_utc: ctx.clock.now_utc().to_rfc3339(),
     }
 }
@@ -449,12 +450,15 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
         } => recover_pin(ctx, &recovery_code, &new_pin),
         Request::RemovePin { credential } => remove_pin(ctx, &credential),
         Request::SetSetting { key, value } => {
-            let mut db_guard = lock_db(&ctx.db);
+            let db_guard = lock_db(&ctx.db);
             if let Err(e) = db_guard.conn().execute("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value)) {
                 tracing::error!(error = %e, "setting save failed");
             }
-            Response::Accepted { effective_utc: now.to_rfc3339(), hud: None }
-        },
+            Response::Accepted {
+                effective_utc: now.to_rfc3339(),
+                hud: None,
+            }
+        }
         Request::SetLimit {
             target,
             default_minutes,
@@ -604,14 +608,18 @@ fn weekly_summary(ctx: &Ctx, end_day: DayKey) -> Response {
 
 fn catalog(ctx: &Ctx) -> Response {
     let db = lock_db(&ctx.db);
-    let (apps, categories, limits, pending_limits) =
-        match (db.list_apps(), db.list_categories(), db.list_limit_rows(), db.list_pending_limits()) {
-            (Ok(apps), Ok(categories), Ok(limits), Ok(pending)) => (apps, categories, limits, pending),
-            (Err(e), _, _, _) => return error_internal(format!("list apps: {e}")),
-            (_, Err(e), _, _) => return error_internal(format!("list categories: {e}")),
-            (_, _, Err(e), _) => return error_internal(format!("list limits: {e}")),
-            (_, _, _, Err(e)) => return error_internal(format!("list pending limits: {e}")),
-        };
+    let (apps, categories, limits, pending_limits) = match (
+        db.list_apps(),
+        db.list_categories(),
+        db.list_limit_rows(),
+        db.list_pending_limits(),
+    ) {
+        (Ok(apps), Ok(categories), Ok(limits), Ok(pending)) => (apps, categories, limits, pending),
+        (Err(e), _, _, _) => return error_internal(format!("list apps: {e}")),
+        (_, Err(e), _, _) => return error_internal(format!("list categories: {e}")),
+        (_, _, Err(e), _) => return error_internal(format!("list limits: {e}")),
+        (_, _, _, Err(e)) => return error_internal(format!("list pending limits: {e}")),
+    };
 
     Response::Catalog(st_ipc::CatalogDto {
         apps: apps
@@ -642,7 +650,10 @@ fn catalog(ctx: &Ctx) -> Response {
             })
             .collect(),
         limits: limits.iter().filter_map(limit_to_dto).collect(),
-        pending_limits: pending_limits.iter().filter_map(pending_limit_to_dto).collect(),
+        pending_limits: pending_limits
+            .iter()
+            .filter_map(pending_limit_to_dto)
+            .collect(),
     })
 }
 
@@ -877,7 +888,8 @@ fn set_limit(ctx: &Ctx, spec: LimitSpec, now: DateTime<Utc>) -> Response {
         )
     };
     match result {
-        Ok(()) => Response::Accepted { hud: None,
+        Ok(()) => Response::Accepted {
+            hud: None,
             effective_utc: effective.to_rfc3339(),
         },
         Err(e) => error_internal(format!("set limit: {e}")),
@@ -900,7 +912,8 @@ fn delete_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str, now: DateTime<Utc>
     // standing an order down. The enforcer's next evaluation tick thaws
     // whatever the deleted order had frozen.
     match db.delete_limit_by_target(&target) {
-        Ok(()) => Response::Accepted { hud: None,
+        Ok(()) => Response::Accepted {
+            hud: None,
             effective_utc: now.to_rfc3339(),
         },
         Err(e) => error_internal(format!("delete limit: {e}")),
@@ -921,10 +934,11 @@ fn cancel_pending_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str) -> Respons
     match db.cancel_pending_limit(&target) {
         Ok(()) => {
             // we just use the current time from clock
-            Response::Accepted { hud: None,
+            Response::Accepted {
+                hud: None,
                 effective_utc: ctx.clock.now_utc().to_rfc3339(),
             }
-        },
+        }
         Err(e) => error_internal(format!("cancel pending limit: {e}")),
     }
 }
@@ -1272,7 +1286,8 @@ fn pending_limit_to_dto(row: &st_storage::PendingLimitRow) -> Option<st_ipc::Pen
 }
 
 fn accepted(effective_utc: DateTime<Utc>) -> Response {
-    Response::Accepted { hud: None,
+    Response::Accepted {
+        hud: None,
         effective_utc: effective_utc.to_rfc3339(),
     }
 }
@@ -1468,7 +1483,10 @@ mod tests {
 
     fn expect_accepted(response: Response, expected: DateTime<Utc>) {
         match response {
-            Response::Accepted { hud: None, effective_utc } => assert_eq!(
+            Response::Accepted {
+                hud: None,
+                effective_utc,
+            } => assert_eq!(
                 DateTime::parse_from_rfc3339(&effective_utc)
                     .expect("rfc3339")
                     .with_timezone(&Utc),
@@ -1910,15 +1928,21 @@ mod tests {
 
         let db_guard = lock_db(&ctx.db);
         let today = db_guard.day_snapshot(DayKey(20260820)).expect("snap");
-        let expires = today.active_timer_expires_utc(&LimitTarget::Total).expect("timer expires");
+        let expires = today
+            .active_timer_expires_utc(&LimitTarget::Total)
+            .expect("timer expires");
         assert_eq!(
-            expires.signed_duration_since(at("2026-08-21T02:00:00Z")).num_seconds(),
+            expires
+                .signed_duration_since(at("2026-08-21T02:00:00Z"))
+                .num_seconds(),
             900,
             "override credited to the local day"
         );
         let utc_day = db_guard.day_snapshot(DayKey(20260821)).expect("snap");
         assert!(
-            utc_day.active_timer_expires_utc(&LimitTarget::Total).is_none(),
+            utc_day
+                .active_timer_expires_utc(&LimitTarget::Total)
+                .is_none(),
             "the UTC calendar day must not receive the bonus"
         );
     }

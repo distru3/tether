@@ -66,9 +66,9 @@ mod link;
 mod snapshot;
 
 #[cfg(windows)]
-mod overlay;
-#[cfg(windows)]
 mod hud;
+#[cfg(windows)]
+mod overlay;
 
 /// Non-Windows shim: overlays are Win32 work, and the agent transport does not
 /// exist off-Windows yet either. Keeping the type present lets this binary

@@ -78,8 +78,8 @@ pub(crate) fn uninstall() -> Result<()> {
 #[cfg(windows)]
 mod win {
     use std::ffi::OsString;
-    use std::path::PathBuf;
     use std::os::windows::process::CommandExt;
+    use std::path::PathBuf;
     use std::process::Command;
     use std::time::Duration;
 

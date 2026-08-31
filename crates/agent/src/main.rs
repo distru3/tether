@@ -232,7 +232,12 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
             strict_mode,
             day_start_minutes,
             idle_threshold_secs: idle_threshold as i64,
-            show_hud_overlay: lock_db(&db).setting("show_hud_overlay").ok().flatten().map(|v| v != "false").unwrap_or(true),
+            show_hud_overlay: lock_db(&db)
+                .setting("show_hud_overlay")
+                .ok()
+                .flatten()
+                .map(|v| v != "false")
+                .unwrap_or(true),
         },
         processes,
         clock.clone(),
@@ -299,7 +304,10 @@ fn run_main_loop(
                 if let Err(e) = backends.filter.apply(&apply_rules) {
                     tracing::error!(error = %e, "failed to apply manual block rules to hosts file");
                 } else {
-                    tracing::info!("applied {} manual block rules to hosts file", apply_rules.len());
+                    tracing::info!(
+                        "applied {} manual block rules to hosts file",
+                        apply_rules.len()
+                    );
                 }
                 last_manual_domains = current_domains;
             }

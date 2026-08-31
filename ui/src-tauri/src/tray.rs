@@ -59,8 +59,24 @@ pub fn run_emergency_network_reset() {
         }
 
         // 2. Reset common network adapter DNS settings to DHCP silently
-        for adapter in &["Wi-Fi", "Ethernet", "Ethernet 2", "Ethernet 3", "Local Area Connection"] {
-            silent_cmd("netsh", &["interface", "ipv4", "set", "dnsservers", &format!("name={adapter}"), "source=dhcp"]);
+        for adapter in &[
+            "Wi-Fi",
+            "Ethernet",
+            "Ethernet 2",
+            "Ethernet 3",
+            "Local Area Connection",
+        ] {
+            silent_cmd(
+                "netsh",
+                &[
+                    "interface",
+                    "ipv4",
+                    "set",
+                    "dnsservers",
+                    &format!("name={adapter}"),
+                    "source=dhcp",
+                ],
+            );
         }
 
         // 3. Delete Screentime firewall rules silently
@@ -70,15 +86,69 @@ pub fn run_emergency_network_reset() {
             "Screentime-Block-Outbound-DNS",
             "Screentime-Allow-Upstream-DNS",
         ] {
-            silent_cmd("netsh", &["advfirewall", "firewall", "delete", "rule", &format!("name={rule}")]);
+            silent_cmd(
+                "netsh",
+                &[
+                    "advfirewall",
+                    "firewall",
+                    "delete",
+                    "rule",
+                    &format!("name={rule}"),
+                ],
+            );
         }
 
         // 4. Remove browser DoH registry policies silently
-        silent_cmd("reg", &["delete", r"HKLM\SOFTWARE\Policies\Google\Chrome", "/v", "DnsOverHttpsMode", "/f"]);
-        silent_cmd("reg", &["delete", r"HKLM\SOFTWARE\Policies\Microsoft\Edge", "/v", "DnsOverHttpsMode", "/f"]);
-        silent_cmd("reg", &["delete", r"HKLM\SOFTWARE\Policies\BraveSoftware\Brave", "/v", "DnsOverHttpsMode", "/f"]);
-        silent_cmd("reg", &["delete", r"HKLM\SOFTWARE\Policies\Mozilla\Firefox\DNSOverHTTPS", "/v", "Enabled", "/f"]);
-        silent_cmd("reg", &["delete", r"HKLM\SOFTWARE\Policies\Mozilla\Firefox\DNSOverHTTPS", "/v", "Locked", "/f"]);
+        silent_cmd(
+            "reg",
+            &[
+                "delete",
+                r"HKLM\SOFTWARE\Policies\Google\Chrome",
+                "/v",
+                "DnsOverHttpsMode",
+                "/f",
+            ],
+        );
+        silent_cmd(
+            "reg",
+            &[
+                "delete",
+                r"HKLM\SOFTWARE\Policies\Microsoft\Edge",
+                "/v",
+                "DnsOverHttpsMode",
+                "/f",
+            ],
+        );
+        silent_cmd(
+            "reg",
+            &[
+                "delete",
+                r"HKLM\SOFTWARE\Policies\BraveSoftware\Brave",
+                "/v",
+                "DnsOverHttpsMode",
+                "/f",
+            ],
+        );
+        silent_cmd(
+            "reg",
+            &[
+                "delete",
+                r"HKLM\SOFTWARE\Policies\Mozilla\Firefox\DNSOverHTTPS",
+                "/v",
+                "Enabled",
+                "/f",
+            ],
+        );
+        silent_cmd(
+            "reg",
+            &[
+                "delete",
+                r"HKLM\SOFTWARE\Policies\Mozilla\Firefox\DNSOverHTTPS",
+                "/v",
+                "Locked",
+                "/f",
+            ],
+        );
 
         // 5. Flush local DNS resolver cache silently
         silent_cmd("ipconfig", &["/flushdns"]);
@@ -108,8 +178,20 @@ pub fn stop_all_services(app: &AppHandle) {
 /// Initialize the system tray icon with menu actions and click handlers.
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let open_item = MenuItem::with_id(app, "open", "Open Screentime", true, None::<&str>)?;
-    let reset_item = MenuItem::with_id(app, "reset_net", "Emergency Reset Network", true, None::<&str>)?;
-    let stop_item = MenuItem::with_id(app, "stop_all", "Exit & Stop All Services", true, None::<&str>)?;
+    let reset_item = MenuItem::with_id(
+        app,
+        "reset_net",
+        "Emergency Reset Network",
+        true,
+        None::<&str>,
+    )?;
+    let stop_item = MenuItem::with_id(
+        app,
+        "stop_all",
+        "Exit & Stop All Services",
+        true,
+        None::<&str>,
+    )?;
     let quit_item = MenuItem::with_id(app, "quit", "Quit Screentime UI", true, None::<&str>)?;
 
     let menu = Menu::with_items(app, &[&open_item, &reset_item, &stop_item, &quit_item])?;
@@ -124,26 +206,24 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .tooltip("Screentime")
         .menu(&menu)
         .show_menu_on_left_click(false)
-        .on_menu_event(|app, event| {
-            match event.id.as_ref() {
-                "open" => {
-                    if let Some(window) = app.get_webview_window("main") {
-                        let _ = window.show();
-                        let _ = window.unminimize();
-                        let _ = window.set_focus();
-                    }
+        .on_menu_event(|app, event| match event.id.as_ref() {
+            "open" => {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
                 }
-                "reset_net" => {
-                    run_emergency_network_reset();
-                }
-                "stop_all" => {
-                    stop_all_services(app);
-                }
-                "quit" => {
-                    app.exit(0);
-                }
-                _ => {}
             }
+            "reset_net" => {
+                run_emergency_network_reset();
+            }
+            "stop_all" => {
+                stop_all_services(app);
+            }
+            "quit" => {
+                app.exit(0);
+            }
+            _ => {}
         })
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click {

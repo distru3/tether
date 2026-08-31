@@ -854,7 +854,6 @@ mod tests {
         }
     }
 
-
     #[test]
     fn report_usage_round_trips_through_framing() {
         let mut buf = Vec::new();

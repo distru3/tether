@@ -157,7 +157,11 @@ impl Db {
             }
         }
 
-        Ok(DaySnapshot { day, used, timer_expires_utc })
+        Ok(DaySnapshot {
+            day,
+            used,
+            timer_expires_utc,
+        })
     }
 
     /// Dashboard rows for one day: per-app and per-primary-category usage,

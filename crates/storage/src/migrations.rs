@@ -16,10 +16,7 @@ pub(crate) const MIGRATIONS: &[(i64, &str)] = &[
         3,
         include_str!("../migrations/0003_total_target_uniqueness.sql"),
     ),
-    (
-        4,
-        include_str!("../migrations/0004_wall_clock_timers.sql"),
-    ),
+    (4, include_str!("../migrations/0004_wall_clock_timers.sql")),
 ];
 
 impl Db {

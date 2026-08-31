@@ -1,16 +1,15 @@
-use std::sync::Arc;
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    CreateFontW, CreateSolidBrush, DeleteObject, ExtTextOutW, SelectObject, FillRect, SetBkMode, SetTextColor,
-    ETO_OPTIONS, HDC, HFONT, HGDIOBJ, TRANSPARENT,
+    CreateFontW, CreateSolidBrush, DeleteObject, ExtTextOutW, FillRect, SelectObject, SetBkMode,
+    SetTextColor, ETO_OPTIONS, TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-    PostMessageW, RegisterClassExW, SetLayeredWindowAttributes, TranslateMessage,
-    MSG, WM_CLOSE, WM_DESTROY, WM_PAINT, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE,
-    WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE, WM_USER, PostQuitMessage,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostMessageW,
+    PostQuitMessage, RegisterClassExW, SetLayeredWindowAttributes, TranslateMessage, MSG, WM_CLOSE,
+    WM_DESTROY, WM_PAINT, WM_USER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST,
+    WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
 };
 
 const WM_UPDATE_HUD: u32 = WM_USER + 1;
@@ -47,43 +46,47 @@ impl HudOverlayRun {
 
 pub fn spawn_hud_overlay(target_rect: (i32, i32, i32, i32)) -> HudOverlayRun {
     let (tx, rx) = std::sync::mpsc::channel();
-    let thread = std::thread::spawn(move || {
-        unsafe {
-            let instance = GetModuleHandleW(None).unwrap();
-            let class_name = w!("ScreentimeHudClass");
-            let wc = WNDCLASSEXW {
-                cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
-                lpfnWndProc: Some(wndproc),
-                hInstance: instance.into(),
-                lpszClassName: class_name,
-                ..Default::default()
-            };
-            let _ = RegisterClassExW(&wc);
+    let thread = std::thread::spawn(move || unsafe {
+        let instance = GetModuleHandleW(None).unwrap();
+        let class_name = w!("ScreentimeHudClass");
+        let wc = WNDCLASSEXW {
+            cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
+            lpfnWndProc: Some(wndproc),
+            hInstance: instance.into(),
+            lpszClassName: class_name,
+            ..Default::default()
+        };
+        let _ = RegisterClassExW(&wc);
 
-            let hwnd = CreateWindowExW(
-                WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
-                class_name,
-                PCWSTR::null(),
-                WS_POPUP | WS_VISIBLE,
-                target_rect.0 + (target_rect.2 / 2) - 30,
-                target_rect.1 + 10,
-                60,
-                24,
-                None,
-                None,
-                instance,
-                None,
-            )
-            .unwrap();
+        let hwnd = CreateWindowExW(
+            WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+            class_name,
+            PCWSTR::null(),
+            WS_POPUP | WS_VISIBLE,
+            target_rect.0 + (target_rect.2 / 2) - 30,
+            target_rect.1 + 10,
+            60,
+            24,
+            None,
+            None,
+            instance,
+            None,
+        )
+        .unwrap();
 
-            SetLayeredWindowAttributes(hwnd, COLORREF(0), 220, windows::Win32::UI::WindowsAndMessaging::LWA_ALPHA).unwrap();
-            tx.send(hwnd.0 as isize).unwrap();
+        SetLayeredWindowAttributes(
+            hwnd,
+            COLORREF(0),
+            220,
+            windows::Win32::UI::WindowsAndMessaging::LWA_ALPHA,
+        )
+        .unwrap();
+        tx.send(hwnd.0 as isize).unwrap();
 
-            let mut msg = MSG::default();
-            while GetMessageW(&mut msg, None, 0, 0).into() {
-                TranslateMessage(&msg);
-                DispatchMessageW(&msg);
-            }
+        let mut msg = MSG::default();
+        while GetMessageW(&mut msg, None, 0, 0).into() {
+            let _ = TranslateMessage(&msg);
+            DispatchMessageW(&msg);
         }
     });
 
@@ -94,12 +97,7 @@ pub fn spawn_hud_overlay(target_rect: (i32, i32, i32, i32)) -> HudOverlayRun {
     }
 }
 
-unsafe extern "system" fn wndproc(
-    hwnd: HWND,
-    msg: u32,
-    wparam: WPARAM,
-    lparam: LPARAM,
-) -> LRESULT {
+unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     static mut REMAINING: i64 = 0;
     static mut IS_TIMER: bool = false;
 
@@ -107,7 +105,7 @@ unsafe extern "system" fn wndproc(
         WM_UPDATE_HUD => {
             REMAINING = wparam.0 as i64;
             IS_TIMER = lparam.0 != 0;
-            windows::Win32::Graphics::Gdi::InvalidateRect(hwnd, None, true);
+            let _ = windows::Win32::Graphics::Gdi::InvalidateRect(hwnd, None, true);
             LRESULT(0)
         }
         WM_PAINT => {
@@ -123,11 +121,9 @@ unsafe extern "system" fn wndproc(
             let mut rect = RECT::default();
             windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect).unwrap();
             FillRect(hdc, &rect, hbrush);
-            DeleteObject(hbrush);
+            let _ = DeleteObject(hbrush);
 
-            let font = CreateFontW(
-                16, 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"),
-            );
+            let font = CreateFontW(16, 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"));
             let old_font = SelectObject(hdc, font);
             SetBkMode(hdc, TRANSPARENT);
             SetTextColor(hdc, COLORREF(0x00_FF_FF_FF));
@@ -135,8 +131,8 @@ unsafe extern "system" fn wndproc(
             let m = REMAINING / 60;
             let s = REMAINING % 60;
             let text = format!("{:02}:{:02}", m, s);
-            let mut wide: Vec<u16> = text.encode_utf16().collect();
-            ExtTextOutW(
+            let wide: Vec<u16> = text.encode_utf16().collect();
+            let _ = ExtTextOutW(
                 hdc,
                 10,
                 2,
@@ -148,8 +144,8 @@ unsafe extern "system" fn wndproc(
             );
 
             SelectObject(hdc, old_font);
-            DeleteObject(font);
-            windows::Win32::Graphics::Gdi::EndPaint(hwnd, &ps);
+            let _ = DeleteObject(font);
+            let _ = windows::Win32::Graphics::Gdi::EndPaint(hwnd, &ps);
             LRESULT(0)
         }
         WM_DESTROY => {

@@ -293,7 +293,9 @@ mod tests {
             self.used.get(target).copied().unwrap_or(0)
         }
         fn active_timer_expires_utc(&self, target: &LimitTarget) -> Option<DateTime<Utc>> {
-            self.granted.get(target).map(|&secs| Utc::now() + chrono::Duration::seconds(secs))
+            self.granted
+                .get(target)
+                .map(|&secs| Utc::now() + chrono::Duration::seconds(secs))
         }
     }
 
@@ -343,7 +345,14 @@ mod tests {
             .used(LimitTarget::Category(SHORTFORM), 16 * 60);
 
         assert_eq!(
-            engine.evaluate(TIKTOK, &[SOCIAL, SHORTFORM], true, MONDAY, &usage, chrono::Utc::now()),
+            engine.evaluate(
+                TIKTOK,
+                &[SOCIAL, SHORTFORM],
+                true,
+                MONDAY,
+                &usage,
+                chrono::Utc::now()
+            ),
             Decision::Block {
                 binding: LimitTarget::Category(SHORTFORM)
             }
@@ -359,7 +368,14 @@ mod tests {
         let usage = FakeUsage::default().used(LimitTarget::Category(SHORTFORM), 20 * 60);
 
         assert!(engine
-            .evaluate(TIKTOK, &[SHORTFORM], true, MONDAY, &usage, chrono::Utc::now())
+            .evaluate(
+                TIKTOK,
+                &[SHORTFORM],
+                true,
+                MONDAY,
+                &usage,
+                chrono::Utc::now()
+            )
             .is_blocked());
     }
 
@@ -384,7 +400,9 @@ mod tests {
         let usage = FakeUsage::default().used(LimitTarget::Total, 500 * 60);
 
         // e.g. the terminal, the file manager, or this app itself.
-        assert!(!engine.evaluate(42, &[], false, MONDAY, &usage, chrono::Utc::now()).is_blocked());
+        assert!(!engine
+            .evaluate(42, &[], false, MONDAY, &usage, chrono::Utc::now())
+            .is_blocked());
     }
 
     #[test]
@@ -477,7 +495,14 @@ mod tests {
             0,
         )]);
         assert!(engine
-            .evaluate(TIKTOK, &[SOCIAL], true, MONDAY, &FakeUsage::default(), chrono::Utc::now())
+            .evaluate(
+                TIKTOK,
+                &[SOCIAL],
+                true,
+                MONDAY,
+                &FakeUsage::default(),
+                chrono::Utc::now()
+            )
             .is_blocked());
     }
 

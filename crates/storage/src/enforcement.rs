@@ -164,7 +164,9 @@ mod tests {
         db.grant_override(&target, day, 15 * 60, now(), Some("test"))
             .expect("grant");
         let snap = db.day_snapshot(day).expect("snapshot");
-        let expires = snap.active_timer_expires_utc(&target).expect("timer expires");
+        let expires = snap
+            .active_timer_expires_utc(&target)
+            .expect("timer expires");
         assert_eq!(expires.signed_duration_since(now()).num_seconds(), 15 * 60);
     }
 
