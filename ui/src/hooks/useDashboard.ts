@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { describeError, getCatalog, getDaySummary, getStatus, getWeeklySummary } from "../api";
-import { shiftDay, todayKey } from "../format";
+import { dayKeyToDate, shiftDay, todayKey } from "../format";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import type { StatusDto } from "../types/generated/StatusDto";
@@ -79,14 +79,17 @@ export function useDashboard(): Dashboard {
             .then((next) => {
                 if (ticket === catalogSeq.current) setCatalog(next);
             })
-            .catch(() => {});
+            .catch(() => { });
     }, []);
 
     const fetchWeek = useCallback(async () => {
         const ticket = ++weekSeq.current;
         setWeekLoading(true);
         try {
-            const next = await getWeeklySummary(viewDay);
+            const jsDay = dayKeyToDate(viewDay).getDay();
+            const deltaToSunday = (7 - jsDay) % 7;
+            const weekEndDay = shiftDay(viewDay, deltaToSunday);
+            const next = await getWeeklySummary(weekEndDay);
             if (ticket !== weekSeq.current) return;
             setWeek(next);
         } catch {
@@ -97,8 +100,9 @@ export function useDashboard(): Dashboard {
     }, [viewDay]);
 
     const setViewDay = useCallback((day: number) => {
-        setViewDayRaw(day);
-        setFollowingToday(day === todayKey());
+        const capped = Math.min(day, todayKey());
+        setViewDayRaw(capped);
+        setFollowingToday(capped === todayKey());
     }, []);
 
     const goPrevDay = useCallback(() => {

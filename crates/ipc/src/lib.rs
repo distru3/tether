@@ -62,10 +62,14 @@ pub enum Request {
     /// Liveness probe. Also how the UI detects that the agent has been stopped.
     Ping,
     /// Dashboard payload for one day.
-    DaySummary { day: DayKey },
+    DaySummary {
+        day: DayKey,
+    },
     /// Dashboard payload for the 7 days ending at `end_day` (inclusive),
     /// plus the previous week's total for the week-over-week comparison.
-    WeeklySummary { end_day: DayKey },
+    WeeklySummary {
+        end_day: DayKey,
+    },
     /// Enforcement state and which capabilities are actually available, so the
     /// UI can be honest about degraded modes.
     Status,
@@ -104,7 +108,15 @@ pub enum Request {
         pin: String,
     },
     /// Remove a limit. Loosening, so always subject to the cooldown.
-    DeleteLimit { target: LimitTargetDto, pin: String },
+    DeleteLimit {
+        target: LimitTargetDto,
+        pin: String,
+    },
+    /// Abort a pending limit change before it takes effect.
+    CancelPendingLimit {
+        target: LimitTargetDto,
+        pin: String,
+    },
     /// "+15 minutes", PIN gated, refused outright in strict mode.
     GrantOverride {
         target: LimitTargetDto,
@@ -128,10 +140,64 @@ pub enum Request {
     /// Dismantle the vault entirely. `credential` may be either the current
     /// PIN or the current recovery code — removing the gate must require the
     /// same proof of ownership as changing it.
-    RemovePin { credential: String },
+    RemovePin {
+        credential: String,
+    },
     /// Usage reported by the session helper, which is the only component able
     /// to see the focused window. See [`ReportUsageDto`] for the contract.
-    ReportUsage { report: ReportUsageDto },
+    ReportUsage {
+        report: ReportUsageDto,
+    },
+
+    /// List all downtime schedules.
+    ListSchedules,
+    CreateSchedule {
+        name: String,
+        weekday_mask: u8,
+        start_minute: u32,
+        end_minute: u32,
+    },
+    UpdateSchedule {
+        #[ts(as = "i32")]
+        id: i64,
+        name: String,
+        weekday_mask: u8,
+        start_minute: u32,
+        end_minute: u32,
+    },
+    SetScheduleEnabled {
+        #[ts(as = "i32")]
+        id: i64,
+        enabled: bool,
+    },
+    DeleteSchedule {
+        #[ts(as = "i32")]
+        id: i64,
+    },
+    ListManualBlocks,
+    AddManualBlock {
+        domain: String,
+    },
+    RemoveManualBlock {
+        domain: String,
+    },
+    /// List all always-allowed subjects for downtime.
+    ListAllowlist,
+    SetAllowlist {
+        subject_type: String,
+        #[ts(as = "i32")]
+        subject_id: i64,
+        allowed: bool,
+    },
+    /// Get the current focus session if active.
+    GetFocusSession,
+    StartFocusSession {
+        duration_minutes: u32,
+        name: Option<String>,
+    },
+    EndFocusSession {
+        pin: Option<String>,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -164,6 +230,20 @@ pub enum Response {
     Error {
         code: ErrorCode,
         message: String,
+    },
+
+    /// All downtime schedules.
+    Schedules(SchedulesDto),
+    /// The schedule a [`Request::CreateSchedule`] just inserted.
+    ScheduleCreated(ScheduleDto),
+    /// All always-allowed subjects for downtime.
+    Allowlist(AllowlistDto),
+    /// Current focus session state.
+    FocusSession {
+        session: Option<FocusSessionDto>,
+    },
+    ManualBlocks {
+        domains: Vec<String>,
     },
 }
 
@@ -316,6 +396,24 @@ pub struct StatusDto {
     pub blocks_encrypted_dns: bool,
     pub strict_mode: bool,
     pub pin_configured: bool,
+    /// The active filter can enforce wildcard (subdomain) rules. True only when
+    /// the DNS-proxy backend is genuinely applied, not just present.
+    pub wildcard_domains: bool,
+    /// The active filter can block individual URL paths. Always false, since
+    /// neither `hosts` nor DNS can see a path; only a browser extension can.
+    pub path_level: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct PendingLimitDto {
+    #[ts(as = "i32")]
+    pub id: i64,
+    pub target: LimitTargetDto,
+    pub action: String, // "update" or "delete"
+    pub default_minutes: Option<u32>,
+    pub weekday_minutes: Option<[Option<u32>; 7]>,
+    pub enabled: Option<bool>,
+    pub effective_from_utc: String,
 }
 
 /// Everything the limit editor needs, in one round trip.
@@ -324,6 +422,7 @@ pub struct CatalogDto {
     pub apps: Vec<AppDto>,
     pub categories: Vec<CategoryDto>,
     pub limits: Vec<LimitDto>,
+    pub pending_limits: Vec<PendingLimitDto>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -378,6 +477,112 @@ pub struct BlockedAppDto {
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 pub struct BlockedAppsDto {
     pub blocked: Vec<BlockedAppDto>,
+}
+
+// -- Web filter --------------------------------------------------------------
+
+/// One web-filter blocklist.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BlocklistDto {
+    #[ts(as = "i32")]
+    pub id: i64,
+    pub name: String,
+    pub source_url: Option<String>,
+    pub version: Option<String>,
+    pub checksum: Option<String>,
+    pub enabled: bool,
+    pub last_updated_utc: Option<String>,
+}
+
+/// The payload of `Response::Blocklists` (wrapped so the internally tagged
+/// `Response` enum can carry the sequence).
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct BlocklistsDto {
+    pub blocklists: Vec<BlocklistDto>,
+}
+
+/// One `block_rules` row: what to block (or, pre-resolution, allow).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BlockRuleDto {
+    #[ts(as = "i32")]
+    pub id: i64,
+    #[ts(as = "Option<i32>")]
+    pub blocklist_id: Option<i64>,
+    #[ts(as = "Option<i32>")]
+    pub category_id: Option<i64>,
+    pub domain: String,
+    pub include_subdomains: bool,
+    /// `"block"` | `"allow"`.
+    pub action: String,
+}
+
+/// The payload of `Response::BlockRules`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct BlockRulesDto {
+    pub rules: Vec<BlockRuleDto>,
+}
+
+/// One site, with its primary category and limit-matching tags.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct SiteDto {
+    #[ts(as = "i32")]
+    pub id: i64,
+    pub domain: String,
+    #[ts(as = "i32")]
+    pub primary_category: i64,
+    #[ts(as = "Vec<i32>")]
+    pub tags: Vec<i64>,
+    pub user_classified: bool,
+}
+
+/// The payload of `Response::Sites`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+pub struct SitesDto {
+    pub sites: Vec<SiteDto>,
+}
+
+/// One downtime schedule window.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct ScheduleDto {
+    #[ts(as = "i32")]
+    pub id: i64,
+    pub name: String,
+    pub weekday_mask: u8,
+    pub start_minute: u32,
+    pub end_minute: u32,
+    pub enabled: bool,
+}
+
+/// The payload of `Response::Schedules`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct SchedulesDto {
+    pub schedules: Vec<ScheduleDto>,
+}
+
+/// One allowlisted subject (app or site).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AllowlistItemDto {
+    pub subject_type: String,
+    #[ts(as = "i32")]
+    pub subject_id: i64,
+    pub name: String,
+}
+
+/// The payload of `Response::Allowlist`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AllowlistDto {
+    pub items: Vec<AllowlistItemDto>,
+}
+
+/// An active focus session.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct FocusSessionDto {
+    pub name: Option<String>,
+    pub started_at_utc: String,
+    pub duration_minutes: u32,
+    pub expires_utc: String,
+    #[ts(as = "i32")]
+    pub remaining_seconds: i64,
 }
 
 /// Write one length-prefixed JSON frame.
@@ -635,6 +840,7 @@ mod tests {
             ],
         }
     }
+
 
     #[test]
     fn report_usage_round_trips_through_framing() {

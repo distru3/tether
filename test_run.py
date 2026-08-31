@@ -1,0 +1,1 @@
+import subprocess; res = subprocess.run([cmd, /D, /C, sc.exe create ScreentimeAgent binPath= C:\\ start= auto displayName= \Screentime Agent\"], capture_output=True); print(res.stdout.decode(), res.stderr.decode(), res.returncode)

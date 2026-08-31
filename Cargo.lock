@@ -3194,6 +3194,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "st-dns"
+version = "0.1.0"
+dependencies = [
+ "st-core",
+ "tracing",
+ "windows 0.58.0",
+]
+
+[[package]]
 name = "st-enforce-linux"
 version = "0.1.0"
 dependencies = [

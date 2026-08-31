@@ -7,15 +7,19 @@
 //! present the user a choice. It lives in this per-user helper because the
 //! agent (SYSTEM, Session 0) cannot draw on the interactive desktop.
 //!
-//! # Modes, and why Quit is not always shown
+//! # Full Window Coverage & Translucent Layering
 //!
-//! * [`OverlayMode::Buttons`] — no PIN configured. **Quit** and **+15 min**;
+//! The overlay window covers the entire target application geometry. A deep
+//! translucent backdrop layer prevents any mouse interaction with the
+//! underlying application, while a centered floating Obsidian card displays
+//! the time limit status, options to extend, and a Quit button.
+//!
+//! # Modes
+//!
+//! * [`OverlayMode::Buttons`] — no PIN configured. Shows **Quit App** and **+15 min**;
 //!   both send an empty PIN, which the agent accepts only in this situation.
-//! * [`OverlayMode::PinExtend`] — a PIN is configured. There is deliberately
-//!   **no Quit button**: its only wire representation is an empty-PIN
-//!   `CloseApps`, which the agent would always reject — drawing it would be a
-//!   button that lies (audit finding). Instead the overlay shows a PIN pad and
-//!   a **+15 min** button that sends the entered PIN via `GrantOverride`.
+//! * [`OverlayMode::PinExtend`] — a PIN is configured. Shows a PIN keypad to
+//!   authorize **+15 min**, as well as a **Quit App** button to terminate the app.
 //!
 //! # Why the PIN pad is clicked, not typed
 //!
@@ -25,34 +29,6 @@
 //! design, since those defences are what stop the blocked app from being
 //! driven. A click pad works regardless of focus, because the topmost window
 //! under the cursor receives mouse input without activation.
-//!
-//! # Resource ownership (per instance)
-//!
-//! Audit fix: hooks used to live in a module-global `Mutex<Option<isize>>`,
-//! which corrupted when two overlays overlapped (second install skipped,
-//! first removal killed the shared hook). Now every overlay run owns its
-//! keyboard-hook handle and its window on its own thread, tracked by an
-//! [`OverlayRun`] value; teardown posts `WM_CLOSE` and **joins** the thread,
-//! so nothing global remains to race.
-//!
-//! # Behaviour
-//!
-//! * Opaque custom-painted panel (`WM_PAINT`), hit-region buttons/pad, no
-//!   child controls — layered alpha fades stay possible.
-//! * Fade-in is driven by a `WM_TIMER` ramp *inside* the message pump (audit
-//!   fix: the old code slept ~200 ms before pumping, leaving the window
-//!   unpainted). The window now paints immediately at alpha 0 and ramps over
-//!   ~200 ms while messages flow.
-//! * The keyboard hook swallows all keys while visible (Alt+F4, Alt+Tab,
-//!   shortcuts). It is installed after the window exists and removed before
-//!   the overlay thread exits.
-//! * `WS_EX_NOACTIVATE` keeps the overlay out of the foreground, so clicking
-//!   it cannot confuse the session loop's focus-based logic.
-//!
-//! # Honest limits
-//!
-//! A truly exclusive-fullscreen game may render the overlay behind it. Most
-//! games run borderless, which the overlay covers.
 
 use std::ffi::c_void;
 use std::sync::Arc;
@@ -60,13 +36,13 @@ use std::sync::Arc;
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, SIZE, WPARAM};
 use windows::Win32::Graphics::Gdi::{
-    CreateFontW, CreateSolidBrush, DeleteObject, ExtTextOutW, FillRect, GetTextExtentPoint32W,
-    InvalidateRect, SelectObject, SetBkMode, SetTextColor, ETO_OPTIONS, HDC, HFONT, HGDIOBJ,
-    TRANSPARENT,
+    CreateFontW, CreatePen, CreateSolidBrush, DeleteObject, Ellipse, ExtTextOutW, FillRect,
+    GetTextExtentPoint32W, InvalidateRect, RoundRect, SelectObject, SetBkMode, SetTextColor,
+    ETO_OPTIONS, HDC, HFONT, HGDIOBJ, PS_NULL, PS_SOLID, TRANSPARENT,
 };
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
+    CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
     GetWindowLongPtrW, KillTimer, LoadCursorW, PostMessageW, PostQuitMessage, RegisterClassExW,
     SetLayeredWindowAttributes, SetTimer, SetWindowLongPtrW, SetWindowsHookExW, TranslateMessage,
     UnhookWindowsHookEx, GWLP_USERDATA, IDC_ARROW, LAYERED_WINDOW_ATTRIBUTES_FLAGS, MSG,
@@ -82,7 +58,7 @@ const WH_KEYBOARD_LL: WINDOWS_HOOK_ID = WINDOWS_HOOK_ID(13);
 pub enum OverlayMode {
     /// No PIN configured: show Quit + +15 min.
     Buttons,
-    /// PIN configured: show the PIN pad + extend; never Quit.
+    /// PIN configured: show the PIN pad + extend + Quit button.
     PinExtend,
 }
 
@@ -109,10 +85,6 @@ impl OverlayCallbacks {
 }
 
 /// Everything one overlay run owns, held by the session loop until teardown.
-///
-/// Why a struct instead of loose fields: dismissal needs the hwnd address the
-/// overlay thread registered, and clean shutdown needs to wait until the hook
-/// is really gone; pairing them guarantees neither outlives the other.
 pub struct OverlayRun {
     control: Arc<OverlayControl>,
     thread: Option<std::thread::JoinHandle<()>>,
@@ -120,8 +92,7 @@ pub struct OverlayRun {
 
 impl OverlayRun {
     /// Ask the overlay to close, then block until its hook is unhooked and
-    /// its window gone. Safe to call on an already-dead overlay (join reports
-    /// the panic; there is nothing left to leak).
+    /// its window gone. Safe to call on an already-dead overlay.
     pub fn dismiss_and_join(mut self) {
         self.control.dismiss();
         if let Some(thread) = self.thread.take() {
@@ -133,9 +104,6 @@ impl OverlayRun {
 }
 
 /// Cross-thread handle onto one overlay's window, used only to post `WM_CLOSE`.
-///
-/// Per-instance by construction (a fresh one ships with every
-/// [`spawn_overlay`]), so overlapping overlays can no longer interfere.
 struct OverlayControl {
     hwnd: std::sync::Mutex<Option<isize>>,
 }
@@ -153,9 +121,6 @@ impl OverlayControl {
 
     fn dismiss(&self) {
         if let Some(addr) = *self.hwnd.lock().unwrap() {
-            // SAFETY: addr was stored from a live HWND by the overlay thread;
-            // after WM_CLOSE the window may be gone, but PostMessageW to a
-            // stale hwnd fails harmlessly instead of dereferencing it.
             unsafe {
                 let _ = PostMessageW(HWND(addr as *mut c_void), WM_CLOSE, WPARAM(0), LPARAM(0));
             }
@@ -163,24 +128,40 @@ impl OverlayControl {
     }
 }
 
+/// Card sizing constants.
+const CARD_W: i32 = 460;
+const CARD_H_BUTTONS: i32 = 360;
+const CARD_H_PIN: i32 = 520;
+const CORNER_RADIUS: i32 = 16;
+
 /// Spawn an overlay over `rect` on its own thread.
 ///
-/// Rectangles smaller than the smallest readable panel are grown around their
-/// centre (position may drift slightly past screen edges; covering the app
-/// matters more than perfect placement).
+/// The window covers the entire app rectangle `(app_x, app_y, app_w, app_h)` so
+/// mouse input is fully intercepted, with a centered floating obsidian card.
 pub fn spawn_overlay(
     rect: (i32, i32, i32, i32),
     callbacks: OverlayCallbacks,
     mode: OverlayMode,
     label: String,
 ) -> OverlayRun {
-    const MIN_W: i32 = 420;
-    const MIN_H: i32 = 460;
-    let (x, y, w, h) = rect;
-    let (w, h) = (w.max(MIN_W), h.max(MIN_H));
-    // Centre the growth so small windows still cover the app's midpoint.
-    let x = x + (rect.2 - w) / 2;
-    let y = y + (rect.3 - h) / 2;
+    let ideal_card_h = match mode {
+        OverlayMode::Buttons => CARD_H_BUTTONS,
+        OverlayMode::PinExtend => CARD_H_PIN,
+    };
+    let (app_x, app_y, app_w, app_h) = rect;
+    // Window must cover at least the application area, and at least the card size + margins.
+    let w = app_w.max(CARD_W + 32);
+    let h = app_h.max(ideal_card_h + 32);
+    let x = if app_w < CARD_W + 32 {
+        app_x - (CARD_W + 32 - app_w) / 2
+    } else {
+        app_x
+    };
+    let y = if app_h < ideal_card_h + 32 {
+        app_y - (ideal_card_h + 32 - app_h) / 2
+    } else {
+        app_y
+    };
 
     let control = OverlayControl::new();
     let thread_control = control.clone();
@@ -201,7 +182,7 @@ struct OverlayState {
     label: String,
     /// Digits clicked so far, rendered masked.
     pin: String,
-    /// Set after a rejected PIN until the next edit; repaints the pad in red.
+    /// Set after a rejected PIN until the next edit; repaints the pad with error message.
     wrong_pin: bool,
     /// Current layered-window alpha for the fade-in ramp.
     alpha: u8,
@@ -221,30 +202,48 @@ impl RectI {
     }
 }
 
-/// Layout constants — keep in sync with `layout_buttons` / `layout_pad`.
+/// Layout constants.
 const PAD: i32 = 24;
-const BTN_H: i32 = 44;
-const BTN_GAP: i32 = 12;
+const BTN_H: i32 = 40;
+const BTN_GAP: i32 = 8;
 const GRID_COLS: i32 = 3;
 const PIN_MAX_DIGITS: usize = 8;
 
 /// Pad labels in hit-order: digits 1–9, clear, 0, enter.
 const PAD_KEYS: [&str; 12] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "OK"];
 
+/// Compute the centered card rectangle for client area `(cw, ch)`.
+fn card_geometry(cw: i32, ch: i32, mode: OverlayMode) -> RectI {
+    let ideal_h = match mode {
+        OverlayMode::Buttons => CARD_H_BUTTONS,
+        OverlayMode::PinExtend => CARD_H_PIN,
+    };
+    let card_w = CARD_W.min(cw.saturating_sub(20).max(100));
+    let card_h = ideal_h.min(ch.saturating_sub(20).max(100));
+    let card_x = (cw - card_w) / 2;
+    let card_y = (ch - card_h) / 2;
+    RectI {
+        x: card_x,
+        y: card_y,
+        w: card_w,
+        h: card_h,
+    }
+}
+
 /// Bottom-row buttons in [`OverlayMode::Buttons`].
-fn layout_buttons(cw: i32, ch: i32) -> (RectI, RectI) {
-    let avail = cw - PAD * 2;
+fn layout_buttons(card: &RectI) -> (RectI, RectI) {
+    let avail = card.w - PAD * 2;
     let btn_w = (avail - BTN_GAP) / 2;
-    let by = ch - PAD - BTN_H;
+    let by = card.y + card.h - PAD - BTN_H;
     (
         RectI {
-            x: PAD,
+            x: card.x + PAD,
             y: by,
             w: btn_w,
             h: BTN_H,
         },
         RectI {
-            x: PAD + btn_w + BTN_GAP,
+            x: card.x + PAD + btn_w + BTN_GAP,
             y: by,
             w: btn_w,
             h: BTN_H,
@@ -252,18 +251,21 @@ fn layout_buttons(cw: i32, ch: i32) -> (RectI, RectI) {
     )
 }
 
-/// Top-left of the pad's key grid for a client size of `cw × ch`.
-fn pad_origin(cw: i32, ch: i32) -> (i32, i32) {
-    let cell_w = (cw - PAD * 2 - (GRID_COLS - 1) * BTN_GAP) / GRID_COLS;
+/// Top-left of the keypad grid for a card.
+fn pad_origin(card: &RectI) -> (i32, i32) {
+    let cell_w = (card.w - PAD * 2 - (GRID_COLS - 1) * BTN_GAP) / GRID_COLS;
     let grid_w = cell_w * GRID_COLS + (GRID_COLS - 1) * BTN_GAP;
     let grid_h = 4 * BTN_H + 3 * BTN_GAP;
-    ((cw - grid_w) / 2, ch - PAD - grid_h)
+    let gx = card.x + (card.w - grid_w) / 2;
+    // Leave room below for the QUIT button
+    let gy = card.y + card.h - PAD - BTN_H - BTN_GAP - grid_h;
+    (gx, gy)
 }
 
-/// Hit rects for all twelve pad keys, indexed like [`PAD_KEYS`].
-fn layout_pad(cw: i32, ch: i32) -> [RectI; 12] {
-    let cell_w = (cw - PAD * 2 - (GRID_COLS - 1) * BTN_GAP) / GRID_COLS;
-    let (gx, gy) = pad_origin(cw, ch);
+/// Hit rects for all twelve keypad keys in [`OverlayMode::PinExtend`].
+fn layout_pad(card: &RectI) -> [RectI; 12] {
+    let cell_w = (card.w - PAD * 2 - (GRID_COLS - 1) * BTN_GAP) / GRID_COLS;
+    let (gx, gy) = pad_origin(card);
     let mut cells = [RectI {
         x: 0,
         y: 0,
@@ -277,6 +279,20 @@ fn layout_pad(cw: i32, ch: i32) -> [RectI; 12] {
         cell.y = gy + row * (BTN_H + BTN_GAP);
     }
     cells
+}
+
+/// Hit rect for the Quit App button in [`OverlayMode::PinExtend`].
+fn layout_pin_quit(card: &RectI) -> RectI {
+    let (gx, _) = pad_origin(card);
+    let cell_w = (card.w - PAD * 2 - (GRID_COLS - 1) * BTN_GAP) / GRID_COLS;
+    let grid_w = cell_w * GRID_COLS + (GRID_COLS - 1) * BTN_GAP;
+    let by = card.y + card.h - PAD - BTN_H;
+    RectI {
+        x: gx,
+        y: by,
+        w: grid_w,
+        h: BTN_H,
+    }
 }
 
 unsafe extern "system" fn wnd_proc(
@@ -305,14 +321,14 @@ unsafe extern "system" fn wnd_proc(
                 if !state.is_null() {
                     let st = &mut *state;
                     st.alpha = st.alpha.saturating_add(FADE_ALPHA_STEP);
-                    // SAFETY: our own hwnd with the layered flag set at creation.
+                    let current_alpha = st.alpha.min(TARGET_ALPHA);
                     let _ = SetLayeredWindowAttributes(
                         hwnd,
-                        windows::Win32::Foundation::COLORREF(0),
-                        st.alpha,
+                        COLORREF(0),
+                        current_alpha,
                         LAYERED_WINDOW_ATTRIBUTES_FLAGS(0x2), // LWA_ALPHA
                     );
-                    if st.alpha == u8::MAX {
+                    if st.alpha >= TARGET_ALPHA {
                         let _ = KillTimer(hwnd, FADE_TIMER_ID);
                     }
                 }
@@ -344,24 +360,19 @@ unsafe extern "system" fn wnd_proc(
 }
 
 /// Dispatch one click at client point `(px, py)`; repaints when state changed.
-///
-/// # Safety
-///
-/// `hwnd` must be a live overlay window whose `GWLP_USERDATA` owns `state`,
-/// called only from `wnd_proc` on the overlay's own thread.
 unsafe fn handle_click(hwnd: HWND, state: &mut OverlayState, px: i32, py: i32) {
     let mut cr = RECT::default();
-    let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut cr);
+    let _ = GetClientRect(hwnd, &mut cr);
     let (cw, ch) = (cr.right - cr.left, cr.bottom - cr.top);
+    let card = card_geometry(cw, ch, state.mode);
 
     match state.mode {
         OverlayMode::Buttons => {
-            let (quit, extend) = layout_buttons(cw, ch);
+            let (quit, extend) = layout_buttons(&card);
             let mut accepted = false;
             if quit.contains(px, py) {
                 accepted = (state.callbacks.on_quit)();
             } else if extend.contains(px, py) {
-                // No PIN configured in this mode, hence the empty PIN.
                 accepted = (state.callbacks.on_extend)(String::new());
             }
             if accepted {
@@ -369,7 +380,13 @@ unsafe fn handle_click(hwnd: HWND, state: &mut OverlayState, px: i32, py: i32) {
             }
         }
         OverlayMode::PinExtend => {
-            for (i, cell) in layout_pad(cw, ch).iter().enumerate() {
+            let quit_btn = layout_pin_quit(&card);
+            if quit_btn.contains(px, py) && (state.callbacks.on_quit)() {
+                let _ = DestroyWindow(hwnd);
+                return;
+            }
+
+            for (i, cell) in layout_pad(&card).iter().enumerate() {
                 if !cell.contains(px, py) {
                     continue;
                 }
@@ -391,7 +408,6 @@ unsafe fn handle_click(hwnd: HWND, state: &mut OverlayState, px: i32, py: i32) {
                             let _ = DestroyWindow(hwnd);
                             return;
                         } else {
-                            // Agent refused (wrong PIN): say so, start over.
                             state.pin.clear();
                             state.wrong_pin = true;
                         }
@@ -405,39 +421,37 @@ unsafe fn handle_click(hwnd: HWND, state: &mut OverlayState, px: i32, py: i32) {
     }
 }
 
-/// Ledger-theme palette. COLORREF packs as `0x00bbggrr`; these mirror
-/// `ui/src/styles/tokens.css` so the overlay reads as the same publication as
-/// the dashboard: warm newsprint, one ink, one editorial red.
+/// Modern Obsidian & Glass theme palette. COLORREF packs as `0x00bbggrr`.
 const fn rgb(r: u8, g: u8, b: u8) -> u32 {
     r as u32 | (g as u32) << 8 | (b as u32) << 16
 }
-const PAPER: u32 = rgb(0xF6, 0xF2, 0xEA);
-const PAPER_RAISED: u32 = rgb(0xFB, 0xF8, 0xF2);
-const INK: u32 = rgb(0x21, 0x1D, 0x1A);
-const INK_SOFT: u32 = rgb(0x57, 0x50, 0x4A);
-const RULE_STRONG: u32 = rgb(0xB3, 0xA9, 0x92);
-const RED: u32 = rgb(0xA0, 0x2C, 0x20);
+const BG_BACKDROP: u32 = rgb(0, 0, 0);
+const BG_OBSIDIAN: u32 = rgb(5, 5, 5);
+const BG_CARD_ELEVATED: u32 = rgb(17, 17, 17);
+const BG_ROSE_BADGE: u32 = rgb(42, 11, 18);
+const BORDER_ELEVATED: u32 = rgb(42, 42, 42);
+const TEXT_WHITE: u32 = rgb(255, 255, 255);
+const TEXT_MUTED: u32 = rgb(153, 153, 153);
+const ACCENT_INDIGO: u32 = rgb(255, 255, 255);
+const ACCENT_INDIGO_BRIGHT: u32 = rgb(255, 255, 255);
+const ACCENT_ROSE: u32 = rgb(244, 63, 94);
 
-/// The faces of the design system, created fresh per paint and freed on drop.
-/// Georgia carries display/body exactly like the dashboard; Consolas is the
-/// utility voice for labels, digits and buttons.
+/// Font suite for the modern overlay interface.
 struct Fonts {
+    brand: HFONT,
+    badge: HFONT,
     display: HFONT,
-    body: HFONT,
-    italic: HFONT,
-    mono: HFONT,
-    mono_bold: HFONT,
+    app_label: HFONT,
+    caption: HFONT,
+    pin_label: HFONT,
+    pin_digit: HFONT,
+    btn: HFONT,
 }
 
 impl Fonts {
-    /// Heights are negative: GDI treats them as character heights rather than
-    /// line heights, which keeps sizes predictable across DPI settings.
     unsafe fn new() -> Self {
-        let georgia = PCWSTR(w!("Georgia").as_ptr());
+        let segoe = PCWSTR(w!("Segoe UI Variable Display").as_ptr());
         let consolas = PCWSTR(w!("Consolas").as_ptr());
-        // windows-0.58 exposes CreateFontW with plain integer params; the
-        // magic numbers are the stock GDI enum values (charset 1 =
-        // DEFAULT_CHARSET, precision/quality 0/5 = default/ClearType).
         let make = |height: i32, weight: i32, italic: bool, face: PCWSTR| -> HFONT {
             CreateFontW(
                 height,
@@ -448,34 +462,38 @@ impl Fonts {
                 italic as u32,
                 0,
                 0,
-                1,
+                1, // DEFAULT_CHARSET
                 0,
                 0,
-                5,
+                5, // CLEARTYPE_QUALITY
                 0,
                 face,
             )
         };
         Self {
-            display: make(-48, 700, false, georgia),
-            body: make(-23, 400, false, georgia),
-            italic: make(-20, 400, true, georgia),
-            mono: make(-13, 400, false, consolas),
-            mono_bold: make(-15, 700, false, consolas),
+            brand: make(-12, 700, false, consolas),
+            badge: make(-11, 700, false, consolas),
+            display: make(-24, 700, false, segoe),
+            app_label: make(-18, 600, false, segoe),
+            caption: make(-13, 400, false, segoe),
+            pin_label: make(-11, 700, false, consolas),
+            pin_digit: make(-18, 600, false, segoe),
+            btn: make(-13, 600, false, segoe),
         }
     }
 }
 
 impl Drop for Fonts {
     fn drop(&mut self) {
-        // SAFETY: each handle came from CreateFontW above and outlived every
-        // selection into the paint DC.
         for f in [
+            &self.brand,
+            &self.badge,
             &self.display,
-            &self.body,
-            &self.italic,
-            &self.mono,
-            &self.mono_bold,
+            &self.app_label,
+            &self.caption,
+            &self.pin_label,
+            &self.pin_digit,
+            &self.btn,
         ] {
             unsafe {
                 let _ = DeleteObject(HGDIOBJ(f.0));
@@ -492,7 +510,8 @@ unsafe fn select_font(hdc: HDC, font: &HFONT) -> HGDIOBJ {
 unsafe fn text_extent(hdc: HDC, s: &str, font: &HFONT) -> (i32, i32) {
     let old = select_font(hdc, font);
     let mut size = SIZE::default();
-    let _ = GetTextExtentPoint32W(hdc, &s.encode_utf16().collect::<Vec<u16>>(), &mut size);
+    let wide: Vec<u16> = s.encode_utf16().collect();
+    let _ = GetTextExtentPoint32W(hdc, &wide, &mut size);
     select_font(hdc, &HFONT(old.0));
     (size.cx, size.cy)
 }
@@ -539,9 +558,7 @@ unsafe fn draw_text_centered(hdc: HDC, cx: i32, y: i32, s: &str, font: &HFONT, c
     draw_text(hdc, cx - w / 2, y, s, font, colour);
 }
 
-/// Uppercase text with letter-spacing — the eyebrow/utility voice. GDI has no
-/// native tracking parameter, so each glyph's advance is widened manually via
-/// the per-character dx array of ExtTextOutW.
+/// Uppercase text with letter-spacing.
 unsafe fn draw_tracked_caps(
     hdc: HDC,
     x: i32,
@@ -573,9 +590,8 @@ unsafe fn draw_tracked_caps(
     );
 }
 
-/// Solid rectangle, same as before but returning nothing new.
+/// Solid rectangle fill.
 fn fill(hdc: HDC, r: &RECT, colour: u32) {
-    // SAFETY: GDI object calls with locally created brush, deleted before return.
     unsafe {
         let brush = CreateSolidBrush(COLORREF(colour));
         let _ = FillRect(hdc, r, brush);
@@ -583,257 +599,354 @@ fn fill(hdc: HDC, r: &RECT, colour: u32) {
     }
 }
 
-/// A rectangular border of thickness `t` drawn inward from `r`'s edges.
-fn stroke(hdc: HDC, r: &RectI, t: i32, colour: u32) {
-    let outer = RECT {
-        left: r.x,
-        top: r.y,
-        right: r.x + r.w,
-        bottom: r.y + r.h,
+/// Draw a rounded rectangle with optional border.
+unsafe fn draw_round_rect(
+    hdc: HDC,
+    r: &RectI,
+    corner: i32,
+    fill_color: u32,
+    border_color: Option<u32>,
+) {
+    let brush = CreateSolidBrush(COLORREF(fill_color));
+    let pen = if let Some(bc) = border_color {
+        CreatePen(PS_SOLID, 1, COLORREF(bc))
+    } else {
+        CreatePen(PS_NULL, 0, COLORREF(0))
     };
-    fill(
-        hdc,
-        &RECT {
-            left: outer.left,
-            top: outer.top,
-            right: outer.right,
-            bottom: outer.top + t,
-        },
-        colour,
-    );
-    fill(
-        hdc,
-        &RECT {
-            left: outer.left,
-            top: outer.bottom - t,
-            right: outer.right,
-            bottom: outer.bottom,
-        },
-        colour,
-    );
-    fill(
-        hdc,
-        &RECT {
-            left: outer.left,
-            top: outer.top,
-            right: outer.left + t,
-            bottom: outer.bottom,
-        },
-        colour,
-    );
-    fill(
-        hdc,
-        &RECT {
-            left: outer.right - t,
-            top: outer.top,
-            right: outer.right,
-            bottom: outer.bottom,
-        },
-        colour,
-    );
+    let old_brush = SelectObject(hdc, HGDIOBJ(brush.0));
+    let old_pen = SelectObject(hdc, HGDIOBJ(pen.0));
+
+    let _ = RoundRect(hdc, r.x, r.y, r.x + r.w, r.y + r.h, corner, corner);
+
+    SelectObject(hdc, old_brush);
+    SelectObject(hdc, old_pen);
+    let _ = DeleteObject(HGDIOBJ(brush.0));
+    let _ = DeleteObject(HGDIOBJ(pen.0));
 }
 
-/// Button voices: solid ink is the primary action, outlined paper the
-/// secondary — matching `.btn--primary` / outlined text-buttons in the UI.
+/// Draw a circle with optional border.
+unsafe fn draw_circle(
+    hdc: HDC,
+    cx: i32,
+    cy: i32,
+    radius: i32,
+    fill_color: u32,
+    border_color: Option<u32>,
+) {
+    let brush = CreateSolidBrush(COLORREF(fill_color));
+    let pen = if let Some(bc) = border_color {
+        CreatePen(PS_SOLID, 1, COLORREF(bc))
+    } else {
+        CreatePen(PS_NULL, 0, COLORREF(0))
+    };
+    let old_brush = SelectObject(hdc, HGDIOBJ(brush.0));
+    let old_pen = SelectObject(hdc, HGDIOBJ(pen.0));
+
+    let _ = Ellipse(
+        hdc,
+        cx - radius,
+        cy - radius,
+        cx + radius + 1,
+        cy + radius + 1,
+    );
+
+    SelectObject(hdc, old_brush);
+    SelectObject(hdc, old_pen);
+    let _ = DeleteObject(HGDIOBJ(brush.0));
+    let _ = DeleteObject(HGDIOBJ(pen.0));
+}
+
 #[derive(Clone, Copy)]
 enum BtnStyle {
-    Ink,
-    Outline,
+    Primary,
+    Secondary,
 }
 
-unsafe fn draw_button(hdc: HDC, r: &RectI, label: &str, style: BtnStyle, fonts: &Fonts) {
+unsafe fn draw_button(
+    hdc: HDC,
+    r: &RectI,
+    label: &str,
+    style: BtnStyle,
+    font: &HFONT,
+    text_color: u32,
+) {
     match style {
-        BtnStyle::Ink => {
-            fill(
-                hdc,
-                &RECT {
-                    left: r.x,
-                    top: r.y,
-                    right: r.x + r.w,
-                    bottom: r.y + r.h,
-                },
-                INK,
-            );
+        BtnStyle::Primary => {
+            draw_round_rect(hdc, r, 10, ACCENT_INDIGO, Some(ACCENT_INDIGO));
             draw_text_centered(
                 hdc,
                 r.x + r.w / 2,
-                r.y + (r.h - text_extent(hdc, label, &fonts.mono_bold).1) / 2,
+                r.y + (r.h - text_extent(hdc, label, font).1) / 2,
                 label,
-                &fonts.mono_bold,
-                PAPER,
+                font,
+                text_color,
             );
         }
-        BtnStyle::Outline => {
-            fill(
-                hdc,
-                &RECT {
-                    left: r.x,
-                    top: r.y,
-                    right: r.x + r.w,
-                    bottom: r.y + r.h,
-                },
-                PAPER_RAISED,
-            );
-            stroke(hdc, r, 1, RULE_STRONG);
+        BtnStyle::Secondary => {
+            draw_round_rect(hdc, r, 10, BG_CARD_ELEVATED, Some(BORDER_ELEVATED));
             draw_text_centered(
                 hdc,
                 r.x + r.w / 2,
-                r.y + (r.h - text_extent(hdc, label, &fonts.mono_bold).1) / 2,
+                r.y + (r.h - text_extent(hdc, label, font).1) / 2,
                 label,
-                &fonts.mono_bold,
-                INK,
+                font,
+                text_color,
             );
         }
     }
 }
 
-/// The page's one loud moment, transplanted from the web banner: a red
-/// double-ruled OVER LIMIT plate, right-aligned like a rubber stamp.
-unsafe fn draw_stamp(hdc: HDC, right: i32, y: i32, fonts: &Fonts) {
-    let (w, h) = (178, 46);
+/// Block badge in the upper right.
+unsafe fn draw_block_badge(hdc: HDC, right: i32, y: i32, text: &str, fonts: &Fonts) {
+    let (tw, th) = text_extent(hdc, text, &fonts.badge);
+    let w = tw + 20;
+    let h = 24;
     let r = RectI {
         x: right - w,
         y,
         w,
         h,
     };
-    stroke(hdc, &r, 3, RED);
-    stroke(
-        hdc,
-        &RectI {
-            x: r.x + 7,
-            y: r.y + 7,
-            w: r.w - 14,
-            h: r.h - 14,
-        },
-        1,
-        RED,
-    );
+    draw_round_rect(hdc, &r, 10, BG_ROSE_BADGE, Some(ACCENT_ROSE));
     draw_text_centered(
         hdc,
-        r.x + r.w / 2,
-        r.y + (h - 17) / 2,
-        "OVER LIMIT",
-        &fonts.mono_bold,
-        RED,
+        r.x + w / 2,
+        y + (h - th) / 2,
+        text,
+        &fonts.badge,
+        ACCENT_ROSE,
     );
 }
 
 unsafe fn paint(hwnd: HWND, state: &OverlayState) {
     let mut rect = RECT::default();
-    let _ = windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect);
+    let _ = GetClientRect(hwnd, &mut rect);
     let (cw, ch) = (rect.right - rect.left, rect.bottom - rect.top);
 
     let mut ps = windows::Win32::Graphics::Gdi::PAINTSTRUCT::default();
     let hdc = windows::Win32::Graphics::Gdi::BeginPaint(hwnd, &mut ps);
 
-    // SAFETY: GDI calls below use objects created in this scope; DC state is
-    // reset per selection and torn down by EndPaint.
     unsafe {
         let fonts = Fonts::new();
 
-        // The sheet.
-        fill(hdc, &rect, PAPER);
-
-        // Masthead: brand left, newspaper double rule below. The verdict lives
-        // only in the stamp — a second red word here used to sit inside the
-        // stamp's box.
-        draw_tracked_caps(hdc, PAD, 24, "SCREENTIME", &fonts.mono, INK_SOFT, 3);
+        // 1. Full-window backdrop: deep translucent veil covering the entire target application.
         fill(
             hdc,
             &RECT {
-                left: PAD,
-                top: 72,
-                right: cw - PAD,
-                bottom: 75,
+                left: 0,
+                top: 0,
+                right: cw,
+                bottom: ch,
             },
-            INK,
+            BG_BACKDROP,
         );
+
+        // 2. Centered floating Obsidian card.
+        let card = card_geometry(cw, ch, state.mode);
+        draw_round_rect(
+            hdc,
+            &card,
+            CORNER_RADIUS,
+            BG_OBSIDIAN,
+            Some(BORDER_ELEVATED),
+        );
+
+        // 3. Header brand voice: uppercase SCREENTIME.
+        draw_tracked_caps(
+            hdc,
+            card.x + PAD,
+            card.y + 20,
+            "SCREENTIME",
+            &fonts.brand,
+            TEXT_MUTED,
+            2,
+        );
+
+        // 4. Header badge: LIMIT REACHED in rounded rose badge.
+        draw_block_badge(
+            hdc,
+            card.x + card.w - PAD,
+            card.y + 16,
+            "LIMIT REACHED",
+            &fonts,
+        );
+
+        // 5. Header divider line.
         fill(
             hdc,
             &RECT {
-                left: PAD,
-                top: 79,
-                right: cw - PAD,
-                bottom: 80,
+                left: card.x + PAD,
+                top: card.y + 48,
+                right: card.x + card.w - PAD,
+                bottom: card.y + 49,
             },
-            RULE_STRONG,
+            BORDER_ELEVATED,
         );
 
-        // The stamp sits alone in the header band, clear of everything.
-        draw_stamp(hdc, cw - PAD, 14, &fonts);
-
-        // Headline figure and the app it convicts.
-        draw_text(hdc, PAD, 112, "Time's up.", &fonts.display, INK);
-        let label = ellipsize(hdc, &state.label, &fonts.body, cw - PAD * 2);
-        draw_text(hdc, PAD, 180, &label, &fonts.body, INK_SOFT);
+        // 6. Headline: "Time's up for today"
         draw_text(
             hdc,
-            PAD,
-            218,
-            "This app hit its standing order for today.",
-            &fonts.italic,
-            INK_SOFT,
+            card.x + PAD,
+            card.y + 60,
+            "Time's up for today",
+            &fonts.display,
+            TEXT_WHITE,
         );
 
+        // 7. Prominent blocked app label in vibrant indigo.
+        let label = ellipsize(hdc, &state.label, &fonts.app_label, card.w - PAD * 2);
+        draw_text(
+            hdc,
+            card.x + PAD,
+            card.y + 92,
+            &label,
+            &fonts.app_label,
+            ACCENT_INDIGO_BRIGHT,
+        );
+
+        // 8. Clean sub-caption explaining the reason.
+        let subcaption = match state.mode {
+            OverlayMode::Buttons => {
+                "This application reached its daily limit or scheduled downtime."
+            }
+            OverlayMode::PinExtend => "Enter master PIN to add 15 minutes, or quit the app below.",
+        };
+        draw_text(
+            hdc,
+            card.x + PAD,
+            card.y + 118,
+            subcaption,
+            &fonts.caption,
+            TEXT_MUTED,
+        );
+
+        // 9. Body actions based on mode.
         match state.mode {
             OverlayMode::Buttons => {
-                let (quit, extend) = layout_buttons(cw, ch);
-                draw_text(
+                let (quit, extend) = layout_buttons(&card);
+                draw_button(
                     hdc,
-                    PAD,
-                    quit.y - 38,
-                    "You can close the app, or buy fifteen more minutes.",
-                    &fonts.italic,
-                    INK_SOFT,
+                    &quit,
+                    "QUIT APP",
+                    BtnStyle::Secondary,
+                    &fonts.btn,
+                    TEXT_WHITE,
                 );
-                draw_button(hdc, &quit, "QUIT", BtnStyle::Outline, &fonts);
-                draw_button(hdc, &extend, "+15 MIN", BtnStyle::Ink, &fonts);
+                draw_button(
+                    hdc,
+                    &extend,
+                    "+15 MIN EXTEND",
+                    BtnStyle::Primary,
+                    &fonts.btn,
+                    TEXT_WHITE,
+                );
             }
             OverlayMode::PinExtend => {
-                let (gx, gy) = pad_origin(cw, ch);
+                let (gx, gy) = pad_origin(&card);
+
+                // Section header: "ENTER MASTER PIN"
                 draw_tracked_caps(
                     hdc,
                     gx,
-                    gy - BTN_GAP - 84,
-                    "SUPERVISOR PIN",
-                    &fonts.mono,
-                    INK_SOFT,
-                    3,
+                    gy - BTN_GAP - 52,
+                    "ENTER MASTER PIN",
+                    &fonts.pin_label,
+                    TEXT_MUTED,
+                    2,
                 );
 
-                // Masked entry: one printed ink square per clicked digit.
-                for i in 0..state.pin.chars().count() {
-                    fill(
-                        hdc,
-                        &RECT {
-                            left: gx + i as i32 * 22,
-                            top: gy - BTN_GAP - 56,
-                            right: gx + i as i32 * 22 + 10,
-                            bottom: gy - BTN_GAP - 46,
-                        },
-                        INK,
-                    );
+                // Masked entry: glowing dots (● ● ● ●) that light up indigo for each digit entered.
+                let num_dots = state.pin.chars().count().clamp(4, PIN_MAX_DIGITS);
+                let dot_spacing = 20;
+                let dots_total_w = (num_dots as i32) * dot_spacing;
+                let dots_start_x = card.x + (card.w - dots_total_w) / 2 + dot_spacing / 2;
+                let dots_y = gy - BTN_GAP - 32;
+
+                for i in 0..num_dots {
+                    let dot_cx = dots_start_x + (i as i32) * dot_spacing;
+                    if i < state.pin.chars().count() {
+                        // Lit dot: glow outer ring + solid indigo core.
+                        draw_circle(
+                            hdc,
+                            dot_cx,
+                            dots_y,
+                            6,
+                            rgb(0x28, 0x2D, 0x54),
+                            Some(ACCENT_INDIGO_BRIGHT),
+                        );
+                        draw_circle(hdc, dot_cx, dots_y, 3, ACCENT_INDIGO, Some(ACCENT_INDIGO));
+                    } else {
+                        // Unlit slot: dark background + subtle border.
+                        draw_circle(
+                            hdc,
+                            dot_cx,
+                            dots_y,
+                            5,
+                            BG_CARD_ELEVATED,
+                            Some(BORDER_ELEVATED),
+                        );
+                        draw_circle(hdc, dot_cx, dots_y, 2, BORDER_ELEVATED, None);
+                    }
                 }
+
+                // Incorrect PIN message in clear rose text.
                 if state.wrong_pin {
-                    draw_text(
+                    draw_text_centered(
                         hdc,
-                        gx,
-                        gy - BTN_GAP - 32,
-                        "That PIN doesn't match.",
-                        &fonts.italic,
-                        RED,
+                        card.x + card.w / 2,
+                        gy - BTN_GAP - 16,
+                        "Incorrect PIN. Please try again.",
+                        &fonts.caption,
+                        ACCENT_ROSE,
                     );
                 }
 
-                for (i, cell) in layout_pad(cw, ch).iter().enumerate() {
-                    let (label, style) = match PAD_KEYS[i] {
-                        "OK" => ("+15 MIN", BtnStyle::Ink),
-                        "C" => ("CLEAR", BtnStyle::Outline),
-                        digit => (digit, BtnStyle::Outline),
-                    };
-                    draw_button(hdc, cell, label, style, &fonts);
+                // 3x4 grid of tactile rounded keypad buttons.
+                for (i, cell) in layout_pad(&card).iter().enumerate() {
+                    match PAD_KEYS[i] {
+                        "OK" => {
+                            draw_button(
+                                hdc,
+                                cell,
+                                "+15 MIN",
+                                BtnStyle::Primary,
+                                &fonts.btn,
+                                TEXT_WHITE,
+                            );
+                        }
+                        "C" => {
+                            draw_button(
+                                hdc,
+                                cell,
+                                "CLEAR",
+                                BtnStyle::Secondary,
+                                &fonts.btn,
+                                TEXT_MUTED,
+                            );
+                        }
+                        digit => {
+                            draw_button(
+                                hdc,
+                                cell,
+                                digit,
+                                BtnStyle::Secondary,
+                                &fonts.pin_digit,
+                                TEXT_WHITE,
+                            );
+                        }
+                    }
                 }
+
+                // Dedicated QUIT APP button below keypad
+                let quit_btn = layout_pin_quit(&card);
+                draw_button(
+                    hdc,
+                    &quit_btn,
+                    "QUIT APP",
+                    BtnStyle::Secondary,
+                    &fonts.btn,
+                    TEXT_WHITE,
+                );
             }
         }
     }
@@ -841,11 +954,13 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
     let _ = windows::Win32::Graphics::Gdi::EndPaint(hwnd, &ps);
 }
 
-/// Timer id for the fade-in ramp. Arbitrary but unique within the window.
+/// Timer id for the fade-in ramp.
 const FADE_TIMER_ID: usize = 1;
-/// Ramp pacing: ~200 ms total (10 steps × 20 ms), matching the old behaviour.
+/// Ramp pacing: ~200 ms total (10 steps × 20 ms).
 const FADE_STEP_MS: u32 = 20;
 const FADE_ALPHA_STEP: u8 = 25;
+/// Target layered window alpha for glass-like backdrop translucency.
+const TARGET_ALPHA: u8 = 240;
 
 /// Run one overlay to completion. Blocks the calling thread in a message pump
 /// until the window is destroyed; call via [`spawn_overlay`] only.
@@ -856,7 +971,6 @@ fn run_overlay(
     label: String,
     control: Arc<OverlayControl>,
 ) {
-    // SAFETY: standard Win32 window lifecycle; see inline notes on each step.
     unsafe {
         let hinstance = GetModuleHandleW(None).expect("module handle");
         let class_name = PCWSTR(w!("ScreentimeBlockOverlay").as_ptr());
@@ -865,16 +979,10 @@ fn run_overlay(
             cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(wnd_proc),
             hInstance: hinstance.into(),
-            // A NULL class cursor makes Windows loop the busy/app-starting
-            // spinner over the window: WM_SETCURSOR falls through to
-            // DefWindowProc, which has nothing to set, so the system cursor
-            // never settles. Own the arrow explicitly.
             hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
             lpszClassName: class_name,
             ..Default::default()
         };
-        // Failure here means "already registered" (a previous overlay ran in
-        // this process); either way the class exists, which is all we need.
         RegisterClassExW(&wc);
 
         let (x, y, w, h) = rect;
@@ -887,8 +995,7 @@ fn run_overlay(
             alpha: 0,
         }));
 
-        // WS_EX_NOACTIVATE: clicking the overlay must not make it the
-        // foreground window, or the session's focus-based dismissal loops.
+        // WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_NOACTIVATE covers the full app rect.
         let Ok(hwnd) = CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
             class_name,
@@ -909,19 +1016,14 @@ fn run_overlay(
         };
         control.register(hwnd);
 
-        // Start fully transparent so the first paint lands invisible; the
-        // WM_TIMER ramp below then fades us in while the pump runs — no more
-        // sleeping before the pump (the window used to sit unpainted ~200ms).
+        // Start transparent and ramp to TARGET_ALPHA via WM_TIMER.
         let _ = SetLayeredWindowAttributes(
             hwnd,
-            windows::Win32::Foundation::COLORREF(0),
+            COLORREF(0),
             0,
             LAYERED_WINDOW_ATTRIBUTES_FLAGS(0x2), // LWA_ALPHA
         );
 
-        // Swallow all keys while the overlay is up. Owned by this stack frame:
-        // two overlapping overlays each get their own hook, and removal below
-        // cannot touch anyone else's (the old module-global hook could).
         let hook = SetWindowsHookExW(WH_KEYBOARD_LL, Some(keyboard_proc), None, 0).ok();
         if hook.is_none() {
             tracing::warn!("keyboard hook unavailable; overlay shows without input blocking");
@@ -929,15 +1031,12 @@ fn run_overlay(
 
         SetTimer(hwnd, FADE_TIMER_ID, FADE_STEP_MS, None);
 
-        // Message loop: runs until the window is destroyed.
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
             let _ = TranslateMessage(&msg);
             DispatchMessageW(&msg);
         }
 
-        // Teardown for everything this run owns; the session loop joins the
-        // thread afterwards, so by the time it proceeds the desktop is quiet.
         let _ = KillTimer(hwnd, FADE_TIMER_ID);
         if let Some(hook) = hook {
             let _ = UnhookWindowsHookEx(hook);
@@ -946,7 +1045,7 @@ fn run_overlay(
 }
 
 /// Swallow all keys while the overlay is up, so the blocked app cannot be
-/// driven by keyboard (Alt+F4, Alt+Tab, typing, shortcuts).
+/// driven by keyboard.
 unsafe extern "system" fn keyboard_proc(_code: i32, _wparam: WPARAM, _lparam: LPARAM) -> LRESULT {
     LRESULT(1)
 }

@@ -1,0 +1,24 @@
+.add-domain-form {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+.domain-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.domain-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border-radius: 4px;
+}
+.domain-name {
+    font-weight: 500;
+}

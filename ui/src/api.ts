@@ -63,15 +63,25 @@ export function removePin(credential: string): Promise<void> {
 export function setLimit(
     target: LimitTargetDto,
     defaultMinutes: number,
-    weekdayMinutes: WeekdayMinutes,
+    weekdayMinutes: (number | null)[],
     enabled: boolean,
     pin: string,
 ): Promise<string> {
-    return invoke("set_limit", { target, defaultMinutes, weekdayMinutes, enabled, pin });
+    return invoke("set_limit", {
+        target,
+        defaultMinutes,
+        weekdayMinutes,
+        enabled,
+        pin,
+    });
 }
 
 export function deleteLimit(target: LimitTargetDto, pin: string): Promise<string> {
     return invoke("delete_limit", { target, pin });
+}
+
+export function cancelPendingLimit(target: LimitTargetDto, pin: string): Promise<string> {
+    return invoke("cancel_pending_limit", { target, pin });
 }
 
 export function grantOverride(target: LimitTargetDto, seconds: number, pin: string): Promise<void> {
@@ -80,6 +90,18 @@ export function grantOverride(target: LimitTargetDto, seconds: number, pin: stri
 
 export function categorizeApp(appId: number, primaryCategoryId: number, tagCategoryIds: number[]): Promise<void> {
     return invoke("categorize", { appId, primary: primaryCategoryId, tags: tagCategoryIds });
+}
+
+export function listManualBlocks(): Promise<{ domains: string[] }> {
+    return invoke("list_manual_blocks");
+}
+
+export function addManualBlock(domain: string): Promise<void> {
+    return invoke("add_manual_block", { domain });
+}
+
+export function removeManualBlock(domain: string): Promise<void> {
+    return invoke("remove_manual_block", { domain });
 }
 
 const COPY: Record<ErrorCode, string> = {

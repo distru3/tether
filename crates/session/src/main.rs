@@ -216,6 +216,9 @@ fn main() -> anyhow::Result<()> {
         ));
         let focused = sample.and_then(|s| s.key);
         let focused_changed = focused != sess.prev_focused;
+        if focused_changed && focused.is_some() {
+            tracing::debug!(app = ?focused, "focused app changed");
+        }
 
         // Bound buffered work if reporting has been failing for a long time.
         if outbox.len() > cycle::MAX_OUTBOX_OBSERVATIONS {
@@ -349,36 +352,35 @@ fn run_frames(
     sent_at: DateTime<Utc>,
 ) -> bool {
     // 3. Usage batch. Ascending order is contractual; sort defensively even
-    // though the accumulator produces ascending stamps.
-    if !outbox.is_empty() {
-        outbox.sort_by(|a, b| a.observed_at_utc.cmp(&b.observed_at_utc));
-        let report = ReportUsageDto {
-            observations: outbox.clone(),
-        };
-        match link::round_trip(stream, &Request::ReportUsage { report }) {
-            Ok(Response::Accepted { effective_utc }) => {
-                log_ingest_ack(&effective_utc, sent_at);
-                outbox.clear();
-                if sess.usage_flowing != Some(true) {
-                    tracing::info!("usage reporting acknowledged by agent");
-                }
-                sess.usage_flowing = Some(true);
+    // though the accumulator produces ascending stamps. Sent every cycle so
+    // empty batches (e.g. idle/desktop) keep the agent's tracking liveness fresh.
+    outbox.sort_by(|a, b| a.observed_at_utc.cmp(&b.observed_at_utc));
+    let report = ReportUsageDto {
+        observations: outbox.clone(),
+    };
+    match link::round_trip(stream, &Request::ReportUsage { report }) {
+        Ok(Response::Accepted { effective_utc }) => {
+            log_ingest_ack(&effective_utc, sent_at);
+            outbox.clear();
+            if sess.usage_flowing != Some(true) {
+                tracing::info!("usage reporting acknowledged by agent");
             }
-            // Whole-batch discard + idempotency makes retaining correct.
-            Ok(Response::Error { code, message }) => {
-                if sess.usage_flowing != Some(false) {
-                    tracing::info!(?code, %message, "agent rejected usage batch; will retry");
-                }
-                sess.usage_flowing = Some(false);
+            sess.usage_flowing = Some(true);
+        }
+        // Whole-batch discard + idempotency makes retaining correct.
+        Ok(Response::Error { code, message }) => {
+            if sess.usage_flowing != Some(false) {
+                tracing::info!(?code, %message, "agent rejected usage batch; will retry");
             }
-            Ok(other) => {
-                tracing::warn!(?other, "unexpected response to ReportUsage; recycling link");
-                return false;
-            }
-            Err(e) => {
-                tracing::debug!(error = %e, "usage report failed; recycling link");
-                return false;
-            }
+            sess.usage_flowing = Some(false);
+        }
+        Ok(other) => {
+            tracing::warn!(?other, "unexpected response to ReportUsage; recycling link");
+            return false;
+        }
+        Err(e) => {
+            tracing::debug!(error = %e, "usage report failed; recycling link");
+            return false;
         }
     }
 
@@ -456,11 +458,13 @@ fn show_overlay(
         cycle::QuitGate::ButtonsAvailable => overlay::OverlayMode::Buttons,
         cycle::QuitGate::PinLocked => overlay::OverlayMode::PinExtend,
     };
-    tracing::info!(app = app_id, ?mode, "showing block overlay");
+    let pid = snap.pid;
+    let target_hwnd = snap.hwnd;
+    tracing::info!(app = app_id, pid, ?mode, "showing block overlay");
     Some(overlay::spawn_overlay(
         snap.rect,
         overlay::OverlayCallbacks::new(
-            move || close_app(app_id),
+            move || close_app_direct(app_id, pid, target_hwnd),
             move |pin| extend_app(app_id, &pin),
         ),
         mode,
@@ -468,36 +472,38 @@ fn show_overlay(
     ))
 }
 
-/// "Quit" from the overlay: terminate the app's process tree.
-///
-/// Click actions deliberately ride their own short-lived connection instead of
-/// the persistent link: they are rare, latency-tolerant, must work even while
-/// the sampler is mid-reconnect, and sharing the link with overlay threads
-/// would buy nothing but a mutex.
-fn close_app(app_id: i64) -> bool {
-    match request_agent(Request::CloseApps {
-        app_id,
-        pin: String::new(),
-    }) {
-        Ok(Response::Accepted { .. }) => true,
-        Ok(Response::Error {
-            code: st_ipc::ErrorCode::BadPin,
-            ..
-        }) => {
-            // Belt and braces: the button is hidden whenever Status said a PIN
-            // exists, so landing here means config flipped under us.
-            tracing::warn!("quit refused (PIN now required); use Screentime");
-            false
+/// "Quit" from the overlay: instantly terminate the target app and notify the agent.
+fn close_app_direct(app_id: i64, pid: u32, target_hwnd: isize) -> bool {
+    #[cfg(windows)]
+    unsafe {
+        use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
+        use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+        use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, WM_CLOSE};
+
+        if target_hwnd != 0 {
+            let _ = PostMessageW(
+                HWND(target_hwnd as *mut std::ffi::c_void),
+                WM_CLOSE,
+                WPARAM(0),
+                LPARAM(0),
+            );
         }
-        Ok(other) => {
-            tracing::warn!(?other, "unexpected close response");
-            false
-        }
-        Err(e) => {
-            tracing::warn!(error = %e, "close request failed");
-            false
+        if pid != 0 {
+            if let Ok(handle) = OpenProcess(PROCESS_TERMINATE, false, pid) {
+                let _ = TerminateProcess(handle, 1);
+                let _ = CloseHandle(handle);
+            }
         }
     }
+
+    std::thread::spawn(move || {
+        let _ = request_agent(Request::CloseApps {
+            app_id,
+            pin: String::new(),
+        });
+    });
+
+    true
 }
 
 /// "+15 minutes" from the overlay, carrying whatever the pad collected (empty

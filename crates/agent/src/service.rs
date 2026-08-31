@@ -79,6 +79,7 @@ pub(crate) fn uninstall() -> Result<()> {
 mod win {
     use std::ffi::OsString;
     use std::path::PathBuf;
+    use std::os::windows::process::CommandExt;
     use std::process::Command;
     use std::time::Duration;
 
@@ -312,7 +313,7 @@ mod win {
         let output = Command::new("cmd")
             .arg("/D")
             .arg("/C")
-            .arg(command_line)
+            .raw_arg(command_line)
             .output()
             .context("spawning cmd.exe to invoke sc.exe")?;
         print!("{}", String::from_utf8_lossy(&output.stdout));

@@ -42,6 +42,11 @@ pub(crate) enum Action {
     Install,
     /// Stop (best-effort) and delete the service via `sc.exe`.
     Uninstall,
+    /// Emergency one-shot: undo all network changes (hosts file, DNS
+    /// overrides, firewall rules, browser policies) and exit. Does NOT start
+    /// the daemon. Designed so a stranded machine can recover without needing
+    /// the batch script or any internet connectivity.
+    ResetNetwork,
 }
 
 /// Decide what to do from the raw argument slice (argv[1..]).
@@ -55,6 +60,7 @@ pub(crate) fn decide(args: &[String]) -> Result<Action, String> {
         [flag] if flag == "--service" => Ok(Action::RunAsService),
         [flag] if flag == "--install" => Ok(Action::Install),
         [flag] if flag == "--uninstall" => Ok(Action::Uninstall),
+        [flag] if flag == "--reset-network" => Ok(Action::ResetNetwork),
         other => Err(format!(
             "error: unrecognized argument(s): {}\n\n{}",
             other.join(" "),
@@ -65,12 +71,12 @@ pub(crate) fn decide(args: &[String]) -> Result<Action, String> {
 
 /// Usage text listing every verb; also the body of the unknown-flag error.
 pub(crate) fn usage_text() -> String {
-    // No interpolation, so a plain literal + to_string beats format! here.
     "usage: screentime-agent [FLAG]\n\
-     \x20 (no args)     run the agent in console mode (foreground)\n\
-     \x20 --service     run under the Windows service controller (launched by SCM)\n\
-     \x20 --install     register the Windows service (elevated prompt required)\n\
-     \x20 --uninstall   remove the Windows service (elevated prompt required)"
+     \x20 (no args)          run the agent in console mode (foreground)\n\
+     \x20 --service          run under the Windows service controller (launched by SCM)\n\
+     \x20 --install          register the Windows service (elevated prompt required)\n\
+     \x20 --uninstall        remove the Windows service (elevated prompt required)\n\
+     \x20 --reset-network    undo all DNS/hosts/firewall changes and exit (emergency recovery)"
         .to_string()
 }
 
@@ -150,11 +156,20 @@ mod tests {
     }
 
     #[test]
+    fn reset_network_flag_selects_reset_network() {
+        assert_eq!(
+            decide(&args(&["--reset-network"])),
+            Ok(Action::ResetNetwork)
+        );
+    }
+
+    #[test]
     fn unknown_flag_is_rejected_with_usage_listing_all_verbs() {
         let err = decide(&args(&["--serv"])).expect_err("unknown flag");
         assert!(err.contains("--service"));
         assert!(err.contains("--install"));
         assert!(err.contains("--uninstall"));
+        assert!(err.contains("--reset-network"));
         assert!(err.contains("(no args)"));
     }
 

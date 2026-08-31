@@ -1,0 +1,120 @@
+/* ==========================================================================
+   tokens.css - Screentime Design Tokens
+   Modern OKLCH Glassmorphism Palette
+   ========================================================================== */
+
+:root {
+    color-scheme: light dark;
+
+    /* ---- Primitives: OKLCH Colors ---- */
+    --base-hue: 240; /* Deep blue/violet base */
+    
+    /* Vibrant Accents */
+    --color-primary: oklch(0.65 0.18 280); /* Neon Purple */
+    --color-primary-hover: oklch(0.7 0.2 280);
+    --color-primary-active: oklch(0.6 0.18 280);
+    --color-primary-subtle: oklch(0.65 0.18 280 / 0.15);
+
+    --color-success: oklch(0.7 0.15 160); /* Emerald */
+    --color-success-subtle: oklch(0.7 0.15 160 / 0.15);
+    
+    --color-warning: oklch(0.75 0.15 60); /* Amber */
+    --color-warning-subtle: oklch(0.75 0.15 60 / 0.15);
+    
+    --color-danger: oklch(0.65 0.18 15); /* Crimson Rose */
+    --color-danger-subtle: oklch(0.65 0.18 15 / 0.15);
+    
+    --color-info: oklch(0.7 0.15 220); /* Cyan */
+
+    /* ---- Semantic Surfaces & Glassmorphism ---- */
+    --bg-app: light-dark(oklch(0.98 0.01 var(--base-hue)), oklch(0.12 0.02 var(--base-hue)));
+    --bg-sidebar: light-dark(oklch(0.95 0.01 var(--base-hue) / 0.6), oklch(0.15 0.02 var(--base-hue) / 0.4));
+    --bg-card: light-dark(oklch(1 0 0 / 0.7), oklch(0.18 0.02 var(--base-hue) / 0.5));
+    --bg-card-hover: light-dark(oklch(1 0 0 / 0.9), oklch(0.22 0.02 var(--base-hue) / 0.6));
+    --bg-input: light-dark(oklch(0.9 0.01 var(--base-hue) / 0.5), oklch(0.1 0.02 var(--base-hue) / 0.5));
+    --bg-modal-backdrop: light-dark(oklch(0.95 0.01 var(--base-hue) / 0.4), oklch(0.05 0.01 var(--base-hue) / 0.5));
+
+    /* ---- Borders (Soft & Subdued) ---- */
+    --border-subtle: light-dark(oklch(0 0 0 / 0.05), oklch(1 1 1 / 0.06));
+    --border-card: light-dark(oklch(0 0 0 / 0.08), oklch(1 1 1 / 0.1));
+    --border-hover: light-dark(oklch(0 0 0 / 0.15), oklch(1 1 1 / 0.15));
+    --border-strong: light-dark(oklch(0 0 0 / 0.25), oklch(1 1 1 / 0.25));
+    --border-focus: var(--color-primary);
+
+    /* ---- Typography ---- */
+    --text-primary: light-dark(oklch(0.2 0.02 var(--base-hue)), oklch(0.95 0.01 var(--base-hue)));
+    --text-secondary: light-dark(oklch(0.4 0.02 var(--base-hue)), oklch(0.7 0.02 var(--base-hue)));
+    --text-muted: light-dark(oklch(0.6 0.01 var(--base-hue)), oklch(0.5 0.02 var(--base-hue)));
+    --text-faint: light-dark(oklch(0.8 0.01 var(--base-hue)), oklch(0.3 0.02 var(--base-hue)));
+
+    /* ---- Fonts ---- */
+    --font-sans: " Inter\, \Segoe UI Variable Text\, \Segoe UI\, system-ui, -apple-system, sans-serif;
+ --font-mono: \JetBrains Mono\, \Cascadia Code\, Consolas, ui-monospace, monospace;
+
+ /* ---- Shadows (Soft Diffuse) ---- */
+ --shadow-sm: light-dark(0 2px 8px -2px oklch(0 0 0 / 0.05), 0 2px 8px -2px oklch(0 0 0 / 0.3));
+ --shadow-card: light-dark(0 8px 24px -4px oklch(0 0 0 / 0.08), 0 8px 32px -4px oklch(0 0 0 / 0.4));
+ --shadow-modal: light-dark(0 24px 48px -12px oklch(0 0 0 / 0.15), 0 24px 64px -12px oklch(0 0 0 / 0.6));
+
+ /* ---- Radii (Modern Squircle-ish) ---- */
+ --radius-xs: 6px;
+ --radius-sm: 8px;
+ --radius-md: 12px;
+ --radius-lg: 16px;
+ --radius-xl: 24px;
+ --radius-full: 9999px;
+
+ /* ---- Motion ---- */
+ --transition-fast: 0.15s cubic-bezier(0.2, 0, 0, 1);
+ --transition-normal: 0.3s cubic-bezier(0.2, 0, 0, 1);
+ --transition-bounce: 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+ /* =======================================
+ Legacy aliases
+ ======================================= */
+ --paper: var(--bg-app);
+ --paper-raised: var(--bg-card);
+ --paper-deep: var(--bg-card-hover);
+ --ink: var(--text-primary);
+ --ink-soft: var(--text-secondary);
+ --ink-faint: var(--text-muted);
+ --rule: var(--border-subtle);
+ --rule-strong: var(--border-card);
+ --red: var(--color-danger);
+ --red-wash: var(--color-danger-subtle);
+ --stamp-green: var(--color-success);
+ --font-display: var(--font-sans);
+ --font-body: var(--font-sans);
+ --font-utility: var(--font-mono);
+ --print-filter: none;
+ --shadow-slip: var(--shadow-card);
+ 
+ --bg-canvas: var(--bg-app);
+ --bg-surface: var(--bg-card);
+ --bg-surface-raised: var(--bg-card-hover);
+ --bg-surface-hover: var(--bg-input);
+ 
+ /* Legacy accents */
+ --accent-indigo: var(--color-primary);
+ --accent-indigo-hover: var(--color-primary-hover);
+ --accent-indigo-subtle: var(--color-primary-subtle);
+ --accent-indigo-border: var(--border-focus);
+ 
+ --accent-emerald: var(--color-success);
+ --accent-emerald-hover: oklch(0.65 0.15 160);
+ --accent-emerald-subtle: var(--color-success-subtle);
+ --accent-emerald-border: oklch(0.65 0.15 160 / 0.25);
+ 
+ --accent-amber: var(--color-warning);
+ --accent-amber-hover: oklch(0.7 0.15 60);
+ --accent-amber-subtle: var(--color-warning-subtle);
+ --accent-amber-border: oklch(0.7 0.15 60 / 0.25);
+ 
+ --accent-rose: var(--color-danger);
+ --accent-rose-hover: oklch(0.6 0.18 15);
+ --accent-rose-subtle: var(--color-danger-subtle);
+ --accent-rose-border: oklch(0.6 0.18 15 / 0.25);
+ 
+ --accent-cyan: var(--color-info);
+ --accent-violet: var(--color-primary);
+}

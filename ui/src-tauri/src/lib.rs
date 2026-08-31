@@ -17,6 +17,7 @@
 //! parsing English.
 
 mod ipc_client;
+mod tray;
 
 #[cfg(windows)]
 mod corners {
@@ -294,6 +295,166 @@ fn grant_override(target: st_ipc::LimitTargetDto, seconds: i64, pin: String) -> 
     }
 }
 
+// -- Web filter --------------------------------------------------------------
+//
+// Thin adapters over the agent's web-filter IPC surface. The agent is the sole
+// owner of the blocklist/rule/site tables; these commands only shape the
+// request and unwrap the structured reply.
+
+fn accepted_cmd(request: st_ipc::Request) -> CmdResult<()> {
+    match ipc_client::request(request) {
+        Ok(Response::Accepted { .. }) => Ok(()),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
+#[tauri::command]
+fn categorize(app_id: i64, primary: i64, tags: Vec<i64>) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::Categorize {
+        app_id,
+        primary,
+        tags,
+    })
+}
+
+#[derive(serde::Serialize)]
+struct ManualBlocksDto {
+    domains: Vec<String>,
+}
+
+#[tauri::command]
+fn list_manual_blocks() -> CmdResult<ManualBlocksDto> {
+    match ipc_client::request(st_ipc::Request::ListManualBlocks) {
+        Ok(st_ipc::Response::ManualBlocks { domains }) => Ok(ManualBlocksDto { domains }),
+        Ok(st_ipc::Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
+#[tauri::command]
+fn add_manual_block(domain: String) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::AddManualBlock { domain })
+}
+
+#[tauri::command]
+fn remove_manual_block(domain: String) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::RemoveManualBlock { domain })
+}
+
+#[tauri::command]
+fn list_schedules() -> CmdResult<st_ipc::SchedulesDto> {
+    match ipc_client::request(st_ipc::Request::ListSchedules) {
+        Ok(Response::Schedules(dto)) => Ok(dto),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
+#[tauri::command]
+fn create_schedule(
+    name: String,
+    weekday_mask: u8,
+    start_minute: u32,
+    end_minute: u32,
+) -> CmdResult<st_ipc::ScheduleDto> {
+    match ipc_client::request(st_ipc::Request::CreateSchedule {
+        name,
+        weekday_mask,
+        start_minute,
+        end_minute,
+    }) {
+        Ok(Response::ScheduleCreated(dto)) => Ok(dto),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
+#[tauri::command]
+fn update_schedule(
+    id: i64,
+    name: String,
+    weekday_mask: u8,
+    start_minute: u32,
+    end_minute: u32,
+) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::UpdateSchedule {
+        id,
+        name,
+        weekday_mask,
+        start_minute,
+        end_minute,
+    })
+}
+
+#[tauri::command]
+fn set_schedule_enabled(id: i64, enabled: bool) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::SetScheduleEnabled { id, enabled })
+}
+
+#[tauri::command]
+fn delete_schedule(id: i64) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::DeleteSchedule { id })
+}
+
+#[tauri::command]
+fn list_allowlist() -> CmdResult<st_ipc::AllowlistDto> {
+    match ipc_client::request(st_ipc::Request::ListAllowlist) {
+        Ok(Response::Allowlist(dto)) => Ok(dto),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
+#[tauri::command]
+fn set_allowlist(subject_type: String, subject_id: i64, allowed: bool) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::SetAllowlist {
+        subject_type,
+        subject_id,
+        allowed,
+    })
+}
+
+#[tauri::command]
+fn get_focus_session() -> CmdResult<Option<st_ipc::FocusSessionDto>> {
+    match ipc_client::request(st_ipc::Request::GetFocusSession) {
+        Ok(Response::FocusSession { session }) => Ok(session),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
+#[tauri::command]
+fn start_focus_session(duration_minutes: u32, name: Option<String>) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::StartFocusSession {
+        duration_minutes,
+        name,
+    })
+}
+
+#[tauri::command]
+fn end_focus_session(pin: Option<String>) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::EndFocusSession { pin })
+}
+
+#[tauri::command]
+fn emergency_reset_network() -> CmdResult<()> {
+    tray::run_emergency_network_reset();
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_all_services(app: tauri::AppHandle) -> CmdResult<()> {
+    tray::stop_all_services(&app);
+    Ok(())
+}
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -314,7 +475,23 @@ pub fn run() {
             remove_pin,
             set_limit,
             delete_limit,
-            grant_override
+            grant_override,
+            categorize,
+            list_manual_blocks,
+            add_manual_block,
+            remove_manual_block,
+            list_schedules,
+            create_schedule,
+            update_schedule,
+            set_schedule_enabled,
+            delete_schedule,
+            list_allowlist,
+            set_allowlist,
+            get_focus_session,
+            start_focus_session,
+            end_focus_session,
+            emergency_reset_network,
+            stop_all_services
         ])
         .setup(|app| {
             #[cfg(windows)]
@@ -325,7 +502,20 @@ pub fn run() {
                     corners::set_square_corners(hwnd);
                 }
             }
+
+            // Initialize system tray icon with menu and emergency actions
+            if let Err(e) = tray::setup_tray(app) {
+                tracing::warn!("Failed to initialize system tray icon: {e}");
+            }
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Minimize to tray on close button so app continues monitoring in background
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let _ = window.hide();
+                api.prevent_close();
+            }
         })
         .run(tauri::generate_context!())
         .expect("failed to launch Tauri application");

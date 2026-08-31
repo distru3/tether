@@ -5,6 +5,7 @@ import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
 import { Dialog } from "./Dialog";
+import { ChevronDownIcon, ChevronRightIcon } from "./icons/Icons";
 
 interface LimitEditorDialogProps {
     catalog: CatalogDto | null;
@@ -114,17 +115,23 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                             <option value="" disabled>
                                 Choose…
                             </option>
-                            <option value="total">Total screen time</option>
-                            {limitableCategories.map((category) => (
-                                <option key={`category:${category.id}`} value={`category:${category.id}`}>
-                                    {category.name}
-                                </option>
-                            ))}
-                            {(catalog?.apps ?? []).map((app) => (
-                                <option key={`app:${app.id}`} value={`app:${app.id}`}>
-                                    {app.display_name}
-                                </option>
-                            ))}
+                            {!catalog?.limits.some((l) => l.target.kind === "total") && (
+                                <option value="total">Total screen time</option>
+                            )}
+                            {limitableCategories
+                                .filter((category) => !catalog?.limits.some((l) => l.target.kind === "category" && l.target.id === category.id))
+                                .map((category) => (
+                                    <option key={`category:${category.id}`} value={`category:${category.id}`}>
+                                        {category.name}
+                                    </option>
+                                ))}
+                            {(catalog?.apps ?? [])
+                                .filter((app) => !catalog?.limits.some((l) => l.target.kind === "app" && l.target.id === app.id))
+                                .map((app) => (
+                                    <option key={`app:${app.id}`} value={`app:${app.id}`}>
+                                        {app.display_name}
+                                    </option>
+                                ))}
                         </select>
                     </label>
                 )}
@@ -149,7 +156,7 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                     disabled={busy}
                     onClick={() => setWeekOpen((open) => !open)}
                 >
-                    <span className="weekday-chevron">{weekOpen ? "▾" : "▸"}</span>
+                    <span className="weekday-chevron">{weekOpen ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}</span>
                     Per-day overrides
                     {overrideCount > 0 && <span className="weekday-count">· {overrideCount}</span>}
                 </button>

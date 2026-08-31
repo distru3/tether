@@ -18,7 +18,8 @@
 param(
     # Target directory for the daemon executables. sc.exe and the autostart
     # entry both reference this exact path, so quote-safety matters.
-    [string]$InstallDir = "C:\Program Files\Screentime"
+    [string]$InstallDir = "C:\Program Files\Screentime",
+    [switch]$SkipBuild = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -39,52 +40,68 @@ if (-not $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administra
     Fail "This script must run from an elevated PowerShell (the service registration via sc.exe requires it)."
 }
 
-if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
-    Fail "cargo was not found on PATH; install the Rust toolchain first."
-}
-
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $AgentSource = Join-Path $RepoRoot "target\release\screentime-agent.exe"
 $SessionSource = Join-Path $RepoRoot "target\release\screentime-session.exe"
 $AgentDest = Join-Path $InstallDir "screentime-agent.exe"
 $SessionDest = Join-Path $InstallDir "screentime-session.exe"
 
+if (-not $SkipBuild) {
+    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+        # Check standard user cargo locations if elevated session lacks user PATH
+        $cargoFallback = Get-ChildItem "C:\Users\*\.cargo\bin\cargo.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty FullName
+        if ($cargoFallback -and (Test-Path $cargoFallback)) {
+            $env:PATH = "$(Split-Path -Parent $cargoFallback);$env:PATH"
+        }
+    }
+    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
+        Fail "cargo was not found on PATH; install the Rust toolchain first."
+    }
+}
+
 Write-Host "== Screentime install =="
 Write-Host "Repo root : $RepoRoot"
 Write-Host "Install to: $InstallDir"
 
 # --- 1. Stop running instances ---------------------------------------------
-# The release binaries cannot be overwritten while running, and a service
-# reinstall against a live process leaves SCM confused. Graceful close first;
-# these daemons have no interactive window to decline with, so after a short
-# wait we stop them outright (deliberate, not reckless: they will be replaced
-# moments later).
+# Stop the Windows service first so SCM doesn't hold locks or attempt restarts.
+$existingService = Get-Service -Name $ServiceName -ErrorAction SilentlyContinue
+if ($existingService -and $existingService.Status -ne "Stopped") {
+    Write-Host "Stopping service $ServiceName..."
+    try {
+        Stop-Service -Name $ServiceName -Force -ErrorAction Stop
+        $existingService.WaitForStatus("Stopped", "00:00:15")
+    } catch {
+        Write-Warning "Could not gracefully stop service: $($_.Exception.Message)"
+    }
+}
+
 foreach ($procName in @("screentime-agent", "screentime-session")) {
     $running = Get-Process -Name $procName -ErrorAction SilentlyContinue
     if (-not $running) { continue }
-    # @(...) is required: Get-Process returns a bare SCALAR for one match, and
-    # under Set-StrictMode 2 a scalar has no .Count in PowerShell 5.1.
     Write-Host "Stopping $procName ($(@($running).Count) process(es))..."
     foreach ($p in $running) {
         if ($p.HasExited) { continue }
         $null = $p.CloseMainWindow()   # harmless if windowless
     }
     $running | Wait-Process -Timeout 3 -ErrorAction SilentlyContinue
-    Get-Process -Name $procName -ErrorAction SilentlyContinue | Stop-Process
+    Get-Process -Name $procName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
     Start-Sleep -Milliseconds 500
 }
 
 # --- 2. Build release binaries ----------------------------------------------
-Push-Location $RepoRoot
-try {
-    Write-Host "Building release binaries..."
-    cargo build --release -p st-agent -p st-session
-    if ($LASTEXITCODE -ne 0) {
-        Fail "cargo build --release failed with exit code $LASTEXITCODE."
+if (-not $SkipBuild) {
+    Push-Location $RepoRoot
+    try {
+        Write-Host "Building release binaries..."
+        cargo build --release -p st-agent -p st-session
+        if ($LASTEXITCODE -ne 0) {
+            Fail "cargo build --release failed with exit code $LASTEXITCODE."
+        }
     }
-}
-finally {
-    Pop-Location
+    finally {
+        Pop-Location
+    }
 }
 
 # --- 3. Copy executables -----------------------------------------------------
@@ -161,6 +178,12 @@ Could not start the $ServiceName service: $($_.Exception.Message)
 Check the tail of C:\ProgramData\screentime\logs\ and the Windows event log
 (Application channel) for the service's own error.
 "@
+}
+
+$sessionRunning = Get-Process -Name "screentime-session" -ErrorAction SilentlyContinue
+if (-not $sessionRunning) {
+    Write-Host "Starting session helper ($SessionDest)..."
+    Start-Process -FilePath $SessionDest
 }
 
 # --- 7. Verification hints ---------------------------------------------------

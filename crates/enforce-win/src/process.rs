@@ -130,7 +130,10 @@ impl ProcessController for Win32ProcessController {
                         // would drift exactly as that crate's docs warn.
                         if let Ok(handle) = open_process_query(entry.th32ProcessID) {
                             if let Ok(path) = image_path_from_handle(&handle) {
-                                if path.replace('/', "\\").to_lowercase() == *target_path {
+                                let norm = path.replace('/', "\\").to_lowercase();
+                                if norm == *target_path
+                                    || norm.ends_with(&format!("\\{target_basename}"))
+                                {
                                     pids.push(entry.th32ProcessID);
                                 }
                             }

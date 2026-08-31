@@ -42,6 +42,16 @@ pub struct LimitRow {
     pub label: String,
 }
 
+pub struct PendingLimitRow {
+    pub id: i64,
+    pub target: Option<LimitTarget>,
+    pub action: String,
+    pub default_minutes: Option<i64>,
+    pub weekday_minutes: Option<[Option<u32>; 7]>,
+    pub enabled: Option<bool>,
+    pub effective_from_utc: String,
+}
+
 impl LimitRow {
     pub fn to_limit(&self) -> Option<Limit> {
         Some(Limit {
@@ -388,6 +398,63 @@ impl Db {
             "UPDATE limits SET weekday_minutes = ?2 WHERE id = ?1",
             params![id, json],
         )?;
+        Ok(())
+    }
+
+    pub fn list_pending_limits(&self) -> Result<Vec<PendingLimitRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, target_type, target_id, action, default_minutes,
+                    weekday_minutes, enabled, effective_from_utc
+             FROM pending_limits
+             ORDER BY id",
+        )?;
+        let rows = stmt.query_map([], |row| {
+            Ok((
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, Option<i64>>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<i64>>(4)?,
+                row.get::<_, Option<String>>(5)?,
+                row.get::<_, Option<i64>>(6)?,
+                row.get::<_, String>(7)?,
+            ))
+        })?;
+
+        let mut out = Vec::new();
+        for res in rows {
+            let (id, t_type, t_id, action, d_min, w_min, enabled, eff_utc) = res?;
+            let w_min_parsed = match w_min {
+                Some(s) => Some(weekday_minutes_from_json("weekday_minutes", &s)?),
+                None => None,
+            };
+            let target = row_to_target(&t_type, t_id);
+            out.push(PendingLimitRow {
+                id,
+                target,
+                action,
+                default_minutes: d_min,
+                weekday_minutes: w_min_parsed,
+                enabled: enabled.map(|v| v != 0),
+                effective_from_utc: eff_utc,
+            });
+        }
+        Ok(out)
+    }
+
+    pub fn cancel_pending_limit(&self, target: &LimitTarget) -> Result<()> {
+        let (target_type, target_id) = target_to_row(target);
+        if let Some(id) = target_id {
+            self.conn.execute(
+                "DELETE FROM pending_limits WHERE target_type = ?1 AND target_id = ?2",
+                params![target_type, id],
+            )?;
+        } else {
+            self.conn.execute(
+                "DELETE FROM pending_limits WHERE target_type = ?1 AND target_id IS NULL",
+                params![target_type],
+            )?;
+        }
         Ok(())
     }
 }

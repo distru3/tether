@@ -1,37 +1,129 @@
-/* ============================================================
-   tokens.css — "The Daily Ledger" design tokens
-   Print broadsheet / accounting ledger: light paper, ink,
-   ruled hairlines, sharp corners, typography-led.
-   ============================================================ */
+/* ==========================================================================
+   tokens.css - Screentime Design Tokens
+   Modern Tech Dark Theme
+   ========================================================================== */
 
 :root {
-    /* Paper surfaces */
-    --paper: #f6f2ea;
-    --paper-raised: #fbf8f2;
-    --paper-deep: #ece5d6;
+   color-scheme: dark;
 
-    /* Ink */
-    --ink: #211d1a;
-    --ink-soft: #57504a;
-    --ink-faint: #8d8578;
+   /* ---- Primitives: OKLCH Colors ---- */
+   --base-hue: 240;
+   /* Slate / Tech Blue */
 
-    /* Rules (hairlines) */
-    --rule: #d8d0bf;
-    --rule-strong: #b3a992;
+   /* Vibrant Accents - Sleek, professional tech colors */
+   --color-primary: oklch(0.65 0.15 250);
+   /* Tech Blue */
+   --color-primary-hover: oklch(0.70 0.15 250);
+   --color-primary-active: oklch(0.60 0.15 250);
+   --color-primary-subtle: oklch(0.65 0.15 250 / 0.15);
 
-    /* Accents */
-    --red: #a02c20;
-    --red-wash: rgba(160, 44, 32, 0.08);
-    --stamp-green: #3d6b45;
+   --color-success: oklch(0.65 0.15 150);
+   /* Emerald */
+   --color-success-subtle: oklch(0.65 0.15 150 / 0.15);
 
-    /* Type */
-    --font-display: Georgia, "Times New Roman", serif;
-    --font-body: Georgia, "Times New Roman", serif;
-    --font-utility: Consolas, "Cascadia Mono", monospace;
+   --color-warning: oklch(0.75 0.18 60);
+   /* Amber */
+   --color-warning-subtle: oklch(0.75 0.18 60 / 0.2);
 
-    /* Data colors printed on paper sit one step duller */
-    --print-filter: saturate(0.7) contrast(0.92);
+   --color-danger: oklch(0.6 0.2 15);
+   /* Tech Red */
+   --color-danger-subtle: oklch(0.6 0.2 15 / 0.15);
 
-    /* Elevation: offset solid shadow for modal slips */
-    --shadow-slip: 6px 6px 0 rgba(33, 29, 26, 0.12);
+   --color-info: oklch(0.7 0.15 230);
+   /* Cyan */
+
+   /* ---- Semantic Surfaces & Glassmorphism ---- */
+   /* Dark Theme Surfaces */
+   --bg-app: oklch(0.15 0.01 240);
+   --bg-sidebar: oklch(0.17 0.01 240 / 0.85);
+   /* Slightly translucent */
+   --bg-card: oklch(0.19 0.01 240 / 0.7);
+   --bg-card-hover: oklch(0.22 0.01 240 / 0.8);
+   --bg-input: oklch(0.12 0.01 240 / 0.8);
+   --bg-modal-backdrop: oklch(0.1 0 0 / 0.6);
+
+   /* ---- Borders (Sharp & Minimal) ---- */
+   --border-subtle: oklch(1 0 0 / 0.06);
+   --border-card: oklch(1 0 0 / 0.08);
+   --border-hover: oklch(1 0 0 / 0.15);
+   --border-strong: oklch(1 0 0 / 0.25);
+   --border-focus: var(--color-primary);
+
+   /* ---- Typography ---- */
+   --text-primary: oklch(0.95 0 0);
+   /* Near white */
+   --text-secondary: oklch(0.75 0.01 240);
+   --text-muted: oklch(0.60 0.02 240);
+   --text-faint: oklch(0.40 0.02 240);
+
+   /* ---- Fonts ---- */
+   --font-sans: "Inter", "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, sans-serif;
+   --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+
+   /* ---- Shadows (Sharp Tech Shadows) ---- */
+   --shadow-sm: 0 1px 4px 0px oklch(0 0 0 / 0.3);
+   --shadow-card: 0 4px 12px 0px oklch(0 0 0 / 0.4);
+   --shadow-modal: 0 12px 32px 0px oklch(0 0 0 / 0.5);
+
+   /* ---- Radii (Sleek Tech) ---- */
+   --radius-xs: 4px;
+   --radius-sm: 8px;
+   --radius-md: 12px;
+   --radius-lg: 16px;
+   --radius-xl: 24px;
+   --radius-full: 9999px;
+
+   /* ---- Motion ---- */
+   --transition-fast: 0.1s cubic-bezier(0.2, 0, 0, 1);
+   --transition-normal: 0.2s cubic-bezier(0.2, 0, 0, 1);
+   --transition-bounce: 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+
+   /* =======================================
+ Legacy aliases
+ ======================================= */
+   --paper: var(--bg-app);
+   --paper-raised: var(--bg-card);
+   --paper-deep: var(--bg-card-hover);
+   --ink: var(--text-primary);
+   --ink-soft: var(--text-secondary);
+   --ink-faint: var(--text-muted);
+   --rule: var(--border-subtle);
+   --rule-strong: var(--border-card);
+   --red: var(--color-danger);
+   --red-wash: var(--color-danger-subtle);
+   --stamp-green: var(--color-success);
+   --font-display: var(--font-sans);
+   --font-body: var(--font-sans);
+   --font-utility: var(--font-mono);
+   --print-filter: none;
+   --shadow-slip: var(--shadow-card);
+
+   --bg-canvas: var(--bg-app);
+   --bg-surface: var(--bg-card);
+   --bg-surface-raised: var(--bg-card-hover);
+   --bg-surface-hover: var(--bg-input);
+
+   /* Legacy accents */
+   --accent-indigo: var(--color-primary);
+   --accent-indigo-hover: var(--color-primary-hover);
+   --accent-indigo-subtle: var(--color-primary-subtle);
+   --accent-indigo-border: var(--border-focus);
+
+   --accent-emerald: var(--color-success);
+   --accent-emerald-hover: oklch(0.7 0.15 150);
+   --accent-emerald-subtle: var(--color-success-subtle);
+   --accent-emerald-border: oklch(0.7 0.15 150 / 0.25);
+
+   --accent-amber: var(--color-warning);
+   --accent-amber-hover: oklch(0.8 0.18 60);
+   --accent-amber-subtle: var(--color-warning-subtle);
+   --accent-amber-border: oklch(0.8 0.18 60 / 0.25);
+
+   --accent-rose: var(--color-danger);
+   --accent-rose-hover: oklch(0.65 0.2 15);
+   --accent-rose-subtle: var(--color-danger-subtle);
+   --accent-rose-border: oklch(0.65 0.2 15 / 0.25);
+
+   --accent-cyan: var(--color-info);
+   --accent-violet: var(--color-primary);
 }

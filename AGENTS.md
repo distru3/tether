@@ -49,6 +49,8 @@ CLI extras: `screentime-agent --service|--install|--uninstall` (SCM mode; instal
 - **Pipe clients must retry `ERROR_PIPE_BUSY` and `ERROR_FILE_NOT_FOUND`** (~1s window) — already handled inside `st_ipc::transport::connect`; don't bypass it.
 - **Test deadlock pattern**: holding a `lock_db()` guard across another `handle(...)` call self-deadlocks. Scope guards before invoking handlers again.
 - The repo lives under OneDrive; sync can transiently hold handles on freshly linked binaries.
+- **DNS proxy upstream forwarding requires an ephemeral socket**: In `st-dns`, forwarding non-blocked queries to an upstream resolver must bind an ephemeral client socket (`0.0.0.0:0`), never reuse the `127.0.0.1:53` listener socket. Reusing the listener causes local client queries to collide with upstream replies and stall the receive thread on 4s timeouts.
+- **Tauri command parity with `api.ts`**: Whenever adding or calling an IPC command from `ui/src/api.ts`, verify that `ui/src-tauri/src/lib.rs` implements the `#[tauri::command]` handler and registers it in `generate_handler![]`.
 
 ## Architecture invariants (do not erode)
 
@@ -58,3 +60,4 @@ CLI extras: `screentime-agent --service|--install|--uninstall` (SCM mode; instal
 - `ui/src-tauri` is a pure IPC adapter: it serializes `st-ipc` DTOs verbatim (**snake_case wire format**) and returns structured `{code, message}` errors — no business logic there.
 - Frontend imports types only from `types/generated/`; friendly copy for error codes lives in the map in `ui/src/api.ts`.
 - The block overlay is hand-painted GDI in the session crate; its palette constants mirror `ui/src/styles/tokens.css`. Window class must set `hCursor` (NULL cursor loops the busy spinner).
+- **Session 1 Hz log quietness**: The session sampling front runs on a 1 Hz cycle. It must **never emit `INFO`-level logs for steady-state periodic flushes** (such as routine usage reports, keepalive ticks, or regular window focus changes). Routine per-second operations belong in `DEBUG`/`TRACE`, reserving `INFO` exclusively for process startup, link disconnects/reconnects, and explicit errors.

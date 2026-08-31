@@ -61,11 +61,13 @@ impl Enforcer {
     /// `now`, `tz_offset_secs` and `day_start_minutes` come from the caller's
     /// injected [`Clock`](st_core::clock::Clock) so tamper semantics stay
     /// testable, and match exactly how usage was bucketed into `today`.
+    #[allow(clippy::too_many_arguments)]
     pub fn tick(
         &mut self,
         db: &mut Db,
         engine: &LimitEngine,
         window_key: Option<&AppKey>,
+        active_focus_session: Option<&st_core::FocusSession>,
         now: DateTime<Utc>,
         tz_offset_secs: i32,
         day_start_minutes: i64,
@@ -101,7 +103,51 @@ impl Enforcer {
             return Ok(());
         };
 
+        let subject = SubjectRef::App(record.id);
         let blockable = self.blockable(db, record.primary_category)?;
+
+        // 1. Check Allowlist: if allowlisted, never block via downtime or focus session
+        let allowlisted = db.is_subject_allowlisted("app", record.id)?;
+
+        // 2. Check Focus Session block
+        let focus_active = active_focus_session
+            .map(|f| f.is_active(now))
+            .unwrap_or(false);
+        if blockable && focus_active && !allowlisted {
+            let expires = active_focus_session
+                .map(|f| f.expires_utc)
+                .unwrap_or(now + FALLBACK_EXPIRY);
+            tracing::info!(app = %record.key, "blocking app due to active focus session");
+            db.set_block(subject, "focus_session", now, Some(expires))?;
+            return Ok(());
+        }
+
+        // 3. Check Downtime Schedules
+        let minute_of_day =
+            (now.timestamp().rem_euclid(86400) + tz_offset_secs as i64).rem_euclid(86400) / 60;
+        let weekday_idx = today.weekday_index().unwrap_or(0);
+        let schedules = db.list_schedules()?;
+        let downtime_active = schedules.iter().any(|s| {
+            let sched = st_core::DowntimeSchedule {
+                id: s.id,
+                name: s.name.clone(),
+                weekday_mask: s.weekday_mask,
+                start_minute: s.start_minute,
+                end_minute: s.end_minute,
+                enabled: s.enabled,
+            };
+            st_core::schedules::is_schedule_active(&sched, minute_of_day as u32, weekday_idx as u32)
+        });
+
+        if blockable && downtime_active && !allowlisted {
+            let expires = today
+                .end_utc(tz_offset_secs, day_start_minutes)
+                .unwrap_or_else(|| now + FALLBACK_EXPIRY);
+            tracing::info!(app = %record.key, "blocking app due to downtime schedule");
+            db.set_block(subject, "downtime", now, Some(expires))?;
+            return Ok(());
+        }
+
         let snapshot = db.day_snapshot(today)?;
         let decision = engine.evaluate(
             record.id,
@@ -111,7 +157,6 @@ impl Enforcer {
             &snapshot,
         );
 
-        let subject = SubjectRef::App(record.id);
         match decision {
             Decision::Block { binding } => {
                 let expires = today
@@ -260,7 +305,7 @@ mod tests {
     ) {
         let engine = engine_for(target);
         enforcer
-            .tick(db, &engine, Some(key), now, 0, 0)
+            .tick(db, &engine, Some(key), None, now, 0, 0)
             .expect("tick");
     }
 
@@ -285,7 +330,7 @@ mod tests {
     }
 
     #[test]
-    fn an_override_lifts_the_block_live() {
+    fn downtime_schedule_blocks_non_allowlisted_apps() {
         let mut db = Db::open_in_memory().expect("db");
         let games = db.category_id("games").expect("games");
 
@@ -362,7 +407,15 @@ mod tests {
         // Next day: everything is unblocked.
         let engine = engine_for(st_core::limits::LimitTarget::Category(games));
         enforcer
-            .tick(&mut db, &engine, None, at("2026-08-21T06:00:00Z"), 0, 0)
+            .tick(
+                &mut db,
+                &engine,
+                None,
+                None,
+                at("2026-08-21T06:00:00Z"),
+                0,
+                0,
+            )
             .expect("tick");
         assert!(!db.is_blocked(SubjectRef::App(app)).expect("cleared"));
     }
@@ -420,6 +473,7 @@ mod tests {
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
                 None,
+                None,
                 at("2026-08-20T12:05:00Z"),
                 0,
                 0,
@@ -454,6 +508,7 @@ mod tests {
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
                 None,
+                None,
                 at("2026-08-20T12:02:00Z"),
                 0,
                 0,
@@ -483,6 +538,7 @@ mod tests {
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
                 None,
+                None,
                 at("2026-08-20T12:00:00Z"),
                 0,
                 0,
@@ -510,6 +566,7 @@ mod tests {
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
                 Some(&steam_key()),
+                None,
                 at("2026-08-20T23:30:00Z"),
                 tz,
                 0,

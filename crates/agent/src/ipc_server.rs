@@ -42,8 +42,9 @@ use st_core::model::{AppKey, SubjectRef};
 use st_core::pin::{generate_recovery_code, hash_pin, normalize_recovery_code, verify_pin};
 use st_core::platform::ProcessController;
 use st_ipc::{
-    transport, ErrorCode, LimitTargetDto, ObservationDto, ReportUsageDto, Request, Response,
-    StatusDto, UsageRowDto,
+    transport, AllowlistDto, BlockRuleDto, BlockRulesDto, BlockedAppsDto, CatalogDto, DaySummaryDto,
+    ErrorCode, FocusSessionDto, LimitTargetDto, ObservationDto, ReportUsageDto, Request, Response,
+    ScheduleDto, SchedulesDto, StatusDto, UsageRowDto, WeeklySummaryDto,
 };
 use st_storage::{Db, LimitRow};
 
@@ -370,6 +371,62 @@ fn serve_connection(stream: OwnedStream, ctx: Ctx) {
     }
 }
 
+fn list_manual_blocks(ctx: &Ctx) -> Response {
+    let db = lock_db(&ctx.db);
+    match db.list_block_rules() {
+        Ok(rows) => {
+            let domains = rows
+                .into_iter()
+                .filter(|r| r.blocklist_id.is_none() && r.category_id.is_none())
+                .map(|r| r.domain)
+                .collect();
+            Response::ManualBlocks { domains }
+        }
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list manual blocks");
+            Response::Error {
+                code: ErrorCode::Internal,
+                message: "Database error".into(),
+            }
+        }
+    }
+}
+
+fn add_manual_block(ctx: &Ctx, domain: &str) -> Response {
+    let db = lock_db(&ctx.db);
+    if let Err(e) = db.add_block_rule(None, None, domain, true, "block") {
+        tracing::error!(error = %e, "failed to add manual block");
+        return Response::Error {
+            code: ErrorCode::Internal,
+            message: "Database error".into(),
+        };
+    }
+    Response::Accepted {
+        effective_utc: ctx.clock.now_utc().to_rfc3339(),
+    }
+}
+
+fn remove_manual_block(ctx: &Ctx, domain: &str) -> Response {
+    let db = lock_db(&ctx.db);
+    // Find the rule
+    let rule_id = match db.list_block_rules() {
+        Ok(rows) => rows
+            .into_iter()
+            .find(|r| r.blocklist_id.is_none() && r.domain == domain)
+            .map(|r| r.id),
+        Err(_) => None,
+    };
+
+    if let Some(id) = rule_id {
+        if let Err(e) = db.delete_block_rule(id) {
+            tracing::error!(error = %e, "failed to remove manual block");
+        }
+    }
+    Response::Accepted {
+        effective_utc: ctx.clock.now_utc().to_rfc3339(),
+    }
+}
+
 fn handle(ctx: &Ctx, request: Request) -> Response {
     let now = ctx.clock.now_utc();
     match request {
@@ -407,6 +464,7 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
             now,
         ),
         Request::DeleteLimit { target, pin } => delete_limit(ctx, target, &pin, now),
+        Request::CancelPendingLimit { target, pin } => cancel_pending_limit(ctx, target, &pin),
         Request::GrantOverride {
             target,
             seconds,
@@ -418,6 +476,10 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
             tags,
         } => categorize(ctx, app_id, primary, &tags),
         Request::ReportUsage { report } => report_usage(ctx, report),
+        Request::ListManualBlocks => list_manual_blocks(ctx),
+        Request::AddManualBlock { domain } => add_manual_block(ctx, &domain),
+        Request::RemoveManualBlock { domain } => remove_manual_block(ctx, &domain),
+        _ => unimplemented!(),
     }
 }
 
@@ -442,6 +504,8 @@ fn status_response(ctx: &Ctx) -> Response {
         blocks_encrypted_dns: ctx.status.blocks_encrypted_dns,
         strict_mode: ctx.policy.strict_mode,
         pin_configured,
+        path_level: false,
+        wildcard_domains: false,
     })
 }
 
@@ -530,12 +594,13 @@ fn weekly_summary(ctx: &Ctx, end_day: DayKey) -> Response {
 
 fn catalog(ctx: &Ctx) -> Response {
     let db = lock_db(&ctx.db);
-    let (apps, categories, limits) =
-        match (db.list_apps(), db.list_categories(), db.list_limit_rows()) {
-            (Ok(apps), Ok(categories), Ok(limits)) => (apps, categories, limits),
-            (Err(e), _, _) => return error_internal(format!("list apps: {e}")),
-            (_, Err(e), _) => return error_internal(format!("list categories: {e}")),
-            (_, _, Err(e)) => return error_internal(format!("list limits: {e}")),
+    let (apps, categories, limits, pending_limits) =
+        match (db.list_apps(), db.list_categories(), db.list_limit_rows(), db.list_pending_limits()) {
+            (Ok(apps), Ok(categories), Ok(limits), Ok(pending)) => (apps, categories, limits, pending),
+            (Err(e), _, _, _) => return error_internal(format!("list apps: {e}")),
+            (_, Err(e), _, _) => return error_internal(format!("list categories: {e}")),
+            (_, _, Err(e), _) => return error_internal(format!("list limits: {e}")),
+            (_, _, _, Err(e)) => return error_internal(format!("list pending limits: {e}")),
         };
 
     Response::Catalog(st_ipc::CatalogDto {
@@ -567,6 +632,7 @@ fn catalog(ctx: &Ctx) -> Response {
             })
             .collect(),
         limits: limits.iter().filter_map(limit_to_dto).collect(),
+        pending_limits: pending_limits.iter().filter_map(pending_limit_to_dto).collect(),
     })
 }
 
@@ -831,6 +897,28 @@ fn delete_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str, now: DateTime<Utc>
     }
 }
 
+fn cancel_pending_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str) -> Response {
+    let db = lock_db(&ctx.db);
+    if !pin_ok(&db, pin) {
+        return Response::Error {
+            code: ErrorCode::BadPin,
+            message: "PIN required".into(),
+        };
+    }
+    let Some(target) = dto_to_target(&target) else {
+        return bad_request("unknown limit target".into());
+    };
+    match db.cancel_pending_limit(&target) {
+        Ok(()) => {
+            // we just use the current time from clock
+            Response::Accepted {
+                effective_utc: ctx.clock.now_utc().to_rfc3339(),
+            }
+        },
+        Err(e) => error_internal(format!("cancel pending limit: {e}")),
+    }
+}
+
 fn grant_override(
     ctx: &Ctx,
     target: LimitTargetDto,
@@ -1088,16 +1176,14 @@ fn is_loosening(
     weekday_minutes
         .iter()
         .zip(existing.weekday_minutes.iter())
-        .any(|(new, old)| match (new, old) {
-            (Some(n), Some(o)) => n > o,
-            (Some(_), None) => true,
-            (None, Some(_)) => true,
-            (None, None) => false,
+        .any(|(new, old)| {
+            let new_effective = new.unwrap_or(default_minutes);
+            let old_effective = old.unwrap_or(existing.default_minutes);
+            new_effective > old_effective
         })
 }
 
-/// Check that the target can carry a time limit at all.
-fn validate_target(db: &Db, target: &LimitTarget) -> std::result::Result<(), ErrorCode> {
+fn validate_target(db: &Db, target: &LimitTarget) -> Result<(), ErrorCode> {
     match target {
         LimitTarget::Total => Ok(()),
         LimitTarget::App(_) => Ok(()),
@@ -1154,6 +1240,24 @@ fn limit_to_dto(row: &LimitRow) -> Option<st_ipc::LimitDto> {
         default_minutes: limit.default_minutes,
         weekday_minutes: limit.weekday_minutes,
         enabled: limit.enabled,
+    })
+}
+
+fn pending_limit_to_dto(row: &st_storage::PendingLimitRow) -> Option<st_ipc::PendingLimitDto> {
+    let target = match row.target {
+        Some(LimitTarget::App(id)) => LimitTargetDto::App { id },
+        Some(LimitTarget::Category(id)) => LimitTargetDto::Category { id },
+        Some(LimitTarget::Total) => LimitTargetDto::Total,
+        None => return None,
+    };
+    Some(st_ipc::PendingLimitDto {
+        id: row.id,
+        target,
+        action: row.action.clone(),
+        default_minutes: row.default_minutes.map(|v| v as u32),
+        weekday_minutes: row.weekday_minutes,
+        enabled: row.enabled,
+        effective_from_utc: row.effective_from_utc.clone(),
     })
 }
 

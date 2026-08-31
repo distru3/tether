@@ -159,6 +159,17 @@ export function useLedgerActions(deps: Deps) {
         [attempt],
     );
 
+    const cancelPendingLimit = useCallback(
+        (target: LimitTargetDto) => {
+            attempt(`Cancel the pending limit change for ${targetLabel(target, depsRef.current.catalog)}`, async (pin) => {
+                const effective = await api.cancelPendingLimit(target, pin);
+                depsRef.current.notify("info", `Pending limit change cancelled.`);
+                depsRef.current.invalidate();
+            });
+        },
+        [attempt],
+    );
+
     const override = useCallback(
         (row: UsageRowDto) => {
             attempt(`Grant fifteen more minutes to ${row.label}`, async (pin) => {
@@ -232,6 +243,7 @@ export function useLedgerActions(deps: Deps) {
         submitEditor,
         toggleLimit,
         removeLimit,
+        cancelPendingLimit,
         override,
         submitGate,
         cancelGate,

@@ -84,6 +84,10 @@ fn main() -> Result<()> {
         Ok(cli::Action::RunAsService) => service::run_as_service(),
         Ok(cli::Action::Install) => service::install(),
         Ok(cli::Action::Uninstall) => service::uninstall(),
+        Ok(cli::Action::ResetNetwork) => {
+            println!("ResetNetwork not implemented without st-dns");
+            Ok(())
+        }
         Err(message) => {
             eprintln!("{message}");
             std::process::exit(1);
@@ -268,9 +272,37 @@ fn run_main_loop(
 
     tracing::info!("agent running; press Ctrl+C to stop");
 
+    let mut last_manual_domains: Vec<String> = vec!["__FORCE_INIT__".to_string()];
+
     while !shutdown_requested() {
         let now = clock.now_utc();
         let tz_offset = clock.local_offset_seconds();
+
+        // Check for manual web blocks
+        if let Ok(rules) = lock_db(&db).list_block_rules() {
+            let mut current_domains: Vec<String> = rules
+                .into_iter()
+                .filter(|r| r.blocklist_id.is_none() && r.category_id.is_none())
+                .map(|r| r.domain)
+                .collect();
+            current_domains.sort();
+
+            if current_domains != last_manual_domains {
+                let apply_rules: Vec<st_core::platform::BlockRule> = current_domains
+                    .iter()
+                    .map(|d| st_core::platform::BlockRule {
+                        domain: d.clone(),
+                        include_subdomains: true,
+                    })
+                    .collect();
+                if let Err(e) = backends.filter.apply(&apply_rules) {
+                    tracing::error!(error = %e, "failed to apply manual block rules to hosts file");
+                } else {
+                    tracing::info!("applied {} manual block rules to hosts file", apply_rules.len());
+                }
+                last_manual_domains = current_domains;
+            }
+        }
         let verdict = guard.check(&*clock);
 
         if let ClockVerdict::Backward { by } = verdict {
@@ -369,6 +401,7 @@ fn evaluate_limits(
         &mut lock_db(db),
         &engine,
         focus.as_ref(),
+        None,
         now,
         tz_offset,
         day_start_minutes,

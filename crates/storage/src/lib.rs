@@ -22,14 +22,17 @@ mod enforcement;
 mod limits;
 mod migrations;
 mod reporting;
+mod schedules;
 mod settings;
 mod taxonomy;
 mod usage;
+mod web;
 
-pub use crate::limits::LimitRow;
+pub use crate::limits::{LimitRow, PendingLimitRow};
 pub use crate::reporting::{
     CategoryRow, DailyTotal, DaySnapshot, DaySummary, UsageRow, WeeklySummary,
 };
+pub use crate::web::{normalize_domain, BlockRuleRow, BlocklistRow};
 
 use std::path::Path;
 
@@ -56,6 +59,11 @@ pub enum StorageError {
     AppNotFound(i64),
     #[error("invalid day key: {0}")]
     InvalidDay(i32),
+    /// A request carried a structurally invalid value (an unknown action
+    /// token, a malformed domain label) that the schema CHECK could only catch
+    /// as an opaque SQLite error. Surfaced to the caller as a `BadRequest`.
+    #[error("invalid argument: {0}")]
+    Invalid(String),
 }
 
 /// The agent's single SQLite handle. All queries go through it so that WAL
@@ -69,7 +77,9 @@ impl Db {
     /// Open (creating if needed) and bring the schema up to date.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let conn = Connection::open(path)?;
-        Self::bootstrap(conn)
+        let mut db = Self::bootstrap(conn)?;
+        db.seed_default_blocklists()?;
+        Ok(db)
     }
 
     /// In-memory database, for tests.

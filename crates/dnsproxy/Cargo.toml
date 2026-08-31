@@ -1,0 +1,23 @@
+[package]
+name = "st-dns"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+st-core.workspace = true
+tracing.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# GetAdaptersAddresses/GetAdaptersInfo (iphlpapi) for per-interface DNS capture,
+# plus the Ndis/WinSock types the adapter address struct ties into. All three
+# are required before the IP_ADAPTER_ADDRESSES_LH fields are even compiled.
+windows = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_Networking_WinSock",
+    "Win32_System_Registry",
+    "Win32_Security",
+] }

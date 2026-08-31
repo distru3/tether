@@ -193,6 +193,7 @@ export function App() {
                                 onToggle={actions.toggleLimit}
                                 onEdit={actions.openEditor}
                                 onRemove={actions.removeLimit}
+                                onCancelPending={actions.cancelPendingLimit}
                                 onNew={actions.startNewOrder}
                                 onOpenPinSetup={actions.openPinSetup}
                             />

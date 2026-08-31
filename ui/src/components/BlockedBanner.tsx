@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
-import { Section } from "./Section";
+import { BlockedIcon } from "./icons/Icons";
 
 interface BlockedBannerProps {
     blocked: UsageRowDto[];
@@ -15,8 +15,6 @@ function minutesUntilLocalMidnight(now: Date): number {
 }
 
 export function BlockedBanner({ blocked, busy, onOverride }: BlockedBannerProps) {
-    // Blocks expire at local midnight, so the countdown rides the wall clock
-    // whether or not any rows are currently listed.
     const [now, setNow] = useState(() => new Date());
 
     useEffect(() => {
@@ -31,30 +29,35 @@ export function BlockedBanner({ blocked, busy, onOverride }: BlockedBannerProps)
     const minutes = totalMinutes % 60;
 
     return (
-        <Section label={`Enforcement — ${blocked.length}`}>
-            <div className="blocked-banner">
-                <span className="stamp" aria-hidden="true">
-                    Over limit
-                </span>
-                <ul className="blocked-list">
-                    {blocked.map((row) => (
-                        <li key={row.id} className="blocked-item">
-                            <span className="blocked-name">{row.label}</span>
-                            <button
-                                type="button"
-                                className="textbtn textbtn--red"
-                                disabled={busy}
-                                onClick={() => onOverride(row)}
-                            >
-                                +15 min
-                            </button>
-                        </li>
-                    ))}
-                </ul>
-                <span className="blocked-reset">
+        <div className="glass-card blocked-banner-card animate-pulse-subtle">
+            <div className="blocked-banner-header">
+                <div className="blocked-badge-group">
+                    <span className="pulse-indicator pulse-indicator--danger" />
+                    <span className="badge badge--danger">ENFORCEMENT ACTIVE ({blocked.length})</span>
+                </div>
+                <span className="blocked-reset-text font-mono">
                     Resets in {hours}h {minutes}m
                 </span>
             </div>
-        </Section>
+
+            <div className="blocked-items-list">
+                {blocked.map((row) => (
+                    <div key={row.id} className="blocked-item-row">
+                        <div className="blocked-item-info">
+                            <BlockedIcon size={16} color="var(--accent-rose)" />
+                            <strong className="blocked-item-name">{row.label}</strong>
+                        </div>
+                        <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            disabled={busy}
+                            onClick={() => onOverride(row)}
+                        >
+                            +15 min Override
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </div>
     );
 }

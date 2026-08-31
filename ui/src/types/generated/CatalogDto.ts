@@ -2,8 +2,9 @@
 import type { AppDto } from "./AppDto";
 import type { CategoryDto } from "./CategoryDto";
 import type { LimitDto } from "./LimitDto";
+import type { PendingLimitDto } from "./PendingLimitDto";
 
 /**
  * Everything the limit editor needs, in one round trip.
  */
-export type CatalogDto = { apps: Array<AppDto>, categories: Array<CategoryDto>, limits: Array<LimitDto>, };
+export type CatalogDto = { apps: Array<AppDto>, categories: Array<CategoryDto>, limits: Array<LimitDto>, pending_limits: Array<PendingLimitDto>, };

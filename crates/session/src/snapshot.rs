@@ -21,6 +21,8 @@ use st_core::model::AppKey;
 pub struct FocusedSnapshot {
     pub key: AppKey,
     pub rect: (i32, i32, i32, i32),
+    pub pid: u32,
+    pub hwnd: isize,
 }
 
 #[cfg(windows)]
@@ -63,7 +65,12 @@ pub fn focused_snapshot() -> Option<FocusedSnapshot> {
         } else {
             (0, 0, 0, 0)
         };
-        Some(FocusedSnapshot { key, rect })
+        Some(FocusedSnapshot {
+            key,
+            rect,
+            pid,
+            hwnd: hwnd.0 as isize,
+        })
     }
 }
 

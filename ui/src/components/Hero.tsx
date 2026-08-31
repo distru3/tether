@@ -1,5 +1,6 @@
 import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import { formatDayLabel, formatDuration, heroParts, sharePercent } from "../format";
+import { ChevronLeftIcon, ChevronRightIcon, SparklesIcon } from "./icons/Icons";
 
 interface HeroProps {
     summary: DaySummaryDto | null;
@@ -22,16 +23,10 @@ export function Hero({
 }: HeroProps) {
     if (loading || summary === null) {
         return (
-            <section className="hero" aria-label="Today's screen time">
-                {loading ? (
-                    <div aria-hidden="true">
-                        <span className="skel skel-figure" />
-                        <span className="skel skel-line" />
-                    </div>
-                ) : (
-                    <p className="hero-sub">The ledger is unreachable right now.</p>
-                )}
-            </section>
+            <div className="hero-card glass-card skeleton-loading">
+                <div className="skeleton-line skeleton-title" />
+                <div className="skeleton-line skeleton-subtitle" />
+            </div>
         );
     }
 
@@ -40,51 +35,65 @@ export function Hero({
     const canBrowse = viewDay !== undefined && goPrevDay !== undefined && goNextDay !== undefined;
 
     return (
-        <section className="hero" aria-label={isViewingToday ? "Today's screen time" : "Screen time"}>
-            {canBrowse && !isViewingToday && (
-                <div className="hero-toolbar">
-                    <p className="hero-datelabel">{formatDayLabel(viewDay)}</p>
-                    {goToday !== undefined && (
-                        <button type="button" className="chip" onClick={goToday}>
-                            Today
+        <section className="hero-card glass-card" aria-label="Daily screen time summary">
+            <div className="hero-content">
+                <header className="hero-meta">
+                    <h2 className="hero-heading">
+                        {isViewingToday ? "Today" : viewDay ? formatDayLabel(viewDay) : "Day View"}
+                    </h2>
+                    {!isViewingToday && goToday && (
+                        <button type="button" className="btn btn-secondary btn-sm" onClick={goToday}>
+                            Back to Today
+                        </button>
+                    )}
+                </header>
+
+                <div className="hero-time-cluster">
+                    {canBrowse && (
+                        <button type="button" className="stepper-nav-btn" aria-label="Previous day" onClick={goPrevDay} title="Previous day">
+                            <ChevronLeftIcon size={16} />
+                        </button>
+                    )}
+
+                    <div className="hero-time-readout">
+                        {heroParts(total).map(([value, unit]) => (
+                            <span key={`${value}${unit}`} className="time-segment">
+                                <span className="time-value font-mono">{value}</span>
+                                <span className="time-unit">{unit}</span>
+                            </span>
+                        ))}
+                    </div>
+
+                    {canBrowse && (
+                        <button
+                            type="button"
+                            className="stepper-nav-btn"
+                            aria-label="Next day"
+                            onClick={goNextDay}
+                            disabled={isViewingToday}
+                            title="Next day"
+                        >
+                            <ChevronRightIcon size={16} />
                         </button>
                     )}
                 </div>
-            )}
-            <div className="hero-row">
-                {canBrowse && (
-                    <button type="button" className="daynav" aria-label="Previous day" onClick={goPrevDay}>
-                        ‹
-                    </button>
-                )}
-                <p className="hero-figure">
-                    {heroParts(total).map(([value, unit], index) => (
-                        <span key={`${value}${unit}`}>
-                            {index > 0 ? " " : ""}
-                            <span>{value}</span>
-                            <span className="hero-unit">{unit}</span>
-                        </span>
-                    ))}
-                </p>
-                {canBrowse && (
-                    <button
-                        type="button"
-                        className="daynav"
-                        aria-label="Next day"
-                        onClick={goNextDay}
-                        disabled={isViewingToday}
-                    >
-                        ›
-                    </button>
-                )}
+
+                <footer className="hero-context">
+                    {lead ? (
+                        <div className="lead-category-chip">
+                            <span className="lead-dot" style={{ backgroundColor: lead.color || "var(--accent-indigo)" }} />
+                            <span className="lead-text">
+                                Most time in <strong>{lead.label}</strong> ({formatDuration(lead.seconds)}, {sharePercent(lead.seconds, total)}%)
+                            </span>
+                        </div>
+                    ) : (
+                        <div className="clean-slate-container">
+                            <SparklesIcon size={16} color="var(--accent-emerald)" />
+                            <span className="clean-slate-text">No active usage recorded yet today.</span>
+                        </div>
+                    )}
+                </footer>
             </div>
-            {lead ? (
-                <p className="hero-sub">
-                    Led by {lead.label} · {formatDuration(lead.seconds)} · {sharePercent(lead.seconds, total)}%
-                </p>
-            ) : (
-                <p className="hero-sub">A clean slate. Go make something.</p>
-            )}
         </section>
     );
 }
