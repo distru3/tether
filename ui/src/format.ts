@@ -7,31 +7,17 @@ export function todayKey(now = new Date()): number {
 
 export function formatDuration(totalSeconds: number): string {
     const s = Math.max(0, Math.round(totalSeconds));
-    if (s >= 3600) {
-        const h = Math.floor(s / 3600);
-        const m = Math.round((s % 3600) / 60);
-        return m >= 60 ? `${h + 1}h 00m` : `${h}h ${m}m`;
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const secs = s % 60;
+    if (h > 0) {
+        return `${h}:${pad2(m)}:${pad2(secs)}`;
     }
-    if (s >= 60) return `${Math.round(s / 60)}m`;
-    return `${s}s`;
+    return `${pad2(m)}:${pad2(secs)}`;
 }
 
 export function heroParts(totalSeconds: number): Array<[string, string]> {
-    const s = Math.max(0, Math.round(totalSeconds));
-    if (s >= 3600) {
-        let h = Math.floor(s / 3600);
-        let m = Math.round((s % 3600) / 60);
-        if (m >= 60) {
-            h += 1;
-            m = 0;
-        }
-        return [
-            [String(h), "h"],
-            [pad2(m), "m"],
-        ];
-    }
-    if (s >= 60) return [[String(Math.round(s / 60)), "m"]];
-    return [[String(s), "s"]];
+    return [[formatDuration(totalSeconds), ""]];
 }
 
 function pad2(n: number): string {
@@ -103,7 +89,7 @@ export function describeWeekdayOverrides(weekdays: readonly (number | null)[]): 
     const parts: string[] = [];
     for (let i = 0; i < WEEKDAY_SHORT.length && i < weekdays.length; i += 1) {
         const minutes = weekdays[i];
-        if (minutes !== null && minutes !== undefined) parts.push(`${WEEKDAY_SHORT[i]} ${minutes}m`);
+        if (minutes !== null && minutes !== undefined) parts.push(`${WEEKDAY_SHORT[i]} ${formatDuration(minutes * 60)}`);
     }
     return parts.length > 0 ? parts.join(" · ") : null;
 }

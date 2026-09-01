@@ -13,15 +13,16 @@
     "windows": [
       {
         "title": "Screentime",
-        "width": 960,
-        "height": 640,
-        "minWidth": 720,
+        "width": 1150,
+        "height": 720,
+        "minWidth": 960,
         "minHeight": 480,
         "resizable": true,
         "fullscreen": false,
         "decorations": false,
         "theme": "Dark",
-        "shadow": true
+        "shadow": true,
+        "visible": false
       }
     ],
     "security": {
@@ -39,6 +40,16 @@
     ],
     "category": "Utility",
     "shortDescription": "Screen time tracking and limits",
-    "longDescription": "Track application usage, set daily limits per app or category, and block distracting websites."
+    "longDescription": "Track application usage, set daily limits per app or category, and block distracting websites.",
+    "windows": {
+      "nsis": {
+        "installMode": "perMachine",
+        "installerHooks": "installer_hooks.nsh"
+      }
+    },
+    "resources": [
+      "bin/screentime-agent.exe",
+      "bin/screentime-session.exe"
+    ]
   }
 }

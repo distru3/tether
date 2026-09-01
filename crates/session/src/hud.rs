@@ -1,9 +1,5 @@
 use windows::core::{w, PCWSTR};
-use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, RECT, WPARAM};
-use windows::Win32::Graphics::Gdi::{
-    CreateFontW, CreateSolidBrush, DeleteObject, ExtTextOutW, FillRect, SelectObject, SetBkMode,
-    SetTextColor, ETO_OPTIONS, TRANSPARENT,
-};
+use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostMessageW,
@@ -65,8 +61,8 @@ pub fn spawn_hud_overlay(target_rect: (i32, i32, i32, i32)) -> HudOverlayRun {
             WS_POPUP | WS_VISIBLE,
             target_rect.0 + (target_rect.2 / 2) - 30,
             target_rect.1 + 10,
-            60,
-            24,
+            72,
+            26,
             None,
             None,
             instance,
@@ -108,45 +104,62 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let _ = windows::Win32::Graphics::Gdi::InvalidateRect(hwnd, None, true);
             LRESULT(0)
         }
-        WM_PAINT => {
+                WM_PAINT => {
             let mut ps = windows::Win32::Graphics::Gdi::PAINTSTRUCT::default();
             let hdc = windows::Win32::Graphics::Gdi::BeginPaint(hwnd, &mut ps);
 
-            let bg_color = if IS_TIMER {
-                COLORREF(0x00_00_8C_FF)
-            } else {
-                COLORREF(0x00_33_33_33)
-            };
-            let hbrush = CreateSolidBrush(bg_color);
-            let mut rect = RECT::default();
+            let mut rect = windows::Win32::Foundation::RECT::default();
             windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect).unwrap();
-            FillRect(hdc, &rect, hbrush);
-            let _ = DeleteObject(hbrush);
 
-            let font = CreateFontW(16, 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 0, 0, w!("Segoe UI"));
-            let old_font = SelectObject(hdc, font);
-            SetBkMode(hdc, TRANSPARENT);
-            SetTextColor(hdc, COLORREF(0x00_FF_FF_FF));
+            let bg_color = windows::Win32::Foundation::COLORREF(0x00_18_18_1b);
+            let timer_border = windows::Win32::Foundation::COLORREF(0x00_F1_66_63); // Indigo
+            let normal_border = windows::Win32::Foundation::COLORREF(0x00_3f_3f_46); // Zinc 700
 
-            let m = REMAINING / 60;
-            let s = REMAINING % 60;
-            let text = format!("{:02}:{:02}", m, s);
-            let wide: Vec<u16> = text.encode_utf16().collect();
-            let _ = ExtTextOutW(
+            let hbrush = windows::Win32::Graphics::Gdi::CreateSolidBrush(bg_color);
+            let hpen = windows::Win32::Graphics::Gdi::CreatePen(
+                windows::Win32::Graphics::Gdi::PS_SOLID, 
+                1, 
+                if IS_TIMER { timer_border } else { normal_border }
+            );
+            
+            let old_brush = windows::Win32::Graphics::Gdi::SelectObject(hdc, hbrush);
+            let old_pen = windows::Win32::Graphics::Gdi::SelectObject(hdc, hpen);
+
+            let _ = windows::Win32::Graphics::Gdi::RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, 10, 10);
+
+            let font = windows::Win32::Graphics::Gdi::CreateFontW(14, 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, w!("Segoe UI"));
+            let old_font = windows::Win32::Graphics::Gdi::SelectObject(hdc, font);
+            windows::Win32::Graphics::Gdi::SetBkMode(hdc, windows::Win32::Graphics::Gdi::TRANSPARENT);
+            windows::Win32::Graphics::Gdi::SetTextColor(hdc, windows::Win32::Foundation::COLORREF(0x00_F4_F4_F5)); // Zinc 100
+
+            let hrs = REMAINING / 3600;
+            let mins = (REMAINING % 3600) / 60;
+            let secs = REMAINING % 60;
+            let text = if hrs > 0 {
+                format!("{}:{:02}:{:02}", hrs, mins, secs)
+            } else {
+                format!("{:02}:{:02}", mins, secs)
+            };
+            let mut wide: Vec<u16> = text.encode_utf16().chain(std::iter::once(0)).collect();
+
+            windows::Win32::Graphics::Gdi::DrawTextW(
                 hdc,
-                10,
-                2,
-                ETO_OPTIONS(0),
-                None,
-                PCWSTR::from_raw(wide.as_ptr()),
-                wide.len() as u32,
-                None,
+                &mut wide,
+                &mut rect,
+                windows::Win32::Graphics::Gdi::DT_CENTER
+                    | windows::Win32::Graphics::Gdi::DT_VCENTER
+                    | windows::Win32::Graphics::Gdi::DT_SINGLELINE,
             );
 
-            SelectObject(hdc, old_font);
-            let _ = DeleteObject(font);
+            windows::Win32::Graphics::Gdi::SelectObject(hdc, old_brush);
+            windows::Win32::Graphics::Gdi::SelectObject(hdc, old_pen);
+            windows::Win32::Graphics::Gdi::SelectObject(hdc, old_font);
+            let _ = windows::Win32::Graphics::Gdi::DeleteObject(hbrush);
+            let _ = windows::Win32::Graphics::Gdi::DeleteObject(hpen);
+            let _ = windows::Win32::Graphics::Gdi::DeleteObject(font);
+
             let _ = windows::Win32::Graphics::Gdi::EndPaint(hwnd, &ps);
-            LRESULT(0)
+            windows::Win32::Foundation::LRESULT(0)
         }
         WM_DESTROY => {
             PostQuitMessage(0);

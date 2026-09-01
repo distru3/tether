@@ -244,6 +244,7 @@ export function useLedgerActions(deps: Deps) {
     }, [deps]);
 
     return {
+        attempt,
         busy,
         setSetting,
         editor,

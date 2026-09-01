@@ -62,11 +62,23 @@ impl HostsFileFilter {
 impl NetworkFilter for HostsFileFilter {
     fn apply(&mut self, rules: &[BlockRule]) -> PlatformResult<()> {
         let rules_vec = rules.to_vec();
-        self.build_replacement(move |existing| render_with_rules(existing, &rules_vec))
+        let res = self.build_replacement(move |existing| render_with_rules(existing, &rules_vec));
+        if res.is_ok() {
+            flush_dns_cache();
+        }
+        res
     }
 
+    
+
+    
+
     fn clear(&mut self) -> PlatformResult<()> {
-        self.build_replacement(move |existing| render_with_rules(existing, &[]))
+        let res = self.build_replacement(move |existing| render_with_rules(existing, &[]));
+        if res.is_ok() {
+            flush_dns_cache();
+        }
+        res
     }
 
     fn capabilities(&self) -> FilterCapabilities {
@@ -117,6 +129,20 @@ fn render_with_rules(existing: &str, rules: &[BlockRule]) -> String {
             out.push_str("0.0.0.0 ");
             out.push_str(&rule.domain);
             out.push('\n');
+            
+            // Mirror common subdomains if wildcarding isn't possible in hosts
+            if rule.include_subdomains {
+                if !rule.domain.starts_with("www.") {
+                    out.push_str("0.0.0.0 www.");
+                    out.push_str(&rule.domain);
+                    out.push('\n');
+                }
+                if !rule.domain.starts_with("m.") {
+                    out.push_str("0.0.0.0 m.");
+                    out.push_str(&rule.domain);
+                    out.push('\n');
+                }
+            }
         }
         out.push_str(END_MARKER);
         out.push('\n');
@@ -248,4 +274,13 @@ mod tests {
 
         assert_eq!(hosts.contents(), "127.0.0.1 localhost\n");
     }
+}
+
+
+fn flush_dns_cache() {
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("ipconfig")
+        .arg("/flushdns")
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .output();
 }

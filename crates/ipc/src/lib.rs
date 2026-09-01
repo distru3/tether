@@ -184,6 +184,7 @@ pub enum Request {
     },
     RemoveManualBlock {
         domain: String,
+        pin: String,
     },
     /// List all always-allowed subjects for downtime.
     ListAllowlist,
@@ -372,6 +373,7 @@ pub struct UsageRowDto {
     #[ts(as = "Option<i32>")]
     pub limit_seconds: Option<i64>,
     pub blocked: bool,
+    pub timer_expires_utc: Option<String>,
 }
 
 /// Seven-day trend for the dashboard: one grand total per day plus the
@@ -471,6 +473,7 @@ pub struct LimitDto {
     pub default_minutes: u32,
     pub weekday_minutes: [Option<u32>; 7],
     pub enabled: bool,
+    pub timer_expires_utc: Option<String>,
 }
 
 /// A currently-blocked app, as reported to the overlay owner.

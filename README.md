@@ -3,11 +3,9 @@
 Cross-platform screen-time tracker and limiter for Windows and (secondarily)
 Linux/X11. Rust workspace, three binaries, Tauri 2 dashboard.
 
-> Status: **M2 in progress**. M1 insight alpha is complete: auto-classification,
-> real named-pipe IPC, and the live dashboard (see the checklist below). M2
-> adds limits and app blocking: PIN vault, limit CRUD over IPC, and the
-> enforcer that freezes exhausted apps. The limit editor, PIN setup and
-> "+15 minutes" override are live in the UI.
+> Status: **M3 in progress**. M1 insight alpha and M2 limit enforcement are complete.
+> M3 brings web filtering (DNS/hosts blocking, NSFW obfuscation) and a fully
+> automated Windows installer pipeline via Tauri v2.
 
 ## Repository layout
 
@@ -24,7 +22,7 @@ Linux/X11. Rust workspace, three binaries, Tauri 2 dashboard.
       session/         screentime-session (per-user sampling front)
     ui/                Tauri 2 + React + Vite dashboard
     docs/              architecture and threat model
-    packaging/         installers (empty for now)
+    packaging/         NSIS installer documentation and hooks
 
 See `docs/ARCHITECTURE.md` and `docs/THREAT_MODEL.md`.
 
@@ -144,6 +142,15 @@ eBPF/fanotify, kernel driver.
       day rollover thaws everything; NeverBlock categories never freeze
       (covered by unit tests with a fake `ProcessController`)
 - [x] UI: limit editor, PIN setup, "+15 minutes" override, blocked banner
+
+
+## Verification checklist (M3)
+
+- [x] Web filtering UI with categorical blocking and domain wildcards
+- [x] NSFW domain obfuscation and PIN-gated overrides
+- [x] DNS/Hosts blocking rules enforced by the agent
+- [x] Automated, zero-setup NSIS installer via Tauri (`installer_hooks.nsh`)
+- [x] Session tracker runs fully invisibly (`windows_subsystem`) and auto-launches on boot
 
 ## Refactor 2026-08
 

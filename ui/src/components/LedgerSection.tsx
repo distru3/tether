@@ -1,6 +1,7 @@
 import React from "react";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
+import { LiveTimer } from "./LiveTimer";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
 import { formatDuration, sharePercent } from "../format";
@@ -76,6 +77,7 @@ export function LedgerSection({
                                 <div className="usage-name-group">
                                     <span className="usage-label">{entry.label}</span>
                                     {entry.blocked && <span className="badge badge-sm badge--danger">Blocked</span>}
+                                    {entry.timer_expires_utc && <LiveTimer expiresUtc={entry.timer_expires_utc} />}
                                     {isUncat && <span className="badge badge-sm badge--warning">Uncategorized</span>}
                                 </div>
 
@@ -92,7 +94,7 @@ export function LedgerSection({
                                             disabled={busy}
                                             onClick={() => onEdit(limit.target, limit)}
                                         >
-                                            {limit.default_minutes}m limit
+                                            {formatDuration(limit.default_minutes * 60)} limit
                                         </button>
                                     ) : canLimit(entry) ? (
                                         <button

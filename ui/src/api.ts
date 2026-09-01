@@ -104,8 +104,8 @@ export function addManualBlock(domain: string): Promise<void> {
     return invoke("add_manual_block", { domain });
 }
 
-export function removeManualBlock(domain: string): Promise<void> {
-    return invoke("remove_manual_block", { domain });
+export function removeManualBlock(domain: string, pin: string): Promise<void> {
+    return invoke("remove_manual_block", { domain, pin });
 }
 
 const COPY: Record<ErrorCode, string> = {

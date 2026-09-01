@@ -1,3 +1,4 @@
+#![windows_subsystem = "windows"]
 //! `screentime-session` — the per-login-session helper, and the workspace's
 //! **sampling front**.
 //!
@@ -208,7 +209,7 @@ fn main() -> anyhow::Result<()> {
     };
     // App id paired with its live overlay thread handle.
     let mut active: Option<(i64, overlay::OverlayRun)> = None;
-    let mut active_hud: Option<(i64, hud::HudOverlayRun)> = None;
+    let mut active_hud: Option<((i32, i32, i32, i32), hud::HudOverlayRun)> = None;
 
     loop {
         let tick = Instant::now();
@@ -312,15 +313,24 @@ fn main() -> anyhow::Result<()> {
         #[cfg(windows)]
         {
             if let Some(hud_state) = &sess.hud {
-                if active_hud.is_none() {
-                    if let Some(snap) = snapshot::focused_snapshot() {
-                        if snap.rect.2 > 0 && snap.rect.3 > 0 {
-                            active_hud = Some((0, hud::spawn_hud_overlay(snap.rect)));
+                if let Some(snap) = snapshot::focused_snapshot() {
+                    if snap.rect.2 > 0 && snap.rect.3 > 0 {
+                        // Check if we need to respawn because window moved or changed
+                        
+                        
+                        let should_respawn = active_hud.as_ref().map(|(rect, _)| *rect != snap.rect).unwrap_or(true);
+                        
+                        if should_respawn {
+                            if let Some((_, run)) = active_hud.take() {
+                                run.dismiss();
+                            }
+                            active_hud = Some((snap.rect, hud::spawn_hud_overlay(snap.rect)));
+                        }
+                        
+                        if let Some((_, ref run)) = active_hud {
+                            run.update(hud_state.remaining_secs, hud_state.is_timer);
                         }
                     }
-                }
-                if let Some((_, ref run)) = active_hud {
-                    run.update(hud_state.remaining_secs, hud_state.is_timer);
                 }
             } else {
                 if let Some((_, run)) = active_hud.take() {

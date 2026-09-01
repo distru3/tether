@@ -4,4 +4,4 @@ export type UsageRowDto = { id: number, label: string, seconds: number, color: s
 /**
  * Present when a limit applies, for the progress ring.
  */
-limit_seconds: number | null, blocked: boolean, };
+limit_seconds: number | null, blocked: boolean, timer_expires_utc: string | null, };

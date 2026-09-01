@@ -1,6 +1,6 @@
 .titlebar {
     height: 40px;
-    background: var(--bg-card);
+    background: #1e1e1e;
     display: flex;
     user-select: none;
     justify-content: space-between;
@@ -22,7 +22,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--accent-blue);
+    color: var(--text-muted);
 }
 
 .titlebar-title {
@@ -57,3 +57,4 @@
     background: #e81123;
     color: white;
 }
+.titlebar { view-transition-name: titlebar; }

@@ -37,7 +37,7 @@ use chrono::{DateTime, Duration, Utc};
 use st_core::category::CategoryKind;
 use st_core::clock::Clock;
 use st_core::daykey::DayKey;
-use st_core::limits::LimitTarget;
+use st_core::limits::{LimitTarget, UsageSnapshot};
 use st_core::model::{AppKey, SubjectRef};
 use st_core::pin::{generate_recovery_code, hash_pin, normalize_recovery_code, verify_pin};
 use st_core::platform::ProcessController;
@@ -189,7 +189,7 @@ impl Live {
 pub struct Ctx {
     db: Arc<Mutex<Db>>,
     status: Arc<StatusInfo>,
-    policy: Arc<Policy>,
+    policy: Arc<std::sync::RwLock<Policy>>,
     processes: Arc<Mutex<Box<dyn ProcessController>>>,
     clock: Arc<dyn Clock>,
     live: Arc<Live>,
@@ -292,7 +292,7 @@ pub fn spawn(
     let ctx = Ctx {
         db,
         status: Arc::new(status),
-        policy: Arc::new(policy),
+        policy: Arc::new(std::sync::RwLock::new(policy)),
         processes,
         clock,
         live: live.clone(),
@@ -408,8 +408,14 @@ fn add_manual_block(ctx: &Ctx, domain: &str) -> Response {
     }
 }
 
-fn remove_manual_block(ctx: &Ctx, domain: &str) -> Response {
+fn remove_manual_block(ctx: &Ctx, domain: &str, pin: &str) -> Response {
     let db = lock_db(&ctx.db);
+    if !pin_ok(&db, pin) {
+        return Response::Error {
+            code: ErrorCode::BadPin,
+            message: "PIN required".into(),
+        };
+    }
     // Find the rule
     let rule_id = match db.list_block_rules() {
         Ok(rows) => rows
@@ -449,10 +455,20 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
             new_pin,
         } => recover_pin(ctx, &recovery_code, &new_pin),
         Request::RemovePin { credential } => remove_pin(ctx, &credential),
-        Request::SetSetting { key, value } => {
+        Request::SetSetting { ref key, ref value } => {
             let db_guard = lock_db(&ctx.db);
             if let Err(e) = db_guard.conn().execute("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value)) {
                 tracing::error!(error = %e, "setting save failed");
+            } else {
+                let mut p = ctx.policy.write().unwrap();
+                match key.as_str() {
+                    "limit_cooldown_hours" => if let Ok(v) = value.parse() { p.limit_cooldown_hours = v; }
+                    "strict_mode" => p.strict_mode = value == "true",
+                    "day_start_minutes" => if let Ok(v) = value.parse() { p.day_start_minutes = v; }
+                    "idle_threshold_secs" => if let Ok(v) = value.parse() { p.idle_threshold_secs = v; }
+                    "show_hud_overlay" => p.show_hud_overlay = value != "false",
+                    _ => {}
+                }
             }
             Response::Accepted {
                 effective_utc: now.to_rfc3339(),
@@ -491,7 +507,7 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
         Request::ReportUsage { report } => report_usage(ctx, report),
         Request::ListManualBlocks => list_manual_blocks(ctx),
         Request::AddManualBlock { domain } => add_manual_block(ctx, &domain),
-        Request::RemoveManualBlock { domain } => remove_manual_block(ctx, &domain),
+        Request::RemoveManualBlock { domain, pin } => remove_manual_block(ctx, &domain, &pin),
         _ => unimplemented!(),
     }
 }
@@ -515,9 +531,9 @@ fn status_response(ctx: &Ctx) -> Response {
         filter_backend: ctx.status.filter_backend.clone(),
         tracking_available,
         blocks_encrypted_dns: ctx.status.blocks_encrypted_dns,
-        strict_mode: ctx.policy.strict_mode,
+        strict_mode: ctx.policy.read().unwrap().strict_mode,
         pin_configured,
-        show_hud_overlay: ctx.policy.show_hud_overlay,
+        show_hud_overlay: ctx.policy.read().unwrap().show_hud_overlay,
         path_level: false,
         wildcard_domains: false,
     })
@@ -552,6 +568,11 @@ fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
             .find(|l| matches!(l.target, LimitTarget::App(id) if id == app_id))
             .map(|l| i64::from(l.default_minutes) * 60)
     };
+    
+    let snapshot = db.day_snapshot(summary.day).ok();
+    let timer_expires = |target: LimitTarget| -> Option<String> {
+        snapshot.as_ref().and_then(|s| s.active_timer_expires_utc(&target)).map(|t| t.to_rfc3339())
+    };
 
     Response::DaySummary(st_ipc::DaySummaryDto {
         day: summary.day,
@@ -566,6 +587,7 @@ fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
                 color: Some(a.category_color),
                 limit_seconds: limit_secs_for(a.id),
                 blocked: blocked_apps.contains(&a.id),
+                timer_expires_utc: timer_expires(LimitTarget::App(a.id)),
             })
             .collect(),
         categories: summary
@@ -578,6 +600,7 @@ fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
                 color: Some(c.color),
                 limit_seconds: None,
                 blocked: false,
+                timer_expires_utc: timer_expires(LimitTarget::Category(c.id)),
             })
             .collect(),
     })
@@ -863,7 +886,7 @@ fn set_limit(ctx: &Ctx, spec: LimitSpec, now: DateTime<Utc>) -> Response {
             now
         }
         // Only loosening *minutes* while staying enabled waits out the cooldown.
-        Some(_) => now + Duration::hours(ctx.policy.limit_cooldown_hours.max(0)),
+        Some(_) => now + Duration::hours(ctx.policy.read().unwrap().limit_cooldown_hours.max(0)),
         None => now,
     };
 
@@ -951,7 +974,7 @@ fn grant_override(
     now: DateTime<Utc>,
 ) -> Response {
     let db = lock_db(&ctx.db);
-    if ctx.policy.strict_mode {
+    if ctx.policy.read().unwrap().strict_mode {
         return Response::Error {
             code: ErrorCode::StrictMode,
             message: "overrides are disabled in strict mode".into(),
@@ -973,7 +996,7 @@ fn grant_override(
     let day = DayKey::from_utc(
         now,
         ctx.clock.local_offset_seconds(),
-        ctx.policy.day_start_minutes,
+        ctx.policy.read().unwrap().day_start_minutes,
     );
     match db.grant_override(&target, day, seconds, now, Some("user override")) {
         Ok(()) => accepted(now),
@@ -1023,8 +1046,8 @@ fn categorize(ctx: &Ctx, app_id: i64, primary: i64, tags: &[i64]) -> Response {
 fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
     let now = ctx.clock.now_utc();
     let tz_offset = ctx.clock.local_offset_seconds();
-    let day_start = ctx.policy.day_start_minutes;
-    let idle_threshold = ctx.policy.idle_threshold_secs.max(1);
+    let day_start = ctx.policy.read().unwrap().day_start_minutes;
+    let idle_threshold = ctx.policy.read().unwrap().idle_threshold_secs.max(1);
 
     // 1. Parse and sanity-check timestamps.
     let mut parsed: Vec<(DateTime<Utc>, ObservationDto)> =
@@ -1087,7 +1110,7 @@ fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
     let mut credited: Vec<(AppKey, DateTime<Utc>, DateTime<Utc>)> = Vec::new();
     {
         let mut chains = lock_recover(&ctx.live.open_chains, "open usage chains");
-        for (t, obs) in parsed {
+        for (t, obs) in parsed.clone() {
             let key_string = obs.app_key.to_db_string();
             ctx.live.note_focus(obs.app_key.clone(), t);
             if i64::from(obs.idle_seconds) >= idle_threshold {
@@ -1134,7 +1157,49 @@ fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
     }
 
     ctx.live.note_report(now);
-    accepted(now)
+    
+    // 6. Compute HUD overlay state for the currently focused app.
+    let mut hud = None;
+    if ctx.policy.read().unwrap().show_hud_overlay {
+        if let Some((_, obs)) = parsed.last() {
+            let db_guard = lock_db(&ctx.db);
+            let today = DayKey::from_utc(now, tz_offset, day_start);
+            if let Ok(snap) = db_guard.day_snapshot(today) {
+                if let Ok(Some(app_id)) = db_guard.app_id_for_key(&obs.app_key) {
+                    if let Ok(Some(record)) = db_guard.app_record(app_id) {
+                        let limits = db_guard.load_limits().unwrap_or_default();
+                        let engine = st_core::limits::LimitEngine::with_default_warnings(limits);
+                        let decision = engine.evaluate(
+                            record.id,
+                            &record.all_categories(),
+                            true, // we assume it's blockable for the HUD check
+                            today.weekday_index().unwrap_or(0),
+                            &snap,
+                            now,
+                        );
+                        let match_res = match decision {
+                            st_core::limits::Decision::Allow { remaining_secs, binding: Some(target) } => Some((remaining_secs, target)),
+                            st_core::limits::Decision::Warn { remaining_secs, binding: target, .. } => Some((remaining_secs, target)),
+                            _ => None,
+                        };
+                        if let Some((remaining_secs, target)) = match_res {
+                            let is_timer = snap.active_timer_expires_utc(&target).is_some();
+                            hud = Some(st_ipc::HudStateDto {
+                                remaining_secs,
+                                is_timer,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Response::Accepted {
+        hud,
+        effective_utc: now.to_rfc3339(),
+    }
+
 }
 
 /// Split a usage span into per-local-day pieces so midnight rollover mid-span
@@ -1264,6 +1329,7 @@ fn limit_to_dto(row: &LimitRow) -> Option<st_ipc::LimitDto> {
         default_minutes: limit.default_minutes,
         weekday_minutes: limit.weekday_minutes,
         enabled: limit.enabled,
+        timer_expires_utc: None,
     })
 }
 
@@ -1461,7 +1527,7 @@ mod tests {
                 self_sampling: false,
                 blocks_encrypted_dns: false,
             }),
-            policy: Arc::new(policy),
+            policy: Arc::new(std::sync::RwLock::new(policy)),
             processes: Arc::new(Mutex::new(Box::new(FakeProcesses::default()))),
             clock: Arc::new(clock),
             live: Arc::new(Live::default()),

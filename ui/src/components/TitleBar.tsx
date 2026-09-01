@@ -7,6 +7,7 @@ export function TitleBar() {
     const [isMaximized, setIsMaximized] = useState(false);
 
     useEffect(() => {
+        appWindow.setDecorations(false);
         let unlisten: () => void;
         appWindow.onResized(async () => {
             const max = await appWindow.isMaximized();

@@ -1,24 +1,29 @@
+
 .add-domain-form {
     display: flex;
     gap: 8px;
     margin-bottom: 16px;
 }
-.domain-list {
-    list-style: none;
-    padding: 0;
-    margin: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+
+.domain-chip-container {
+    /* Custom scrollbar for the chips area */
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-light) transparent;
 }
-.domain-item {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background: var(--bg-secondary);
-    border-radius: 4px;
+.domain-chip-container::-webkit-scrollbar {
+    width: 6px;
 }
-.domain-name {
-    font-weight: 500;
+.domain-chip-container::-webkit-scrollbar-track {
+    background: transparent;
+}
+.domain-chip-container::-webkit-scrollbar-thumb {
+    background-color: var(--border-light);
+    border-radius: 10px;
+}
+
+.domain-remove-btn {
+    transition: color 0.1s ease-in-out;
+}
+.domain-remove-btn:hover {
+    color: var(--color-danger) !important;
 }

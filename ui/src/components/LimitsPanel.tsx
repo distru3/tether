@@ -2,8 +2,9 @@ import React from "react";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
-import { describeWeekdayOverrides, targetLabel } from "../format";
+import { describeWeekdayOverrides, targetLabel, formatDuration } from "../format";
 import { CalendarIcon, LimitsIcon, PlusIcon, WarningIcon } from "./icons/Icons";
+import { LiveTimer } from "./LiveTimer";
 
 interface LimitsPanelProps {
     limits: LimitDto[];
@@ -80,6 +81,7 @@ export function LimitsPanel({
                                             {isCategory ? "Category" : "App"}
                                         </span>
                                         <h3 className="limit-target-name">{label}</h3>
+                                        {limit.timer_expires_utc && <LiveTimer expiresUtc={limit.timer_expires_utc} />}
                                     </div>
                                     <input
                                         type="checkbox"
@@ -93,7 +95,7 @@ export function LimitsPanel({
 
                                 <div className="limit-card-body">
                                     <div className="limit-budget-row font-mono">
-                                        <span className="budget-value">{limit.default_minutes}m</span>
+                                        <span className="budget-value">{formatDuration(limit.default_minutes * 60)}</span>
                                         <span className="budget-unit">/ day</span>
                                     </div>
                                     {varies !== null && (

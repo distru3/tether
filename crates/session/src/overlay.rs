@@ -432,8 +432,8 @@ const BG_ROSE_BADGE: u32 = rgb(42, 11, 18);
 const BORDER_ELEVATED: u32 = rgb(42, 42, 42);
 const TEXT_WHITE: u32 = rgb(255, 255, 255);
 const TEXT_MUTED: u32 = rgb(153, 153, 153);
-const ACCENT_INDIGO: u32 = rgb(255, 255, 255);
-const ACCENT_INDIGO_BRIGHT: u32 = rgb(255, 255, 255);
+const ACCENT_INDIGO: u32 = rgb(99, 102, 241);
+const ACCENT_INDIGO_BRIGHT: u32 = rgb(129, 140, 248);
 const ACCENT_ROSE: u32 = rgb(244, 63, 94);
 
 /// Font suite for the modern overlay interface.

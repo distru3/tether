@@ -60,6 +60,7 @@ pub struct AgentStatus {
     pub tracking_available: bool,
     pub pin_configured: bool,
     pub strict_mode: bool,
+    pub show_hud_overlay: bool,
 }
 
 /// Structured failure for every fallible command.
@@ -130,6 +131,7 @@ fn get_status() -> AgentStatus {
             tracking_available: dto.tracking_available,
             pin_configured: dto.pin_configured,
             strict_mode: dto.strict_mode,
+            show_hud_overlay: dto.show_hud_overlay,
         },
         Ok(_) | Err(_) => AgentStatus {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -144,6 +146,7 @@ fn get_status() -> AgentStatus {
             tracking_available: false,
             pin_configured: false,
             strict_mode: false,
+            show_hud_overlay: true,
         },
     }
 }
@@ -276,6 +279,17 @@ fn set_limit(
     }
 }
 
+
+#[tauri::command]
+fn cancel_pending_limit(target: st_ipc::LimitTargetDto, pin: String) -> CmdResult<String> {
+    match ipc_client::request(st_ipc::Request::CancelPendingLimit { target, pin }) {
+        Ok(st_ipc::Response::Accepted { effective_utc, .. }) => Ok(effective_utc),
+        Ok(st_ipc::Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
 #[tauri::command]
 fn delete_limit(target: st_ipc::LimitTargetDto, pin: String) -> CmdResult<String> {
     match ipc_client::request(st_ipc::Request::DeleteLimit { target, pin }) {
@@ -345,8 +359,8 @@ fn add_manual_block(domain: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
-fn remove_manual_block(domain: String) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::RemoveManualBlock { domain })
+fn remove_manual_block(domain: String, pin: String) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::RemoveManualBlock { domain, pin })
 }
 
 #[tauri::command]
@@ -480,6 +494,7 @@ pub fn run() {
             remove_pin,
             set_setting,
             set_limit,
+            cancel_pending_limit,
             delete_limit,
             grant_override,
             categorize,
@@ -506,6 +521,24 @@ pub fn run() {
                 if let Some(window) = app.get_webview_window("main") {
                     let hwnd = window.hwnd().expect("main window HWND");
                     corners::set_square_corners(hwnd);
+                }
+            }
+
+                        #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                // Auto-launch the session tracker alongside the UI.
+                // The tracker uses a single-instance mutex, so this is perfectly
+                // safe to call blindly ?" it will just exit if already running.
+                if let Ok(exe) = std::env::current_exe() {
+                    if let Some(dir) = exe.parent() {
+                        let tracker = dir.join("bin").join("screentime-session.exe");
+                        if tracker.exists() {
+                            let _ = std::process::Command::new(tracker)
+                                .creation_flags(0x08000000) // CREATE_NO_WINDOW
+                                .spawn();
+                        }
+                    }
                 }
             }
 
