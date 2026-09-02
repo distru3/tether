@@ -1,1 +1,0 @@
-fn main() { let output = std::process::Command::new(cmd).arg(/D).arg(/C).arg(sc.exe create ScreentimeAgent binPath= C:\\ start= auto displayName= "Screentime Agent").output().unwrap(); println!({}, String::from_utf8_lossy(&output.stdout)); }

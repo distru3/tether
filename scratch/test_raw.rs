@@ -1,1 +1,0 @@
-use std::os::windows::process::CommandExt; fn main() { let out = std::process::Command::new(cmd).arg(/D).arg(/C).raw_arg(sc.exe create Foo binPath= C:\\ start= auto displayName= "Foo Bar").output().unwrap(); println!({:?}, out); }
