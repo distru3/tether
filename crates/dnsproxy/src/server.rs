@@ -118,21 +118,27 @@ fn receive_loop(
                             tracing::warn!(error = %e, "dns resolver failed to send NXDOMAIN");
                         }
                     }
-                    LocalResponse::Forward => match forward(query, upstream) {
-                        Some(mut resp) => {
-                            // The client sent the id; make sure it gets that same
-                            // id back, not whatever the upstream echoed.
-                            if let Ok(id) = wire::message_id(query) {
-                                wire::set_message_id(&mut resp, id);
+                    LocalResponse::Forward => {
+                        let query_vec = query.to_vec();
+                        let socket_clone = socket.try_clone().expect("clone socket");
+                        std::thread::spawn(move || {
+                            match forward(&query_vec, upstream) {
+                                Some(mut resp) => {
+                                    // The client sent the id; make sure it gets that same
+                                    // id back, not whatever the upstream echoed.
+                                    if let Ok(id) = wire::message_id(&query_vec) {
+                                        wire::set_message_id(&mut resp, id);
+                                    }
+                                    if let Err(e) = socket_clone.send_to(&resp, peer) {
+                                        tracing::warn!(error = %e, "dns resolver failed to relay response");
+                                    }
+                                }
+                                None => {
+                                    tracing::warn!(%peer, "dns resolver forward timed out or upstream unreachable");
+                                }
                             }
-                            if let Err(e) = socket.send_to(&resp, peer) {
-                                tracing::warn!(error = %e, "dns resolver failed to relay response");
-                            }
-                        }
-                        None => {
-                            tracing::warn!(%peer, "dns resolver forward timed out or upstream unreachable");
-                        }
-                    },
+                        });
+                    }
                 }
             }
             Err(e)
