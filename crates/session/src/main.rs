@@ -316,17 +316,19 @@ fn main() -> anyhow::Result<()> {
                 if let Some(snap) = snapshot::focused_snapshot() {
                     if snap.rect.2 > 0 && snap.rect.3 > 0 {
                         // Check if we need to respawn because window moved or changed
-                        
-                        
-                        let should_respawn = active_hud.as_ref().map(|(rect, _)| *rect != snap.rect).unwrap_or(true);
-                        
+
+                        let should_respawn = active_hud
+                            .as_ref()
+                            .map(|(rect, _)| *rect != snap.rect)
+                            .unwrap_or(true);
+
                         if should_respawn {
                             if let Some((_, run)) = active_hud.take() {
                                 run.dismiss();
                             }
                             active_hud = Some((snap.rect, hud::spawn_hud_overlay(snap.rect)));
                         }
-                        
+
                         if let Some((_, ref run)) = active_hud {
                             run.update(hud_state.remaining_secs, hud_state.is_timer);
                         }

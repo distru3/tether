@@ -1,10 +1,14 @@
-import React from "react";
+import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { AppWindow, FolderTree } from "lucide-react";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
 import { LiveTimer } from "./LiveTimer";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
 import { formatDuration, sharePercent } from "../format";
+import { FilterTabs } from "./FilterTabs";
+import './LedgerSection.css';
 
 type RowKind = "app" | "category";
 
@@ -45,125 +49,180 @@ export function LedgerSection({
     onCategorize,
     catalog,
 }: LedgerSectionProps) {
+    const { t } = useTranslation();
+    const [activeTab, setActiveTab] = useState("All");
+    const [isExpanded, setIsExpanded] = useState(false);
+
     if (entries.length === 0) return null;
 
+    const filteredEntries = entries.filter((entry) => {
+        if (activeTab === "Blocked") return entry.blocked;
+        if (activeTab === "Active") return !entry.blocked;
+        return true;
+    });
+
+    const visibleEntries = isExpanded ? filteredEntries : filteredEntries.slice(0, 5);
+
     return (
-        <div className="glass-card usage-section-card">
-            <div className="section-card-header">
-                <div>
-                    <h3 className="card-title">{label}</h3>
-                    <p className="card-description">{entries.length} items active today</p>
+        <div className="card ledger-section-card">
+            <div className="ledger-card-header">
+                <div className="ledger-header-text">
+                    <h3 className="ledger-title">{label}</h3>
+                    <p className="ledger-subtitle">{t("ledger.itemsActiveToday", { count: filteredEntries.length })}</p>
                 </div>
+                <FilterTabs 
+                    tabs={["All", "Active", "Blocked"]} 
+                    activeTab={activeTab} 
+                    onChange={setActiveTab} 
+                />
             </div>
 
-            <div className="usage-rows-list">
-                {entries.map((entry, index) => {
-                    const limit = limitFor(kind, entry.id);
-                    const target: LimitTargetDto =
-                        kind === "app" ? { kind: "app", id: entry.id } : { kind: "category", id: entry.id };
-                    const limitSeconds = entry.limit_seconds;
-                    const overLimit = limitSeconds !== null && entry.seconds >= limitSeconds;
-                    const share = total > 0 ? (entry.seconds / total) * 100 : 0;
-                    const isUncat = kind === "app" && catalog && isUncategorizedApp(catalog, entry.id);
+            <div className="ledger-table-wrapper">
+                <table className="ledger-table">
+                    <thead>
+                        <tr>
+                            <th>{t("ledger.application", "Application")}</th>
+                            <th>{t("ledger.category", "Category")}</th>
+                            <th>{t("ledger.timeLimit", "Time/Limit")}</th>
+                            <th>{t("ledger.progress", "Progress")}</th>
+                            <th>{t("ledger.status", "Status")}</th>
+                            <th>{t("ledger.action", "Action")}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {visibleEntries.map((entry) => {
+                            const limit = limitFor(kind, entry.id);
+                            const target: LimitTargetDto =
+                                kind === "app" ? { kind: "app", id: entry.id } : { kind: "category", id: entry.id };
+                            const limitSeconds = entry.limit_seconds;
+                            const overLimit = limitSeconds !== null && entry.seconds >= limitSeconds;
+                            const share = total > 0 ? (entry.seconds / total) * 100 : 0;
+                            const isUncat = kind === "app" && catalog && isUncategorizedApp(catalog, entry.id);
 
-                    return (
-                        <div key={entry.id} className={`usage-row ${entry.blocked ? "usage-row--blocked" : ""}`}>
-                            <div className="usage-row-main">
-                                <span className="usage-rank font-mono">{index + 1}</span>
-                                <span
-                                    className="usage-swatch"
-                                    style={{ backgroundColor: entry.color ?? "var(--accent-indigo)" }}
-                                />
-                                <div className="usage-name-group">
-                                    <span className="usage-label">{entry.label}</span>
-                                    {entry.blocked && <span className="badge badge-sm badge--danger">Blocked</span>}
-                                    {entry.timer_expires_utc && <LiveTimer expiresUtc={entry.timer_expires_utc} />}
-                                    {isUncat && <span className="badge badge-sm badge--warning">Uncategorized</span>}
-                                </div>
+                            let categoryName = "—";
+                            if (kind === "app" && catalog) {
+                                const appInfo = catalog.apps.find((a) => a.id === entry.id);
+                                if (appInfo && appInfo.primary_category) {
+                                    const catInfo = catalog.categories.find(c => c.id === appInfo.primary_category);
+                                    if (catInfo) {
+                                        categoryName = catInfo.name;
+                                    }
+                                }
+                            }
 
-                                <div className="usage-metrics font-mono">
-                                    <span className="usage-time">{formatDuration(entry.seconds)}</span>
-                                    <span className="usage-percent">{sharePercent(entry.seconds, total)}%</span>
-                                </div>
-
-                                <div className="usage-actions">
-                                    {limit ? (
-                                        <button
-                                            type="button"
-                                            className="btn btn-secondary btn-sm"
-                                            disabled={busy}
-                                            onClick={() => onEdit(limit.target, limit)}
-                                        >
-                                            {formatDuration(limit.default_minutes * 60)} limit
-                                        </button>
-                                    ) : canLimit(entry) ? (
-                                        <button
-                                            type="button"
-                                            className="btn btn-ghost btn-sm"
-                                            disabled={busy}
-                                            onClick={() => onEdit(target, null)}
-                                        >
-                                            + Limit
-                                        </button>
-                                    ) : null}
-
-                                    {kind === "app" && onCategorize && (
-                                        <button
-                                            type="button"
-                                            className="btn btn-ghost btn-sm"
-                                            disabled={busy}
-                                            onClick={() => {
-                                                const app = catalog?.apps.find((a) => a.id === entry.id);
-                                                onCategorize(entry.id, entry.label, app?.primary_category ?? null, app?.tags ?? []);
-                                            }}
-                                        >
-                                            Tag
-                                        </button>
-                                    )}
-                                </div>
-                            </div>
-
-                            {/* Share progress bar */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginTop: '8px' }}>
-                                {limitSeconds !== null ? (
-                                    <>
-                                        <div className="usage-progress-track" style={{ height: '3px', marginTop: 0 }}>
-                                            <div
-                                                className={`usage-progress-bar ${overLimit ? "usage-progress-bar--over" : "usage-progress-bar--limit"}`}
-                                                style={{
-                                                    width: `${limitPercent(entry.seconds, limitSeconds)}%`,
-                                                    backgroundColor: overLimit ? "var(--color-danger)" : "var(--color-info)"
-                                                }}
-                                                title={`${Math.round(limitPercent(entry.seconds, limitSeconds))}% of limit`}
-                                            />
+                            return (
+                                <tr key={entry.id} className={entry.blocked ? "row-blocked" : ""}>
+                                    <td>
+                                        <div className="ledger-app-cell">
+                                            <div 
+                                                className="ledger-icon-box"
+                                                style={{ backgroundColor: `${entry.color ?? 'var(--color-primary)'}22`, color: entry.color ?? 'var(--color-primary)' }}
+                                            >
+                                                {kind === "app" ? <AppWindow size={16} /> : <FolderTree size={16} />}
+                                            </div>
+                                            <span className="ledger-app-name">{entry.label}</span>
                                         </div>
-                                        <div className="usage-progress-track" style={{ height: '3px', marginTop: 0 }}>
-                                            <div
-                                                className="usage-progress-bar"
-                                                style={{
-                                                    width: `${share}%`,
-                                                    backgroundColor: entry.color ?? "var(--accent-indigo)"
-                                                }}
-                                                title={`${Math.round(share)}% of day`}
-                                            />
+                                    </td>
+                                    <td>
+                                        {kind === "app" ? (
+                                            <span className="ledger-category-pill">{categoryName}</span>
+                                        ) : (
+                                            <span className="ledger-category-pill">Category Group</span>
+                                        )}
+                                        {isUncat && <span className="badge badge-sm badge--warning ml-2">{t("ledger.uncategorized")}</span>}
+                                    </td>
+                                    <td>
+                                        <div className="ledger-time-cell">
+                                            <span className="ledger-time">{formatDuration(entry.seconds)}</span>
+                                            {limitSeconds !== null && (
+                                                <span className="ledger-limit-val">/ {formatDuration(limitSeconds)}</span>
+                                            )}
                                         </div>
-                                    </>
-                                ) : (
-                                    <div className="usage-progress-track" style={{ height: '4px', marginTop: 0 }}>
-                                        <div
-                                            className="usage-progress-bar"
-                                            style={{
-                                                width: `${share}%`,
-                                                backgroundColor: entry.color ?? "var(--accent-indigo)",
-                                            }}
-                                            title={`${Math.round(share)}% of day`}
-                                        />
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
+                                    </td>
+                                    <td>
+                                        <div className="ledger-progress-cell">
+                                            <div className="ledger-progress-track">
+                                                <div 
+                                                    className="ledger-progress-fill"
+                                                    style={{ 
+                                                        width: `${limitSeconds !== null ? limitPercent(entry.seconds, limitSeconds) : share}%`,
+                                                        backgroundColor: overLimit ? "var(--color-danger)" : (entry.color ?? "var(--color-primary)")
+                                                    }}
+                                                />
+                                            </div>
+                                            <span className="ledger-progress-text font-mono">
+                                                {sharePercent(entry.seconds, total)}%
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div className="ledger-status-cell">
+                                            {entry.blocked ? (
+                                                <span className="badge badge-sm badge--danger">{t("ledger.blocked", "Blocked")}</span>
+                                            ) : (
+                                                <span className="badge badge-sm badge--success">{t("ledger.active", "Running")}</span>
+                                            )}
+                                            {entry.timer_expires_utc && <LiveTimer expiresUtc={entry.timer_expires_utc} />}
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <div className="ledger-action-cell">
+                                            {limit ? (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-secondary btn-sm"
+                                                    disabled={busy}
+                                                    onClick={() => onEdit(limit.target, limit)}
+                                                >
+                                                    Edit Limit
+                                                </button>
+                                            ) : canLimit(entry) ? (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-ghost btn-sm"
+                                                    disabled={busy}
+                                                    onClick={() => onEdit(target, null)}
+                                                >
+                                                    Set Limit
+                                                </button>
+                                            ) : null}
+
+                                            {kind === "app" && onCategorize && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-ghost btn-sm"
+                                                    disabled={busy}
+                                                    onClick={() => {
+                                                        const app = catalog?.apps.find((a) => a.id === entry.id);
+                                                        onCategorize(entry.id, entry.label, app?.primary_category ?? null, app?.tags ?? []);
+                                                    }}
+                                                >
+                                                    {t("ledger.tag")}
+                                                </button>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                    </tbody>
+                </table>
+                {!isExpanded && filteredEntries.length > 5 && (
+                    <div className="ledger-footer">
+                        <span className="ledger-footer-info">Showing 5 {kind === "app" ? "monitored applications" : "categories"}</span>
+                        <button className="btn btn-ghost ledger-footer-action" onClick={() => setIsExpanded(true)}>
+                            Manage all {filteredEntries.length} {kind === "app" ? "detected apps" : "categories"} &rarr;
+                        </button>
+                    </div>
+                )}
+                {isExpanded && filteredEntries.length > 5 && (
+                    <div className="ledger-footer">
+                        <span className="ledger-footer-info">Showing all {filteredEntries.length} {kind === "app" ? "monitored applications" : "categories"}</span>
+                        <button className="btn btn-ghost ledger-footer-action" onClick={() => setIsExpanded(false)}>
+                            Show less &uarr;
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

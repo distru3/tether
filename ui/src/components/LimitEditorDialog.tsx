@@ -1,4 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { useTranslation } from "react-i18next";
 import type { WeekdayMinutes } from "../api";
 import { targetLabel, WEEKDAY_SHORT } from "../format";
 import type { CatalogDto } from "../types/generated/CatalogDto";
@@ -42,6 +43,7 @@ function decodeTarget(value: string): LimitTargetDto | null {
 }
 
 export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onClose }: LimitEditorDialogProps) {
+    const { t } = useTranslation();
     const limitableCategories = useMemo(
         () => (catalog?.categories ?? []).filter((category) => category.kind === "limitable"),
         [catalog],
@@ -66,14 +68,14 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
         if (busy) return;
         const parsed = Number.parseInt(minutes, 10);
         if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1440) {
-            setError("Enter minutes between 0 and 1440.");
+            setError(t("limitEditor.errMinutes"));
             return;
         }
         for (const day of dayOverrides) {
             if (!day.override) continue;
             const dayMinutes = Number.parseInt(day.minutes, 10);
             if (!Number.isFinite(dayMinutes) || dayMinutes < 0 || dayMinutes > 1440) {
-                setError("Override minutes must be between 0 and 1440.");
+                setError(t("limitEditor.errOverrideMinutes"));
                 setWeekOpen(true);
                 return;
             }
@@ -83,7 +85,7 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
         ) as WeekdayMinutes;
         const finalTarget = locked ? target : decodeTarget(chosen);
         if (finalTarget === null) {
-            setError("Pick what the order applies to.");
+            setError(t("limitEditor.errPick"));
             return;
         }
         onSubmit(finalTarget, parsed, weekdayMinutes, enabled);
@@ -91,19 +93,19 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
 
     return (
         <Dialog
-            label={locked ? "Edit standing order" : "New standing order"}
+            label={locked ? t("limitEditor.editOrder") : t("limitEditor.newOrder")}
             onClose={() => {
                 if (!busy) onClose();
             }}
         >
             <form onSubmit={submit}>
-                <p className="dialog-eyebrow">{locked ? "Edit order" : "New order"}</p>
+                <p className="dialog-eyebrow">{locked ? t("limitEditor.editEyebrow") : t("limitEditor.newEyebrow")}</p>
                 <h2 className="dialog-title">
-                    {locked && target !== null ? targetLabel(target, catalog) : "Choose a target"}
+                    {locked && target !== null ? targetLabel(target, catalog) : t("limitEditor.chooseTarget")}
                 </h2>
                 {!locked && (
                     <label className="field">
-                        <span className="field-label">Applies to</span>
+                        <span className="field-label">{t("limitEditor.appliesTo")}</span>
                         <select
                             value={chosen}
                             disabled={busy}
@@ -113,10 +115,10 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                             }}
                         >
                             <option value="" disabled>
-                                Choose…
+                                {t("limitEditor.choose")}
                             </option>
                             {!catalog?.limits.some((l) => l.target.kind === "total") && (
-                                <option value="total">Total screen time</option>
+                                <option value="total">{t("limitEditor.totalScreenTime")}</option>
                             )}
                             {limitableCategories
                                 .filter((category) => !catalog?.limits.some((l) => l.target.kind === "category" && l.target.id === category.id))
@@ -136,7 +138,7 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                     </label>
                 )}
                 <label className="field">
-                    <span className="field-label">Minutes per day</span>
+                    <span className="field-label">{t("limitEditor.minutesPerDay")}</span>
                     <input
                         type="number"
                         min={0}
@@ -157,7 +159,7 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                     onClick={() => setWeekOpen((open) => !open)}
                 >
                     <span className="weekday-chevron">{weekOpen ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}</span>
-                    Per-day overrides
+                    {t("limitEditor.perDayOverrides")}
                     {overrideCount > 0 && <span className="weekday-count">· {overrideCount}</span>}
                 </button>
                 {weekOpen && (
@@ -174,7 +176,7 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                                         updateDay(index, { override: event.target.checked })
                                     }
                                 />
-                                <span className="weekday-name">{WEEKDAY_SHORT[index]}</span>
+                                <span className="weekday-name">{t(`weeklyChart.${WEEKDAY_SHORT[index]!.toLowerCase()}`)}</span>
                                 <input
                                     type="number"
                                     className="weekday-input"
@@ -198,12 +200,12 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                         disabled={busy}
                         onChange={(event) => setEnabled(event.target.checked)}
                     />
-                    <span>In force</span>
+                    <span>{t("limitEditor.inForce")}</span>
                 </label>
                 {error !== null && <p className="dialog-error">{error}</p>}
                 <div className="dialog-actions">
                     <button type="submit" className="btn btn--primary" disabled={busy}>
-                        {busy ? "Setting…" : "Save order"}
+                        {busy ? t("limitEditor.setting") : t("limitEditor.saveOrder")}
                     </button>
                     <button
                         type="button"
@@ -213,7 +215,7 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                         }}
                         disabled={busy}
                     >
-                        Cancel
+                        {t("common.cancel")}
                     </button>
                 </div>
             </form>

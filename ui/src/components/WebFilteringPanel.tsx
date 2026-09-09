@@ -1,8 +1,11 @@
 import { useEffect, useState, useRef } from "react";
+import { useTranslation } from "react-i18next";
 import { addManualBlock, listManualBlocks, removeManualBlock } from "../api";
+import { MetricCards } from "./MetricCards";
 import "./WebFilteringPanel.css";
 
 export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, run: (pin: string) => Promise<void>) => void }) {
+    const { t } = useTranslation();
     const [domains, setDomains] = useState<string[]>([]);
     const [newDomain, setNewDomain] = useState("");
     const [loading, setLoading] = useState(true);
@@ -31,7 +34,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
         if (!trimmed) return;
         
         if (domains.map(d => d.toLowerCase()).includes(trimmed)) {
-            setError("This domain is already blocked.");
+            setError(t("webFilter.alreadyBlocked"));
             return;
         }
 
@@ -48,7 +51,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
 
 
     const handleShowAdult = () => {
-        onAttempt("View Hidden Domains", async (pin: string) => {
+        onAttempt(t("pinGate.viewHidden"), async (pin: string) => {
             setShowAdult(true);
         });
     };
@@ -59,7 +62,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
 
     const handleRemove = (domain: string) => {
         setError(null);
-        onAttempt(`Remove block on ${domain}`, async (pin: string) => {
+        onAttempt(t("pinGate.removeBlock", { domain }), async (pin: string) => {
             await removeManualBlock(domain, pin);
             refresh();
         });
@@ -89,11 +92,11 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
             const uniqueNew = Array.from(new Set(lines)).filter(d => !existingLowers.includes(d));
 
             if (uniqueNew.length === 0) {
-                throw new Error("All domains in this file are already blocked.");
+                throw new Error(t("webFilter.allBlocked"));
             }
 
             if (uniqueNew.length > 100) {
-                throw new Error(`File contains ${uniqueNew.length} new domains. Please limit to 100 maximum.`);
+                throw new Error(t("webFilter.tooMany", { count: uniqueNew.length }));
             }
 
             // Simple batch processing
@@ -114,137 +117,160 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
         }
     };
 
+    const nsfwCount = domains.filter(isNsfw).length;
+    const visibleDomains = domains.filter(d => showAdult || !isNsfw(d));
+
+    const metrics = [
+        { label: t("webFilter.totalBlocked", "Total Blocked"), value: domains.length, icon: <div style={{width: 16, height: 16, borderRadius: '50%', border: '2px solid currentColor'}} /> },
+        { label: t("webFilter.hiddenDomains", "Hidden Domains"), value: nsfwCount, icon: <div style={{width: 16, height: 16, borderRadius: '2px', border: '2px solid currentColor', borderStyle: 'dashed'}} /> },
+    ];
+
     return (
-        <section className="card limits-panel" style={{ maxWidth: "800px" }}>
-            <header className="card-header" style={{ display: "block" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                    <h2 style={{ margin: 0, whiteSpace: "nowrap" }}>Custom Blocked Domains</h2>
-                    <span className="badge badge-sm badge--warning">Experimental</span>
+        <div className="view-container">
+            <div className="view-header">
+                <div>
+                    <h2 className="view-title">{t("webFilter.customBlockedDomains", "Web Shield")}</h2>
+                    <p className="view-subtitle">{t("webFilter.desc", "Manage blocked domains and bulk upload custom lists.")}</p>
                 </div>
-                <div className="card-subtitle" style={{ marginTop: "8px" }}>
-                    Domains blocked permanently on this device using the Windows hosts file.
-                    <div style={{ marginTop: "8px", fontSize: "12px", color: "var(--text-muted)", display: "flex", gap: "6px" }}>
-                        <span>ℹ️</span>
-                        <span>Due to browser caching and "Secure DNS" bypasses, some domains might not get blocked immediately (or at all). You may need to manually disable Secure DNS in your browser settings or fully restart your browser for changes to take effect.</span>
-                    </div>
-                </div>
-            </header>
-            
-            <div className="card-body">
-                {error && <div className="error-text" style={{ marginBottom: "16px", color: "var(--color-danger)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>⚠️ {error}</div>}
+            </div>
 
-                <div className="web-filter-controls" style={{ display: "flex", gap: "16px", marginBottom: "24px", flexWrap: "wrap" }}>
-                    <form onSubmit={handleAdd} style={{ display: "flex", gap: "8px", flex: "1", minWidth: "250px", alignItems: "flex-start" }}>
-                        <input
-                            type="text"
-                            value={newDomain}
-                            onChange={e => setNewDomain(e.target.value)}
-                            placeholder="e.g. facebook.com"
-                            className="form-input"
-                            style={{ flex: 1 }}
-                        />
-                        <button type="submit" className="btn btn--primary" disabled={!newDomain.trim()} style={{ whiteSpace: "nowrap" }}>
-                            Block Domain
-                        </button>
-                    </form>
+            <MetricCards metrics={metrics} />
 
-                    <div className="bulk-upload-section" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                        <input 
-                            type="file" 
-                            accept=".txt,.csv" 
-                            ref={fileInputRef}
-                            style={{ display: 'none' }}
-                            onChange={handleFileUpload}
-                        />
-                        <button 
-                            type="button" 
-                            className="btn btn--secondary" 
-                            onClick={() => fileInputRef.current?.click()}
-                            disabled={isUploading}
-                        >
-                            {isUploading ? "Importing..." : "Bulk Upload (.txt)"}
-                        </button>
-                    </div>
-                </div>
+            <section className="card limits-panel">
+                <div className="card-body">
+                    {error && (
+                        <div className="error-text" style={{ marginBottom: "16px", color: "var(--color-danger)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
+                            {error}
+                        </div>
+                    )}
 
-                <div className="ai-prompt-card glass-card" style={{ padding: "16px", marginBottom: "24px", borderRadius: "8px", border: "1px dashed var(--border-light)" }}>
-                    <h3 style={{ margin: "0 0 8px 0", fontSize: "14px" }}>Generate Lists with AI</h3>
-                    <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "var(--text-muted)" }}>
-                        Want to block an entire category? Enter a topic below and copy a specialized prompt to feed into ChatGPT or Claude. Save the AI's response as a .txt file and upload it above.
-                    </p>
-                    <div style={{ display: "flex", gap: "8px" }}>
-                        <input
-                            type="text"
-                            value={aiCategory}
-                            onChange={e => setAiCategory(e.target.value)}
-                            placeholder="e.g. Social Media, Adult Content, News"
-                            className="form-input form-input-sm"
-                            style={{ flex: 1 }}
-                        />
-                        <button 
-                            type="button" 
-                            className="btn btn--secondary btn-sm" style={{ whiteSpace: "nowrap" }} 
-                            onClick={handleCopyPrompt}
-                            disabled={!aiCategory.trim()}
-                        >
-                            {promptCopied ? "Copied!" : "Copy AI Prompt"}
-                        </button>
-                    </div>
-                </div>
+                    <div className="web-filter-controls" style={{ display: "flex", gap: "16px", marginBottom: "24px", flexWrap: "wrap", alignItems: 'flex-start' }}>
+                        <form onSubmit={handleAdd} style={{ display: "flex", gap: "8px", flex: "1", minWidth: "250px" }}>
+                            <input
+                                type="text"
+                                value={newDomain}
+                                onChange={e => setNewDomain(e.target.value)}
+                                placeholder={t("webFilter.placeholder", "example.com")}
+                                className="form-input"
+                                style={{ flex: 1 }}
+                            />
+                            <button type="submit" className="btn btn-primary" disabled={!newDomain.trim()} style={{ whiteSpace: "nowrap" }}>
+                                {t("webFilter.blockDomain", "Block Domain")}
+                            </button>
+                        </form>
 
-                {loading && !isUploading ? (
-                    <div className="empty-state">Loading...</div>
-                ) : domains.length === 0 ? (
-                    <div className="empty-state">No custom domains blocked.</div>
-                ) : (
-                    <div className="domain-chip-container" style={{ display: "flex", flexWrap: "wrap", gap: "8px", maxHeight: "300px", overflowY: "auto", paddingRight: "8px" }}>
-                        {domains.filter(d => showAdult || !isNsfw(d)).map(d => (
-                            <div key={d} className="domain-chip" style={{ display: "inline-flex", alignItems: "center", background: "var(--bg-surface-raised)", border: "1px solid var(--border-light)", borderRadius: "16px", padding: "4px 10px", fontSize: "13px", gap: "6px" }}>
-                                <span className="domain-name" style={{ fontFamily: "var(--font-mono)" }}>{d}</span>
-                                <button 
-                                    className="domain-remove-btn" 
-                                    onClick={() => handleRemove(d)}
-                                    title="Remove block"
-                                    style={{ background: "transparent", border: "none", color: "var(--text-muted)", cursor: "pointer", fontSize: "16px", lineHeight: 1, padding: "0 4px", display: "flex", alignItems: "center" }}
-                                >
-                                    &times;
-                                </button>
-                            </div>
-                        ))}
-                        
-                        {!showAdult && domains.some(isNsfw) && (
+                        <div className="bulk-upload-section" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                            <input 
+                                type="file" 
+                                accept=".txt,.csv" 
+                                ref={fileInputRef}
+                                style={{ display: 'none' }}
+                                onChange={handleFileUpload}
+                            />
                             <button 
                                 type="button" 
-                                className="domain-chip" 
-                                onClick={handleShowAdult}
-                                title="Unlock hidden domains"
-                                style={{ 
-                                    background: "transparent", 
-                                    border: "1px dashed var(--border-light)", 
-                                    color: "var(--text-muted)", 
-                                    cursor: "pointer", 
-                                    padding: "4px 12px",
-                                    fontSize: "12px",
-                                    display: "inline-flex",
-                                    alignItems: "center",
-                                    borderRadius: "16px",
-                                    transition: "all 0.2s ease"
-                                }}
-                                onMouseEnter={(e) => { 
-                                    e.currentTarget.style.color = "var(--text-primary)"; 
-                                    e.currentTarget.style.borderColor = "var(--text-muted)"; 
-                                }}
-                                onMouseLeave={(e) => { 
-                                    e.currentTarget.style.color = "var(--text-muted)"; 
-                                    e.currentTarget.style.borderColor = "var(--border-light)"; 
-                                }}
+                                className="btn btn-secondary" 
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isUploading}
                             >
-                                <span>{domains.filter(isNsfw).length} hidden</span>
+                                {isUploading ? t("webFilter.importing", "Importing...") : t("webFilter.bulkUpload", "Bulk Upload")}
                             </button>
-                        )}
+                        </div>
                     </div>
-                )}
-            </div>
-        </section>
+
+                    <div className="ai-prompt-card glass-card" style={{ padding: "16px", marginBottom: "24px", borderRadius: "8px", border: "1px dashed var(--border-subtle)", backgroundColor: "var(--bg-recessed)" }}>
+                        <h3 style={{ margin: "0 0 8px 0", fontSize: "14px", fontWeight: 600 }}>{t("webFilter.generateListsWithAi", "Generate Blocklists with AI")}</h3>
+                        <p style={{ margin: "0 0 12px 0", fontSize: "13px", color: "var(--text-muted)" }}>
+                            {t("webFilter.aiDesc", "Enter a topic to copy an AI prompt that will generate a formatted domain list for bulk upload.")}
+                        </p>
+                        <div style={{ display: "flex", gap: "8px" }}>
+                            <input
+                                type="text"
+                                value={aiCategory}
+                                onChange={e => setAiCategory(e.target.value)}
+                                placeholder={t("webFilter.aiPlaceholder", "e.g. news sites, video streaming...")}
+                                className="form-input form-input-sm"
+                                style={{ flex: 1 }}
+                            />
+                            <button 
+                                type="button" 
+                                className="btn btn-secondary btn-sm" style={{ whiteSpace: "nowrap" }} 
+                                onClick={handleCopyPrompt}
+                                disabled={!aiCategory.trim()}
+                            >
+                                {promptCopied ? t("webFilter.copied", "Copied!") : t("webFilter.copyPrompt", "Copy Prompt")}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="ledger-table-wrapper" style={{ marginTop: 24 }}>
+                        <table className="ledger-table">
+                            <thead>
+                                <tr>
+                                    <th>{t("webFilter.domain", "Domain")}</th>
+                                    <th>{t("webFilter.category", "Category")}</th>
+                                    <th>{t("webFilter.status", "Status")}</th>
+                                    <th>{t("webFilter.action", "Action")}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {loading && !isUploading ? (
+                                    <tr>
+                                        <td colSpan={4} className="text-center" style={{ color: 'var(--text-muted)' }}>{t("common.loading", "Loading...")}</td>
+                                    </tr>
+                                ) : visibleDomains.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={4} className="text-center" style={{ color: 'var(--text-muted)' }}>{t("webFilter.noCustomDomains", "No custom domains blocked.")}</td>
+                                    </tr>
+                                ) : (
+                                    visibleDomains.map(d => {
+                                        const isAdult = isNsfw(d);
+                                        return (
+                                            <tr key={d}>
+                                                <td>
+                                                    <div className="ledger-app-cell">
+                                                        <div className="ledger-icon-box" style={{ backgroundColor: 'rgba(244, 63, 94, 0.1)', color: 'var(--color-danger)' }}>
+                                                            <div style={{width: 14, height: 14, border: '2px solid currentColor', borderRadius: '50%'}} />
+                                                        </div>
+                                                        <span className="ledger-app-name font-mono">{d}</span>
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <span className="ledger-category-pill">{isAdult ? "Adult Content" : "Custom Block"}</span>
+                                                </td>
+                                                <td>
+                                                    <span className="badge badge-sm badge--danger">{t("webFilter.blocked", "Blocked")}</span>
+                                                </td>
+                                                <td>
+                                                    <button 
+                                                        className="btn btn-ghost btn-sm text-danger" 
+                                                        onClick={() => handleRemove(d)}
+                                                    >
+                                                        {t("webFilter.remove", "Remove")}
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
+                                {!showAdult && nsfwCount > 0 && (
+                                    <tr>
+                                        <td colSpan={4} style={{ textAlign: "center" }}>
+                                            <button 
+                                                type="button" 
+                                                className="btn btn-ghost btn-sm" 
+                                                onClick={handleShowAdult}
+                                            >
+                                                {t("webFilter.hidden", { count: nsfwCount })}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+        </div>
     );
 }

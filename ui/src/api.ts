@@ -92,7 +92,7 @@ export function grantOverride(target: LimitTargetDto, seconds: number, pin: stri
     return invoke("grant_override", { target, seconds, pin });
 }
 
-export function categorizeApp(appId: number, primaryCategoryId: number, tagCategoryIds: number[]): Promise<void> {
+export function categorizeApp(appId: number, primaryCategoryId: number | null, tagCategoryIds: number[]): Promise<void> {
     return invoke("categorize", { appId, primary: primaryCategoryId, tags: tagCategoryIds });
 }
 
@@ -108,40 +108,32 @@ export function removeManualBlock(domain: string, pin: string): Promise<void> {
     return invoke("remove_manual_block", { domain, pin });
 }
 
-const COPY: Record<ErrorCode, string> = {
-    bad_pin: "That PIN doesn't match.",
-    cooldown_active: "Loosened limits take effect later — see the notice.",
-    strict_mode: "Overrides are disabled in strict mode.",
-    not_limitable: "That target can't carry a standing order.",
-    not_found: "That entry is no longer on the books.",
-    bad_request: "The request didn't parse — try again.",
-    internal: "Something went wrong on our side.",
-};
+import i18n from "./i18n";
 
 export function mapErrorCode(code: string, message?: string): string {
     switch (code) {
         case "bad_pin":
-            return COPY.bad_pin;
+            return i18n.t("api.errors.bad_pin");
         case "cooldown_active":
-            return COPY.cooldown_active;
+            return i18n.t("api.errors.cooldown_active");
         case "strict_mode":
-            return COPY.strict_mode;
+            return i18n.t("api.errors.strict_mode");
         case "not_limitable":
-            return COPY.not_limitable;
+            return i18n.t("api.errors.not_limitable");
         case "not_found":
-            return COPY.not_found;
+            return i18n.t("api.errors.not_found");
         case "bad_request":
-            return COPY.bad_request;
+            return i18n.t("api.errors.bad_request");
         case "internal":
-            return COPY.internal;
+            return i18n.t("api.errors.internal");
         case "unreachable":
-            return "Can't reach the screentime agent right now.";
+            return i18n.t("api.errors.unreachable");
         case "unexpected_response":
             return message !== undefined && message.trim().length > 0
                 ? message
-                : "Unexpected response from the backend.";
+                : i18n.t("api.errors.unexpected_response");
         default:
-            return "Unexpected response from the backend.";
+            return i18n.t("api.errors.unexpected_response");
     }
 }
 

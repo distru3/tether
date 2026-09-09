@@ -27,3 +27,5 @@ ui/src/**/*.js.map
 Thumbs.db
 desktop.ini
 *.swp
+
+ui/src-tauri/bin/*.exe

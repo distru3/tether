@@ -279,7 +279,6 @@ fn set_limit(
     }
 }
 
-
 #[tauri::command]
 fn cancel_pending_limit(target: st_ipc::LimitTargetDto, pin: String) -> CmdResult<String> {
     match ipc_client::request(st_ipc::Request::CancelPendingLimit { target, pin }) {
@@ -330,7 +329,7 @@ fn accepted_cmd(request: st_ipc::Request) -> CmdResult<()> {
 }
 
 #[tauri::command]
-fn categorize(app_id: i64, primary: i64, tags: Vec<i64>) -> CmdResult<()> {
+fn categorize(app_id: i64, primary: Option<i64>, tags: Vec<i64>) -> CmdResult<()> {
     accepted_cmd(st_ipc::Request::Categorize {
         app_id,
         primary,
@@ -483,7 +482,15 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_window_state::Builder::default().build())
         .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            use tauri::Manager;
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+        }))
         .invoke_handler(tauri::generate_handler![
             get_status,
             get_day_summary,
@@ -519,12 +526,13 @@ pub fn run() {
             {
                 use tauri::Manager;
                 if let Some(window) = app.get_webview_window("main") {
-                    let hwnd = window.hwnd().expect("main window HWND");
-                    corners::set_square_corners(hwnd);
+                    if let Ok(hwnd) = window.hwnd() {
+                        corners::set_square_corners(hwnd);
+                    }
                 }
             }
 
-                        #[cfg(windows)]
+            #[cfg(windows)]
             {
                 use std::os::windows::process::CommandExt;
                 // Auto-launch the session tracker alongside the UI.

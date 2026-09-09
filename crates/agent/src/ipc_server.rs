@@ -42,8 +42,8 @@ use st_core::model::{AppKey, SubjectRef};
 use st_core::pin::{generate_recovery_code, hash_pin, normalize_recovery_code, verify_pin};
 use st_core::platform::ProcessController;
 use st_ipc::{
-    transport, ErrorCode, LimitTargetDto, ObservationDto, ReportUsageDto,
-    Request, Response, StatusDto, UsageRowDto,
+    transport, ErrorCode, LimitTargetDto, ObservationDto, ReportUsageDto, Request, Response,
+    StatusDto, UsageRowDto,
 };
 use st_storage::{Db, LimitRow};
 
@@ -126,6 +126,8 @@ pub struct Policy {
     pub idle_threshold_secs: i64,
     /// Whether to show the remaining time HUD on limited apps.
     pub show_hud_overlay: bool,
+    /// Whether the curated social-media domain list is active.
+    pub social_filter_enabled: bool,
 }
 
 /// Runtime-updated facts shared between IPC workers and the main loop.
@@ -467,6 +469,7 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
                     "day_start_minutes" => if let Ok(v) = value.parse() { p.day_start_minutes = v; }
                     "idle_threshold_secs" => if let Ok(v) = value.parse() { p.idle_threshold_secs = v; }
                     "show_hud_overlay" => p.show_hud_overlay = value != "false",
+                    "social_filter_enabled" => p.social_filter_enabled = value == "true",
                     _ => {}
                 }
             }
@@ -508,7 +511,10 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
         Request::ListManualBlocks => list_manual_blocks(ctx),
         Request::AddManualBlock { domain } => add_manual_block(ctx, &domain),
         Request::RemoveManualBlock { domain, pin } => remove_manual_block(ctx, &domain, &pin),
-        _ => unimplemented!(),
+        _ => Response::Error {
+            code: st_ipc::ErrorCode::BadRequest,
+            message: "Feature not yet available.".to_string(),
+        },
     }
 }
 
@@ -524,6 +530,7 @@ fn status_response(ctx: &Ctx) -> Response {
             .live
             .reported_within(RECENT_REPORT_SECS, ctx.clock.now_utc());
 
+    let policy = ctx.policy.read().unwrap();
     Response::Status(StatusDto {
         agent_version: ctx.status.agent_version.clone(),
         tracker_backend: ctx.status.tracker_backend.clone(),
@@ -531,9 +538,13 @@ fn status_response(ctx: &Ctx) -> Response {
         filter_backend: ctx.status.filter_backend.clone(),
         tracking_available,
         blocks_encrypted_dns: ctx.status.blocks_encrypted_dns,
-        strict_mode: ctx.policy.read().unwrap().strict_mode,
+        strict_mode: policy.strict_mode,
         pin_configured,
-        show_hud_overlay: ctx.policy.read().unwrap().show_hud_overlay,
+        show_hud_overlay: policy.show_hud_overlay,
+        social_filter_enabled: policy.social_filter_enabled,
+        limit_cooldown_hours: policy.limit_cooldown_hours,
+        day_start_minutes: policy.day_start_minutes,
+        idle_threshold_secs: policy.idle_threshold_secs,
         path_level: false,
         wildcard_domains: false,
     })
@@ -568,10 +579,13 @@ fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
             .find(|l| matches!(l.target, LimitTarget::App(id) if id == app_id))
             .map(|l| i64::from(l.default_minutes) * 60)
     };
-    
+
     let snapshot = db.day_snapshot(summary.day).ok();
     let timer_expires = |target: LimitTarget| -> Option<String> {
-        snapshot.as_ref().and_then(|s| s.active_timer_expires_utc(&target)).map(|t| t.to_rfc3339())
+        snapshot
+            .as_ref()
+            .and_then(|s| s.active_timer_expires_utc(&target))
+            .map(|t| t.to_rfc3339())
     };
 
     Response::DaySummary(st_ipc::DaySummaryDto {
@@ -601,6 +615,15 @@ fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
                 limit_seconds: None,
                 blocked: false,
                 timer_expires_utc: timer_expires(LimitTarget::Category(c.id)),
+            })
+            .collect(),
+        intervals: summary
+            .intervals
+            .into_iter()
+            .map(|i| st_ipc::IntervalDto {
+                start_utc: i.start_utc,
+                duration_seconds: i.duration_seconds,
+                app_id: i.app_id,
             })
             .collect(),
     })
@@ -1004,11 +1027,24 @@ fn grant_override(
     }
 }
 
-fn categorize(ctx: &Ctx, app_id: i64, primary: i64, tags: &[i64]) -> Response {
+fn categorize(ctx: &Ctx, app_id: i64, primary: Option<i64>, tags: &[i64]) -> Response {
     let mut db = lock_db(&ctx.db);
-    match db.set_app_categories(app_id, primary, tags, true) {
-        Ok(()) => accepted(ctx.clock.now_utc()),
-        Err(e) => error_internal(format!("categorise: {e}")),
+    match primary {
+        Some(p) => match db.set_app_categories(app_id, p, tags, true) {
+            Ok(()) => accepted(ctx.clock.now_utc()),
+            Err(e) => error_internal(format!("categorise: {e}")),
+        },
+        None => {
+            // Auto-detect requested: reset to uncategorized and clear user flag
+            let uncat = match db.category_id("uncategorized") {
+                Ok(id) => id,
+                Err(e) => return error_internal(format!("missing uncategorized category: {e}")),
+            };
+            match db.set_app_categories(app_id, uncat, &[], false) {
+                Ok(()) => accepted(ctx.clock.now_utc()),
+                Err(e) => error_internal(format!("categorise: {e}")),
+            }
+        }
     }
 }
 
@@ -1157,7 +1193,7 @@ fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
     }
 
     ctx.live.note_report(now);
-    
+
     // 6. Compute HUD overlay state for the currently focused app.
     let mut hud = None;
     if ctx.policy.read().unwrap().show_hud_overlay {
@@ -1178,8 +1214,15 @@ fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
                             now,
                         );
                         let match_res = match decision {
-                            st_core::limits::Decision::Allow { remaining_secs, binding: Some(target) } => Some((remaining_secs, target)),
-                            st_core::limits::Decision::Warn { remaining_secs, binding: target, .. } => Some((remaining_secs, target)),
+                            st_core::limits::Decision::Allow {
+                                remaining_secs,
+                                binding: Some(target),
+                            } => Some((remaining_secs, target)),
+                            st_core::limits::Decision::Warn {
+                                remaining_secs,
+                                binding: target,
+                                ..
+                            } => Some((remaining_secs, target)),
                             _ => None,
                         };
                         if let Some((remaining_secs, target)) = match_res {
@@ -1199,7 +1242,6 @@ fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
         hud,
         effective_utc: now.to_rfc3339(),
     }
-
 }
 
 /// Split a usage span into per-local-day pieces so midnight rollover mid-span
@@ -1379,6 +1421,7 @@ mod tests {
     use st_core::limits::Limit;
     use st_core::limits::UsageSnapshot;
     use st_ipc::IpcError;
+    use std::sync::RwLock;
 
     fn base() -> Limit {
         Limit::new(1, LimitTarget::Total, 30)
@@ -1495,13 +1538,14 @@ mod tests {
                 self_sampling: false,
                 blocks_encrypted_dns: false,
             }),
-            policy: Arc::new(Policy {
+            policy: Arc::new(RwLock::new(Policy {
                 limit_cooldown_hours: 24,
                 strict_mode: false,
                 day_start_minutes: 0,
                 idle_threshold_secs: 60,
                 show_hud_overlay: true,
-            }),
+                social_filter_enabled: false,
+            })),
             processes: Arc::new(Mutex::new(Box::new(FakeProcesses::default()))),
             clock: Arc::new(clock),
             live: Arc::new(Live::default()),
@@ -1515,6 +1559,7 @@ mod tests {
             day_start_minutes: 0,
             idle_threshold_secs: 60,
             show_hud_overlay: true,
+            social_filter_enabled: false,
         };
         tweak(&mut policy);
         Ctx {
@@ -2432,6 +2477,7 @@ mod tests {
                 day_start_minutes: 0,
                 idle_threshold_secs: 60,
                 show_hud_overlay: true,
+                social_filter_enabled: false,
             },
             Arc::new(Mutex::new(Box::<FakeProcesses>::default())),
             Arc::new(TestClock::new(at("2026-08-20T12:00:00Z"), 0)),

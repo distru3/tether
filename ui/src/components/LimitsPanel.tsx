@@ -1,14 +1,22 @@
-import React from "react";
+import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
+import { AppWindow, FolderTree, Calendar as CalendarLucide, Timer } from "lucide-react";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
+import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import { describeWeekdayOverrides, targetLabel, formatDuration } from "../format";
 import { CalendarIcon, LimitsIcon, PlusIcon, WarningIcon } from "./icons/Icons";
 import { LiveTimer } from "./LiveTimer";
+import { ToggleSwitch } from "./ToggleSwitch";
+import { FilterTabs } from "./FilterTabs";
+import { MetricCards, type MetricData } from "./MetricCards";
+import './LimitsPanel.css';
 
 interface LimitsPanelProps {
     limits: LimitDto[];
     catalog: CatalogDto | null;
+    summary: DaySummaryDto | null;
     busy: boolean;
     pinConfigured: boolean;
     onToggle: (limit: LimitDto, next: boolean) => void;
@@ -22,6 +30,7 @@ interface LimitsPanelProps {
 export function LimitsPanel({
     limits,
     catalog,
+    summary,
     busy,
     pinConfigured,
     onToggle,
@@ -31,98 +40,159 @@ export function LimitsPanel({
     onNew,
     onOpenPinSetup,
 }: LimitsPanelProps) {
+    const { t } = useTranslation();
+    const [activeTab, setActiveTab] = useState("All");
+
+    const activeLimits = limits.filter(l => l.enabled).length;
+    let limitsReached = 0;
+    
+    const limitUsageMap = new Map<string, number>();
+
+    if (summary) {
+        limits.forEach(l => {
+            if (l.target.kind === "app" || l.target.kind === "category") {
+                const arr = l.target.kind === "app" ? summary.apps : summary.categories;
+                const entry = arr.find((x: any) => x.id === (l.target as any).id);
+                if (entry) {
+                    limitUsageMap.set(`${l.target.kind}-${(l.target as any).id}`, entry.seconds);
+                    if (entry.seconds >= l.default_minutes * 60) {
+                        limitsReached++;
+                    }
+                }
+            } else if (l.target.kind === "total") {
+                limitUsageMap.set(`total-0`, summary.total_seconds);
+                if (summary.total_seconds >= l.default_minutes * 60) {
+                    limitsReached++;
+                }
+            }
+        });
+    }
+
+    const metrics: MetricData[] = [
+        { label: t("limits.totalLimits", "Total Limits"), value: limits.length, icon: <Timer size={16} /> },
+        { label: t("limits.activeLimits", "Active Limits"), value: activeLimits, icon: <Timer size={16} /> },
+        { label: t("limits.limitsReached", "Limits Reached"), value: limitsReached, icon: <WarningIcon size={16} color="var(--color-danger)" />, badge: limitsReached > 0 ? "Action Needed" : undefined }
+    ];
+
+    const filteredLimits = limits.filter(l => {
+        if (activeTab === "Active") return l.enabled;
+        if (activeTab === "Disabled") return !l.enabled;
+        return true;
+    });
+
     return (
         <div className="limits-container view-container">
             <div className="view-header">
                 <div>
-                    <h2 className="view-title">App & Category Limits</h2>
-                    <p className="view-subtitle">
-                        Enforce daily time budgets on apps and categories. Loosening changes undergo an anti-impulse cooldown.
-                    </p>
+                    <h2 className="view-title">{t("limits.title")}</h2>
+                    <p className="view-subtitle">{t("limits.subtitle")}</p>
                 </div>
                 <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={onNew}>
                     <PlusIcon size={14} />
-                    Add New Limit
+                    {t("limits.addNewLimit")}
                 </button>
             </div>
 
+            <MetricCards metrics={metrics} />
+
             {!pinConfigured && (
-                <div className="glass-card banner-warning-card">
+                <div className="glass-card banner-warning-card" style={{ marginBottom: 24 }}>
                     <div className="card-icon-wrapper card-icon--amber">
                         <WarningIcon size={18} color="var(--accent-amber)" />
                     </div>
                     <div className="banner-content">
-                        <strong>Limits are currently unprotected.</strong>
-                        <p>Set a master PIN to prevent bypass or unauthorized quota removal.</p>
+                        <strong>{t("limits.unprotected")}</strong>
+                        <p>{t("limits.unprotectedDesc")}</p>
                     </div>
                     <button type="button" className="btn btn-secondary btn-sm" onClick={onOpenPinSetup}>
-                        Set PIN
+                        {t("limits.setPin")}
                     </button>
                 </div>
             )}
 
-            <div className="limits-grid">
-                {limits.length === 0 ? (
+            <div className="limits-list-header" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <FilterTabs tabs={["All", "Active", "Disabled"]} activeTab={activeTab} onChange={setActiveTab} />
+            </div>
+
+            <div className="rich-limits-list">
+                {filteredLimits.length === 0 && limits.length === 0 ? (
                     <div className="glass-card empty-card">
                         <LimitsIcon size={32} color="var(--text-muted)" />
-                        <p>No limits configured. Click <strong>Add New Limit</strong> to set daily quotas on apps or categories.</p>
+                        <p dangerouslySetInnerHTML={{ __html: t("limits.noLimitsEmpty") }} />
                     </div>
                 ) : (
-                    limits.map((limit) => {
+                    filteredLimits.map((limit) => {
                         const varies = describeWeekdayOverrides(limit.weekday_minutes);
                         const label = targetLabel(limit.target, catalog);
                         const isCategory = limit.target.kind === "category";
+                        const targetId = limit.target.kind === "total" ? 0 : (limit.target as any).id;
+                        const limitSeconds = limit.default_minutes * 60;
+                        const usedSeconds = limitUsageMap.get(`${limit.target.kind}-${targetId}`) ?? 0;
+                        const overLimit = usedSeconds >= limitSeconds;
+                        const progressPercent = limitSeconds > 0 ? Math.min(100, (usedSeconds / limitSeconds) * 100) : 100;
 
                         return (
-                            <div className={`glass-card limit-card ${limit.enabled ? "" : "limit-card--disabled"}`} key={limit.id}>
-                                <div className="limit-card-header">
-                                    <div className="limit-card-title-group">
-                                        <span className={`target-badge ${isCategory ? "target-badge--category" : "target-badge--app"}`}>
-                                            {isCategory ? "Category" : "App"}
-                                        </span>
+                            <div className={`glass-card rich-limit-card ${limit.enabled ? "" : "limit-card--disabled"}`} key={limit.id}>
+                                <div className="rich-limit-card-header">
+                                    <div className="rich-limit-icon-box" style={{ backgroundColor: isCategory ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: isCategory ? 'var(--color-primary)' : '#10b981' }}>
+                                        {isCategory ? <FolderTree size={20} /> : <AppWindow size={20} />}
+                                    </div>
+                                    <div className="rich-limit-title-group">
                                         <h3 className="limit-target-name">{label}</h3>
-                                        {limit.timer_expires_utc && <LiveTimer expiresUtc={limit.timer_expires_utc} />}
-                                    </div>
-                                    <input
-                                        type="checkbox"
-                                        className="toggle-switch"
-                                        checked={limit.enabled}
-                                        disabled={busy}
-                                        onChange={(e) => onToggle(limit, e.target.checked)}
-                                        title={limit.enabled ? "Disable limit" : "Enable limit"}
-                                    />
-                                </div>
-
-                                <div className="limit-card-body">
-                                    <div className="limit-budget-row font-mono">
-                                        <span className="budget-value">{formatDuration(limit.default_minutes * 60)}</span>
-                                        <span className="budget-unit">/ day</span>
-                                    </div>
-                                    {varies !== null && (
-                                        <div className="limit-schedule-tag" title={`Per-day: ${varies}`}>
-                                            <CalendarIcon size={13} color="var(--accent-indigo)" />
-                                            <span>Weekday overrides active</span>
+                                        <div className="limit-badges">
+                                            <span className={`target-badge ${isCategory ? "target-badge--category" : "target-badge--app"}`}>
+                                                {isCategory ? t("limits.category") : t("limits.app")}
+                                            </span>
+                                            {overLimit && <span className="badge badge-sm badge--danger">Limit Reached</span>}
+                                            {limit.timer_expires_utc && <LiveTimer expiresUtc={limit.timer_expires_utc} />}
                                         </div>
-                                    )}
+                                    </div>
+                                    <div className="rich-limit-toggle">
+                                        <ToggleSwitch 
+                                            checked={limit.enabled} 
+                                            onChange={(val) => onToggle(limit, val)} 
+                                            disabled={busy}
+                                        />
+                                    </div>
                                 </div>
 
-                                <div className="limit-card-footer">
-                                    <button
-                                        type="button"
-                                        className="btn btn-secondary btn-sm"
-                                        disabled={busy}
-                                        onClick={() => onEdit(limit.target, limit)}
-                                    >
-                                        Edit Budget
-                                    </button>
-                                    <button
-                                        type="button"
-                                        className="btn btn-ghost btn-sm text-danger"
-                                        disabled={busy}
-                                        onClick={() => onRemove(limit.target)}
-                                    >
-                                        Remove
-                                    </button>
+                                <div className="rich-limit-card-body">
+                                    <div className="rich-limit-progress">
+                                        <div className="rich-limit-progress-header">
+                                            <span className="rich-limit-usage">{formatDuration(usedSeconds)} <span className="rich-limit-total">/ {formatDuration(limitSeconds)}</span></span>
+                                        </div>
+                                        <div className="rich-limit-progress-track">
+                                            <div 
+                                                className="rich-limit-progress-fill" 
+                                                style={{ width: `${progressPercent}%`, backgroundColor: overLimit ? 'var(--color-danger)' : 'var(--color-primary)' }}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="rich-limit-card-footer">
+                                    <div className="limit-schedule-tag" title={varies ? `Per-day: ${varies}` : undefined}>
+                                        <CalendarLucide size={14} color="var(--text-muted)" />
+                                        <span>{varies ? t("limits.weekdayOverridesActive") : t("limits.perDay", "Per Day")}</span>
+                                    </div>
+                                    <div className="limit-footer-actions">
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary btn-sm"
+                                            disabled={busy}
+                                            onClick={() => onEdit(limit.target, limit)}
+                                        >
+                                            {t("limits.editBudget")}
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn btn-ghost btn-sm text-danger"
+                                            disabled={busy}
+                                            onClick={() => onRemove(limit.target)}
+                                        >
+                                            {t("limits.remove")}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         );
@@ -130,41 +200,39 @@ export function LimitsPanel({
                 )}
                 {catalog?.pending_limits.map((pending) => {
                     const label = targetLabel(pending.target, catalog);
-                    const isCategory = pending.target.kind === "category";
                     const isDelete = pending.action === "delete";
                     const formattedTime = new Date(pending.effective_from_utc).toLocaleString();
 
                     return (
-                        <div className="glass-card limit-card limit-card--pending" key={`pending-${pending.id}`}>
-                            <div className="limit-card-header">
-                                <div className="limit-card-title-group">
-                                    <span className="target-badge" style={{ backgroundColor: "var(--accent-amber)", color: "black" }}>
-                                        Pending
-                                    </span>
+                        <div className="glass-card rich-limit-card limit-card--pending" key={`pending-${pending.id}`}>
+                            <div className="rich-limit-card-header">
+                                <div className="rich-limit-icon-box" style={{ backgroundColor: "var(--accent-amber-subtle)", color: "var(--color-warning)" }}>
+                                    <WarningIcon size={20} color="var(--color-warning)" />
+                                </div>
+                                <div className="rich-limit-title-group">
                                     <h3 className="limit-target-name">{label}</h3>
+                                    <div className="limit-badges">
+                                        <span className="target-badge" style={{ backgroundColor: "var(--accent-amber)", color: "black" }}>
+                                            {t("limits.pending")}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
-                            <div className="limit-card-body">
-                                <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "8px" }}>
-                                    {isDelete ? "Scheduled for removal at:" : "Changes apply at:"}
+                            <div className="rich-limit-card-body">
+                                <p style={{ fontSize: "13px", color: "var(--text-muted)" }}>
+                                    {isDelete ? t("limits.scheduledForRemoval") : t("limits.changesApplyAt")}
                                     <br />
                                     <strong>{formattedTime}</strong>
                                 </p>
-                                {!isDelete && pending.default_minutes != null && (
-                                    <div className="limit-budget-row font-mono" style={{ opacity: 0.7 }}>
-                                        <span className="budget-value">{pending.default_minutes}m</span>
-                                        <span className="budget-unit">/ day</span>
-                                    </div>
-                                )}
                             </div>
-                            <div className="limit-card-footer">
+                            <div className="rich-limit-card-footer">
                                 <button
                                     type="button"
                                     className="btn btn-secondary btn-sm text-danger"
                                     disabled={busy}
                                     onClick={() => onCancelPending(pending.target)}
                                 >
-                                    Cancel Pending Change
+                                    {t("limits.cancelPendingChange")}
                                 </button>
                             </div>
                         </div>

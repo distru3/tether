@@ -32,7 +32,7 @@ pub use crate::limits::{LimitRow, PendingLimitRow};
 pub use crate::reporting::{
     CategoryRow, DailyTotal, DaySnapshot, DaySummary, UsageRow, WeeklySummary,
 };
-pub use crate::web::{normalize_domain, BlockRuleRow, BlocklistRow};
+pub use crate::web::{normalize_domain, BlockRuleRow, BlocklistRow, DEFAULT_SOCIAL_MEDIA_DOMAINS};
 
 use std::path::Path;
 
@@ -77,8 +77,8 @@ impl Db {
     /// Open (creating if needed) and bring the schema up to date.
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let conn = Connection::open(path)?;
-        let mut db = Self::bootstrap(conn)?;
-        db.seed_default_blocklists()?;
+        let db = Self::bootstrap(conn)?;
+
         Ok(db)
     }
 

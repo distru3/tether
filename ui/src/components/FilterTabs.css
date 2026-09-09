@@ -1,0 +1,29 @@
+.filter-tabs {
+    display: inline-flex;
+    background-color: var(--bg-recessed);
+    padding: 4px;
+    border-radius: 9999px;
+    gap: 4px;
+}
+
+.filter-tab {
+    padding: 6px 16px;
+    border: none;
+    border-radius: 9999px;
+    background-color: transparent;
+    color: var(--text-secondary);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.filter-tab:hover {
+    color: var(--text-primary);
+}
+
+.filter-tab.active {
+    background-color: var(--bg-card);
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}

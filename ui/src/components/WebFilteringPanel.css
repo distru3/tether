@@ -8,7 +8,7 @@
 .domain-chip-container {
     /* Custom scrollbar for the chips area */
     scrollbar-width: thin;
-    scrollbar-color: var(--border-light) transparent;
+    scrollbar-color: var(--border-subtle) transparent;
 }
 .domain-chip-container::-webkit-scrollbar {
     width: 6px;
@@ -17,7 +17,7 @@
     background: transparent;
 }
 .domain-chip-container::-webkit-scrollbar-thumb {
-    background-color: var(--border-light);
+    background-color: var(--border-subtle);
     border-radius: 10px;
 }
 

@@ -164,12 +164,64 @@ pub fn pick_upstream(ifaces: &[IfaceDns]) -> Option<IpAddr> {
 /// validation). Runs each `netsh` as a short-lived child; failure on one
 /// interface is logged but does not abort the rest, so a single stubborn
 /// adapter cannot undo the whole override.
-pub fn override_all(ifaces: &[IfaceDns]) {
+pub fn set_family_dns(ifaces: &[IfaceDns]) {
     for iface in ifaces {
-        if let Err(e) = set_servers(&iface.name, &[Ipv4Addr::LOCALHOST.into()]) {
-            tracing::warn!(interface = %iface.name, error = %e, "DNS override failed for interface");
-        }
+        // Set IPv4 to Cloudflare Family
+        let _ = command(
+            "netsh",
+            &[
+                "interface",
+                "ipv4",
+                "set",
+                "dnsservers",
+                &format!("name={}", iface.name),
+                "source=static",
+                "address=1.1.1.3",
+                "validate=no",
+            ],
+        );
+        let _ = command(
+            "netsh",
+            &[
+                "interface",
+                "ipv4",
+                "add",
+                "dnsservers",
+                &format!("name={}", iface.name),
+                "address=1.0.0.3",
+                "validate=no",
+            ],
+        );
+
+        // Set IPv6 to Cloudflare Family
+        let _ = command(
+            "netsh",
+            &[
+                "interface",
+                "ipv6",
+                "set",
+                "dnsservers",
+                &format!("name={}", iface.name),
+                "source=static",
+                "address=2606:4700:4700::1113",
+                "validate=no",
+            ],
+        );
+        let _ = command(
+            "netsh",
+            &[
+                "interface",
+                "ipv6",
+                "add",
+                "dnsservers",
+                &format!("name={}", iface.name),
+                "address=2606:4700:4700::1003",
+                "validate=no",
+            ],
+        );
     }
+    // Flush the system DNS cache
+    let _ = command("ipconfig", &["/flushdns"]);
 }
 
 /// Restore each interface's captured DNS configuration.
@@ -229,33 +281,25 @@ pub fn restore_all(ifaces: &[IfaceDns]) {
         if let Err(e) = result {
             tracing::warn!(interface = %iface.name, error = %e, "DNS restore failed for interface");
         }
-    }
-}
 
-fn set_servers(name: &str, servers: &[IpAddr]) -> std::result::Result<(), String> {
-    let Some(first) = servers.first() else {
-        return Ok(());
-    };
-    let name_arg = format!("name={name}");
-    let addr_arg = format!("address={first}");
-    command(
-        "netsh",
-        &[
-            "interface",
-            "ipv4",
-            "set",
-            "dnsservers",
-            &name_arg,
-            "source=static",
-            &addr_arg,
-            "validate=no",
-        ],
-    )
+        // Always reset IPv6 to DHCP since we don't capture it yet
+        let _ = command(
+            "netsh",
+            &[
+                "interface",
+                "ipv6",
+                "set",
+                "dnsservers",
+                &name_arg,
+                "source=dhcp",
+            ],
+        );
+    }
 }
 
 /// Run an external command and capture a failure as a string, consuming stdout
 /// for diagnostics. `netsh` is trusted to be on PATH on any Windows install.
-fn command(program: &str, args: &[&str]) -> std::result::Result<(), String> {
+pub fn command(program: &str, args: &[&str]) -> std::result::Result<(), String> {
     let out = std::process::Command::new(program)
         .args(args)
         .output()

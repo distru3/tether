@@ -29,16 +29,11 @@
 //! everywhere while the resolver logic stays fully exercised by tests.
 
 pub mod lockdown;
-pub mod resolve;
 
 #[cfg(windows)]
 pub mod dns_config;
 #[cfg(windows)]
 pub mod filter;
-#[cfg(windows)]
-pub mod server;
-#[cfg(windows)]
-pub mod wire;
 
 #[cfg(windows)]
 pub use filter::DnsProxyFilter;

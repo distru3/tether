@@ -47,6 +47,10 @@ pub(crate) enum Action {
     /// the daemon. Designed so a stranded machine can recover without needing
     /// the batch script or any internet connectivity.
     ResetNetwork,
+    /// Enable Cloudflare Family DNS on all interfaces
+    EnableFamilyDns,
+    /// Restore DNS on all interfaces to DHCP
+    DisableFamilyDns,
 }
 
 /// Decide what to do from the raw argument slice (argv[1..]).
@@ -61,6 +65,8 @@ pub(crate) fn decide(args: &[String]) -> Result<Action, String> {
         [flag] if flag == "--install" => Ok(Action::Install),
         [flag] if flag == "--uninstall" => Ok(Action::Uninstall),
         [flag] if flag == "--reset-network" => Ok(Action::ResetNetwork),
+        [flag] if flag == "--enable-family-dns" => Ok(Action::EnableFamilyDns),
+        [flag] if flag == "--disable-family-dns" => Ok(Action::DisableFamilyDns),
         other => Err(format!(
             "error: unrecognized argument(s): {}\n\n{}",
             other.join(" "),

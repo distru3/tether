@@ -195,8 +195,12 @@ impl IdleMonitor for Win32IdleMonitor {
             let idle_secs = u64::from(idle_ms) / 1000;
 
             Ok(if idle_secs >= self.threshold_secs {
-                IdleState::Idle {
-                    for_secs: idle_secs,
+                if is_media_playing() {
+                    IdleState::Active
+                } else {
+                    IdleState::Idle {
+                        for_secs: idle_secs,
+                    }
                 }
             } else {
                 IdleState::Active
@@ -206,6 +210,75 @@ impl IdleMonitor for Win32IdleMonitor {
 
     fn backend(&self) -> &'static str {
         "win32-lastinput"
+    }
+}
+
+/// Checks if video or audio is currently playing.
+/// Returns true if the system display is required (video playback)
+/// or if any audio session is active (audio playback).
+fn is_media_playing() -> bool {
+    unsafe {
+        // Check if display is kept awake (Video)
+        let mut state: u32 = 0;
+        let res = windows::Win32::System::Power::CallNtPowerInformation(
+            windows::Win32::System::Power::SystemExecutionState,
+            None,
+            0,
+            Some(&mut state as *mut u32 as *mut std::ffi::c_void),
+            4,
+        );
+        if res == windows::Win32::Foundation::STATUS_SUCCESS {
+            if (state & windows::Win32::System::Power::ES_DISPLAY_REQUIRED.0) != 0 {
+                return true;
+            }
+        }
+
+        // Check if audio is playing
+        use windows::Win32::Media::Audio::{
+            eConsole, eRender, AudioSessionStateActive, IAudioSessionManager2, IMMDeviceEnumerator,
+            MMDeviceEnumerator,
+        };
+        use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+
+        let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+
+        let Ok(enumerator) = windows::Win32::System::Com::CoCreateInstance::<_, IMMDeviceEnumerator>(
+            &MMDeviceEnumerator,
+            None,
+            windows::Win32::System::Com::CLSCTX_ALL,
+        ) else {
+            return false;
+        };
+
+        let Ok(device) = enumerator.GetDefaultAudioEndpoint(eRender, eConsole) else {
+            return false;
+        };
+
+        let Ok(manager) =
+            device.Activate::<IAudioSessionManager2>(windows::Win32::System::Com::CLSCTX_ALL, None)
+        else {
+            return false;
+        };
+
+        let Ok(session_enum) = manager.GetSessionEnumerator() else {
+            return false;
+        };
+
+        let Ok(count) = session_enum.GetCount() else {
+            return false;
+        };
+
+        for i in 0..count {
+            if let Ok(session) = session_enum.GetSession(i) {
+                if let Ok(state) = session.GetState() {
+                    if state == AudioSessionStateActive {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        false
     }
 }
 

@@ -13,8 +13,8 @@
     "windows": [
       {
         "title": "Tether",
-        "width": 1150,
-        "height": 720,
+        "width": 1280,
+        "height": 800,
         "minWidth": 960,
         "minHeight": 480,
         "resizable": true,

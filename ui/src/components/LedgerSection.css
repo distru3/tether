@@ -1,0 +1,159 @@
+.ledger-section-card {
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+}
+
+.ledger-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.ledger-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin: 0 0 4px 0;
+}
+
+.ledger-subtitle {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin: 0;
+}
+
+.ledger-table-wrapper {
+    overflow-x: auto;
+}
+
+.ledger-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+}
+
+.ledger-table th {
+    padding: 12px 24px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    font-weight: 500;
+    border-bottom: 1px solid var(--border-subtle);
+}
+
+.ledger-table td {
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+    vertical-align: middle;
+}
+
+.ledger-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.ledger-table tbody tr:hover {
+    background-color: var(--bg-card-hover);
+}
+
+.row-blocked td {
+    background-color: rgba(244, 63, 94, 0.05); /* very light red */
+}
+
+.ledger-app-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ledger-icon-box {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.ledger-app-name {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.ledger-category-pill {
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background-color: var(--bg-recessed);
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.ledger-time-cell {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+    font-family: var(--font-mono);
+}
+
+.ledger-time {
+    font-size: 14px;
+    color: var(--text-primary);
+    font-weight: 500;
+}
+
+.ledger-limit-val {
+    font-size: 12px;
+    color: var(--text-muted);
+}
+
+.ledger-progress-cell {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.ledger-progress-track {
+    width: 80px;
+    height: 6px;
+    border-radius: 9999px;
+    background-color: var(--bg-recessed);
+    overflow: hidden;
+}
+
+.ledger-progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+}
+
+.ledger-progress-text {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.ledger-status-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.ledger-action-cell {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.badge--success {
+    background-color: rgba(16, 185, 129, 0.1);
+    color: #10b981;
+    border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.ledger-footer { display: flex; justify-content: space-between; align-items: center; padding: 16px 24px; border-top: 1px solid var(--border-subtle); background: var(--bg-card); border-radius: 0 0 16px 16px; } .ledger-footer-info { color: var(--text-muted); font-size: 13px; } .ledger-footer-action { color: var(--color-primary); font-size: 14px; font-weight: 500; cursor: pointer; text-decoration: none; padding: 6px 12px; border-radius: 6px; } .ledger-footer-action:hover { background: var(--bg-recessed); }

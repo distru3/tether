@@ -26,3 +26,5 @@ tauri-plugin-shell = "2.0"
 tracing.workspace = true
 tracing-subscriber.workspace = true
 windows = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Dwm"] }
+tauri-plugin-single-instance = "2.4.4"
+tauri-plugin-window-state = "2.0.0-rc"

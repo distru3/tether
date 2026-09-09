@@ -425,16 +425,16 @@ unsafe fn handle_click(hwnd: HWND, state: &mut OverlayState, px: i32, py: i32) {
 const fn rgb(r: u8, g: u8, b: u8) -> u32 {
     r as u32 | (g as u32) << 8 | (b as u32) << 16
 }
-const BG_BACKDROP: u32 = rgb(0, 0, 0);
-const BG_OBSIDIAN: u32 = rgb(5, 5, 5);
-const BG_CARD_ELEVATED: u32 = rgb(17, 17, 17);
-const BG_ROSE_BADGE: u32 = rgb(42, 11, 18);
-const BORDER_ELEVATED: u32 = rgb(42, 42, 42);
-const TEXT_WHITE: u32 = rgb(255, 255, 255);
-const TEXT_MUTED: u32 = rgb(153, 153, 153);
-const ACCENT_INDIGO: u32 = rgb(99, 102, 241);
-const ACCENT_INDIGO_BRIGHT: u32 = rgb(129, 140, 248);
-const ACCENT_ROSE: u32 = rgb(244, 63, 94);
+const BG_BACKDROP: u32 = rgb(249, 250, 251); // gray-50
+const BG_OBSIDIAN: u32 = rgb(255, 255, 255); // white
+const BG_CARD_ELEVATED: u32 = rgb(243, 244, 246); // gray-100
+const BG_ROSE_BADGE: u32 = rgb(254, 226, 226); // red-100
+const BORDER_ELEVATED: u32 = rgb(229, 231, 235); // gray-200
+const TEXT_WHITE: u32 = rgb(17, 24, 39); // gray-900
+const TEXT_MUTED: u32 = rgb(107, 114, 128); // gray-500
+const ACCENT_INDIGO: u32 = rgb(99, 102, 241); // indigo-500
+const ACCENT_INDIGO_BRIGHT: u32 = rgb(79, 70, 229); // indigo-600
+const ACCENT_ROSE: u32 = rgb(239, 68, 68); // red-500
 
 /// Font suite for the modern overlay interface.
 struct Fonts {

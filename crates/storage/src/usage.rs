@@ -19,11 +19,14 @@ impl Db {
         let secs = interval.duration_secs();
 
         let tx = self.conn.transaction()?;
-        tx.execute(
-            "INSERT INTO usage_intervals
-                 (subject_type, subject_id, session_id, start_utc, end_utc,
-                  duration_secs, day_key)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+
+        let updated = tx.execute(
+            "UPDATE usage_intervals 
+             SET end_utc = ?5, duration_secs = duration_secs + ?6
+             WHERE subject_type = ?1 
+               AND subject_id = ?2 
+               AND session_id = ?3 
+               AND end_utc = ?4",
             params![
                 subject_type,
                 subject_id,
@@ -31,9 +34,26 @@ impl Db {
                 interval.start.to_rfc3339(),
                 interval.end.to_rfc3339(),
                 secs,
-                interval.day_key.0
             ],
         )?;
+
+        if updated == 0 {
+            tx.execute(
+                "INSERT INTO usage_intervals
+                     (subject_type, subject_id, session_id, start_utc, end_utc,
+                      duration_secs, day_key)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                params![
+                    subject_type,
+                    subject_id,
+                    interval.session_id,
+                    interval.start.to_rfc3339(),
+                    interval.end.to_rfc3339(),
+                    secs,
+                    interval.day_key.0
+                ],
+            )?;
+        }
         tx.execute(
             "INSERT INTO usage_daily (day_key, subject_type, subject_id, seconds)
              VALUES (?1, ?2, ?3, ?4)
@@ -176,4 +196,40 @@ mod tests {
         assert_eq!(before, 360);
         assert_eq!(after, before);
     }
+
+    #[test]
+    fn usage_intervals_are_coalesced_if_contiguous() {
+        let mut db = Db::open_in_memory().expect("open");
+        let day = DayKey(20260820);
+        let uncat = db.category_id("uncategorized").expect("uncat");
+        let app = db
+            .upsert_app(&AppKey::windows_exe("C:\\a.exe"), "A", None, uncat, now())
+            .expect("app");
+
+        let t1 = now();
+        let t2 = t1 + chrono::Duration::seconds(1);
+        let t3 = t2 + chrono::Duration::seconds(1);
+        let t4 = t3 + chrono::Duration::seconds(1);
+
+        db.record_interval(&interval_at(app, 1, day, t1)).expect("i1");
+        db.record_interval(&UsageInterval {
+            subject: SubjectRef::App(app),
+            session_id: "s1".into(),
+            start: t2,
+            end: t3,
+            day_key: day,
+        }).expect("i2");
+        db.record_interval(&UsageInterval {
+            subject: SubjectRef::App(app),
+            session_id: "s1".into(),
+            start: t3,
+            end: t4,
+            day_key: day,
+        }).expect("i3");
+
+        let summary = db.day_summary(day).expect("summary");
+        assert_eq!(summary.intervals.len(), 1, "should be merged into 1 interval");
+        assert_eq!(summary.intervals[0].duration_seconds, 3);
+    }
 }
+

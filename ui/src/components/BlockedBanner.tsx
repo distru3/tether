@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
 import { BlockedIcon } from "./icons/Icons";
 
@@ -15,6 +16,7 @@ function minutesUntilLocalMidnight(now: Date): number {
 }
 
 export function BlockedBanner({ blocked, busy, onOverride }: BlockedBannerProps) {
+    const { t } = useTranslation();
     const [now, setNow] = useState(() => new Date());
 
     useEffect(() => {
@@ -33,10 +35,10 @@ export function BlockedBanner({ blocked, busy, onOverride }: BlockedBannerProps)
             <div className="blocked-banner-header">
                 <div className="blocked-badge-group">
                     <span className="pulse-indicator pulse-indicator--danger" />
-                    <span className="badge badge--danger">ENFORCEMENT ACTIVE ({blocked.length})</span>
+                    <span className="badge badge--danger">{t("banner.enforcementActive", { count: blocked.length })}</span>
                 </div>
                 <span className="blocked-reset-text font-mono">
-                    Resets in {hours}h {minutes}m
+                    {t("banner.resetsIn", { hours, minutes })}
                 </span>
             </div>
 
@@ -53,7 +55,7 @@ export function BlockedBanner({ blocked, busy, onOverride }: BlockedBannerProps)
                             disabled={busy}
                             onClick={() => onOverride(row)}
                         >
-                            +15 min Override
+                            {t("banner.override")}
                         </button>
                     </div>
                 ))}

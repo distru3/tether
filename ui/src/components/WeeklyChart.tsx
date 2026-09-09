@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useTranslation } from "react-i18next";
 import type { WeeklySummaryDto } from "../types/generated/WeeklySummaryDto";
 import { chartBarLabel, dayKeyToDate, formatDayLabel, formatDuration } from "../format";
 
@@ -11,10 +12,20 @@ interface WeeklyChartProps {
 
 const DAY_COUNT = 7;
 const MAX_BAR_HEIGHT = 110;
-const WEEKDAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"] as const;
 
 export function WeeklyChart({ week, viewDay, loading, onSelectDay }: WeeklyChartProps) {
+    const { t } = useTranslation();
     const [hoveredDay, setHoveredDay] = useState<number | null>(null);
+
+    const WEEKDAY_NAMES = [
+        t("weeklyChart.sun"), 
+        t("weeklyChart.mon"), 
+        t("weeklyChart.tue"), 
+        t("weeklyChart.wed"), 
+        t("weeklyChart.thu"), 
+        t("weeklyChart.fri"), 
+        t("weeklyChart.sat")
+    ];
 
     if (week === null) {
         if (!loading) return null;
@@ -40,8 +51,9 @@ export function WeeklyChart({ week, viewDay, loading, onSelectDay }: WeeklyChart
             ? Math.round(((total - week.previous_week_total) / week.previous_week_total) * 100)
             : null;
 
+    const vsLastWeek = t("weeklyChart.vsLastWeek");
     const deltaLabel =
-        delta === null ? "—" : delta > 0 ? `+${delta}% vs last week` : delta < 0 ? `−${Math.abs(delta)}% vs last week` : "±0% vs last week";
+        delta === null ? "—" : delta > 0 ? `+${delta}% ${vsLastWeek}` : delta < 0 ? `−${Math.abs(delta)}% ${vsLastWeek}` : `±0% ${vsLastWeek}`;
     const deltaClass =
         delta === null
             ? "delta-badge delta-neutral"
@@ -52,10 +64,10 @@ export function WeeklyChart({ week, viewDay, loading, onSelectDay }: WeeklyChart
                     : "delta-badge delta-neutral";
 
     return (
-        <section className="weekly-chart-card glass-card" aria-label="7-Day Activity Chart">
+        <section className="weekly-chart-card glass-card" aria-label={t("weeklyChart.title")}>
             <header className="chart-header">
                 <div className="chart-title-block">
-                    <h3 className="chart-heading">7-Day Activity</h3>
+                    <h3 className="chart-heading">{t("weeklyChart.title")}</h3>
                     <div className="chart-metrics-row">
                         <span className="chart-total-time font-mono">{formatDuration(total)}</span>
                         <span className={deltaClass}>{deltaLabel}</span>
@@ -63,7 +75,7 @@ export function WeeklyChart({ week, viewDay, loading, onSelectDay }: WeeklyChart
                 </div>
             </header>
 
-            <div className="week-bars-container" role="region" aria-label="7 Day Activity Chart">
+            <div className="week-bars-container" role="region" aria-label={t("weeklyChart.title")}>
                 {days.map((day) => {
                     const isSelected = day.day === viewDay;
                     const isHovered = day.day === hoveredDay;

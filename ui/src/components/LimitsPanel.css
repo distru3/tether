@@ -1,0 +1,105 @@
+.limits-container {
+    display: flex;
+    flex-direction: column;
+}
+
+.rich-limit-card {
+    display: flex;
+    flex-direction: column;
+    padding: 20px;
+}
+
+.rich-limit-card-header {
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+
+.rich-limit-icon-box {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.rich-limit-title-group {
+    display: flex;
+    flex-direction: column;
+    flex-grow: 1;
+    gap: 4px;
+}
+
+.limit-badges {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.rich-limit-toggle {
+    flex-shrink: 0;
+    margin-left: auto;
+}
+
+.rich-limit-card-body {
+    margin-bottom: 20px;
+}
+
+.rich-limit-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.rich-limit-progress-header {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.rich-limit-usage {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+}
+
+.rich-limit-total {
+    color: var(--text-muted);
+    font-weight: 400;
+}
+
+.rich-limit-progress-track {
+    width: 100%;
+    height: 8px;
+    background-color: var(--bg-recessed);
+    border-radius: 9999px;
+    overflow: hidden;
+}
+
+.rich-limit-progress-fill {
+    height: 100%;
+    border-radius: 9999px;
+    transition: width 0.3s ease;
+}
+
+.rich-limit-card-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-top: 16px;
+    border-top: 1px solid var(--border-subtle);
+}
+
+.limit-footer-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.limits-grid { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+.rich-limit-card { border: 1px solid var(--border-subtle); box-shadow: var(--shadow-sm); border-radius: 12px; }
+
+.rich-limits-list { display: flex; flex-direction: column; gap: 16px; width: 100%; }

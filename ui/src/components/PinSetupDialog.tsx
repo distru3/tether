@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-
+import { useTranslation } from "react-i18next";
 import { describeError, removePin, type PinVaultReply } from "../api";
 import { Dialog } from "./Dialog";
 
@@ -11,6 +11,7 @@ interface PinSetupDialogProps {
 }
 
 export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSetupDialogProps) {
+    const { t } = useTranslation();
     const [currentPin, setCurrentPin] = useState("");
     const [newPin, setNewPin] = useState("");
     const [confirmPin, setConfirmPin] = useState("");
@@ -23,11 +24,11 @@ export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSe
         event.preventDefault();
         if (busy) return;
         if (newPin.trim().length === 0) {
-            setError("Enter a new PIN.");
+            setError(t("pinSetup.errEnterNew"));
             return;
         }
         if (newPin !== confirmPin) {
-            setError("The two new PINs differ.");
+            setError(t("pinSetup.errDiff"));
             return;
         }
         setError(null);
@@ -55,15 +56,11 @@ export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSe
 
     if (issuedCode !== null) {
         return (
-            <Dialog label="Recovery code" onClose={guardedClose}>
-                <p className="dialog-eyebrow">House key</p>
-                <h2 className="dialog-title">Write this down</h2>
-                <p className="panel-note">
-                    This is the recovery code for your new PIN. It is shown <strong>once</strong> —
-                    the app stores only a hash, so nobody can show it again. It replaces the PIN
-                    if you forget it, and stops working the next time the PIN changes.
-                </p>
-                <div className="recovery-code" role="textbox" aria-label="Recovery code" tabIndex={0}>
+            <Dialog label={t("pinSetup.recoveryCodeTitle")} onClose={guardedClose}>
+                <p className="dialog-eyebrow">{t("pinSetup.houseKey")}</p>
+                <h2 className="dialog-title">{t("pinSetup.writeThisDown")}</h2>
+                <p className="panel-note" dangerouslySetInnerHTML={{ __html: t("pinSetup.recoveryDesc") }} />
+                <div className="recovery-code" role="textbox" aria-label={t("pinSetup.recoveryCodeTitle")} tabIndex={0}>
                     {issuedCode}
                 </div>
                 <div className="dialog-actions">
@@ -73,7 +70,7 @@ export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSe
                         onClick={onClose}
                         disabled={removing}
                     >
-                        I've written it down
+                        {t("pinSetup.writtenDown")}
                     </button>
                 </div>
             </Dialog>
@@ -81,54 +78,54 @@ export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSe
     }
 
     return (
-        <Dialog label="Set a PIN" onClose={guardedClose}>
+        <Dialog label={pinConfigured ? t("pinSetup.changePin") : t("pinSetup.setPin")} onClose={guardedClose}>
             <form onSubmit={submit}>
-                <p className="dialog-eyebrow">House key</p>
-                <h2 className="dialog-title">{pinConfigured ? "Change the PIN" : "Set a PIN"}</h2>
+                <p className="dialog-eyebrow">{t("pinSetup.houseKey")}</p>
+                <h2 className="dialog-title">{pinConfigured ? t("pinSetup.changePin") : t("pinSetup.setPin")}</h2>
                 <p className="panel-note">
-                    A PIN gates standing-order changes and time grants. Optional until you set one.
+                    {t("pinSetup.pinDesc")}
                 </p>
                 {pinConfigured && (
                     <label className="field">
-                        <span className="field-label">Current PIN or recovery code</span>
+                        <span className="field-label">{t("pinSetup.currentPin")}</span>
                         <input
                             type="password"
                             autoComplete="off"
                             value={currentPin}
                             disabled={busy}
-                            aria-label="Current PIN or recovery code"
+                            aria-label={t("pinSetup.currentPin")}
                             onChange={(event) => setCurrentPin(event.target.value)}
                         />
                     </label>
                 )}
                 <label className="field">
-                    <span className="field-label">New PIN</span>
+                    <span className="field-label">{t("pinSetup.newPin")}</span>
                     <input
                         type="password"
                         inputMode="numeric"
                         autoComplete="new-password"
                         value={newPin}
                         disabled={busy}
-                        aria-label="New PIN"
+                        aria-label={t("pinSetup.newPin")}
                         onChange={(event) => setNewPin(event.target.value)}
                     />
                 </label>
                 <label className="field">
-                    <span className="field-label">Repeat new PIN</span>
+                    <span className="field-label">{t("pinSetup.repeatPin")}</span>
                     <input
                         type="password"
                         inputMode="numeric"
                         autoComplete="new-password"
                         value={confirmPin}
                         disabled={busy}
-                        aria-label="Repeat new PIN"
+                        aria-label={t("pinSetup.repeatPin")}
                         onChange={(event) => setConfirmPin(event.target.value)}
                     />
                 </label>
                 {error !== null && <p className="dialog-error">{error}</p>}
                 <div className="dialog-actions">
                     <button type="submit" className="btn btn--primary" disabled={busy}>
-                        {busy ? "Setting…" : "Save PIN"}
+                        {busy ? t("pinSetup.setting") : t("pinSetup.savePin")}
                     </button>
                     <button
                         type="button"
@@ -136,21 +133,21 @@ export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSe
                         onClick={guardedClose}
                         disabled={busy}
                     >
-                        Cancel
+                        {t("common.cancel")}
                     </button>
                 </div>
             </form>
             {pinConfigured && (
                 <div className="remove-vault">
-                    <p className="dialog-eyebrow">Stand down the gate</p>
+                    <p className="dialog-eyebrow">{t("pinSetup.standDown")}</p>
                     <div className="remove-vault-row">
                         <input
                             type="password"
                             autoComplete="off"
-                            placeholder="PIN or recovery code"
+                            placeholder={t("pinSetup.pinOrRecovery")}
                             value={removeCredential}
                             disabled={removing || busy}
-                            aria-label="PIN or recovery code to remove the vault"
+                            aria-label={t("pinSetup.pinOrRecovery")}
                             onChange={(event) => {
                                 setRemoveCredential(event.target.value);
                                 setError(null);
@@ -162,7 +159,7 @@ export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSe
                             disabled={removing || busy || removeCredential.trim().length === 0}
                             onClick={() => void submitRemove()}
                         >
-                            {removing ? "Removing…" : "Remove PIN"}
+                            {removing ? t("pinSetup.removing") : t("pinSetup.removePin")}
                         </button>
                     </div>
                 </div>

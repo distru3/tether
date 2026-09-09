@@ -16,6 +16,37 @@ pub struct Backends {
 }
 
 #[cfg(windows)]
+struct WindowsCompositeFilter {
+    hosts: st_enforce_win::HostsFileFilter,
+    proxy: st_dns::DnsProxyFilter,
+}
+
+#[cfg(windows)]
+impl st_core::platform::NetworkFilter for WindowsCompositeFilter {
+    fn apply(
+        &mut self,
+        rules: &[st_core::platform::BlockRule],
+    ) -> st_core::platform::PlatformResult<()> {
+        self.hosts.apply(rules)?;
+        self.proxy.apply(rules)
+    }
+
+    fn clear(&mut self) -> st_core::platform::PlatformResult<()> {
+        self.hosts.clear()?;
+        self.proxy.clear()
+    }
+
+    fn capabilities(&self) -> st_core::platform::FilterCapabilities {
+        // Dns proxy has wider capabilities than hosts filter
+        self.proxy.capabilities()
+    }
+
+    fn backend(&self) -> &'static str {
+        "windows-composite-filter"
+    }
+}
+
+#[cfg(windows)]
 pub fn detect(capture_titles: bool, idle_threshold_secs: u64) -> Backends {
     use st_enforce_win::{HostsFileFilter, Win32ProcessController};
     use st_tracker_win::{Win32IdleMonitor, Win32WindowTracker};
@@ -24,7 +55,10 @@ pub fn detect(capture_titles: bool, idle_threshold_secs: u64) -> Backends {
         tracker: Box::new(Win32WindowTracker::new(capture_titles)),
         idle: Box::new(Win32IdleMonitor::new(idle_threshold_secs)),
         processes: Some(Box::new(Win32ProcessController::new())),
-        filter: Box::new(HostsFileFilter::new()),
+        filter: Box::new(WindowsCompositeFilter {
+            hosts: HostsFileFilter::new(),
+            proxy: st_dns::DnsProxyFilter::new(),
+        }),
     }
 }
 

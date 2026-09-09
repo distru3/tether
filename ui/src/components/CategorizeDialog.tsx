@@ -1,5 +1,5 @@
 import { useState } from "react";
-
+import { useTranslation } from "react-i18next";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import { Dialog } from "./Dialog";
 
@@ -24,6 +24,7 @@ export function CategorizeDialog({
     onCategorize,
     onAutoDetect,
 }: CategorizeDialogProps) {
+    const { t } = useTranslation();
     const [selectedPrimary, setSelectedPrimary] = useState<number | null>(currentPrimaryId);
     const [selectedTags, setSelectedTags] = useState<number[]>(currentTagIds ?? []);
 
@@ -38,20 +39,21 @@ export function CategorizeDialog({
     const handleSave = () => {
         if (selectedPrimary !== null) {
             onCategorize(selectedPrimary, selectedTags);
+        } else {
+            onAutoDetect();
         }
     };
 
     return (
-        <Dialog label="Categorize app" onClose={onClose}>
-            <p className="dialog-eyebrow">App classification</p>
+        <Dialog label={t("categorize.title")} onClose={onClose}>
+            <p className="dialog-eyebrow">{t("categorize.eyebrow")}</p>
             <h2 className="dialog-title">{appName}</h2>
             <p className="panel-note">
-                Choose the primary category for this app. You can also add tag categories for
-                overlapping budgets (e.g., TikTok as both Short-Form Video and Social Media).
+                {t("categorize.desc")}
             </p>
 
             <label className="field">
-                <span className="field-label">Primary category</span>
+                <span className="field-label">{t("categorize.primary")}</span>
                 <select
                     value={selectedPrimary ?? ""}
                     disabled={busy}
@@ -60,7 +62,7 @@ export function CategorizeDialog({
                         setSelectedPrimary(value === "" ? null : parseInt(value, 10));
                     }}
                 >
-                    <option value="">Auto-detect</option>
+                    <option value="">{t("categorize.autoDetect")}</option>
                     {limitableCategories.map((category) => (
                         <option key={category.id} value={category.id}>
                             {category.name}
@@ -69,9 +71,9 @@ export function CategorizeDialog({
                 </select>
             </label>
 
-            {limitableCategories.length > 0 && (
+            {limitableCategories.length > 0 && selectedPrimary !== null && catalog?.categories.find(c => c.id === selectedPrimary)?.slug !== "uncategorized" && (
                 <div className="field">
-                    <span className="field-label">Tag categories (optional)</span>
+                    <span className="field-label">{t("categorize.tags")}</span>
                     <div className="tag-list">
                         {limitableCategories.map((category) => (
                             <label key={category.id} className="tag-item">
@@ -95,15 +97,15 @@ export function CategorizeDialog({
                     onClick={onAutoDetect}
                     disabled={busy}
                 >
-                    Auto-detect
+                    {t("categorize.autoDetect")}
                 </button>
                 <button
                     type="button"
                     className="btn btn--primary"
                     onClick={handleSave}
-                    disabled={busy || selectedPrimary === null}
+                    disabled={busy}
                 >
-                    {busy ? "Saving…" : "Save"}
+                    {busy ? t("categorize.saving") : t("common.save")}
                 </button>
             </div>
         </Dialog>

@@ -1,176 +1,187 @@
-# screentime
+# Tether
 
-Cross-platform screen-time tracker and limiter for Windows and (secondarily)
-Linux/X11. Rust workspace, three binaries, Tauri 2 dashboard.
+> A private-by-default screen-time tracker and limiter for Windows. See where your
+> time actually goes, then put a hard stop on the apps and sites that steal it.
 
-> Status: **M3 in progress**. M1 insight alpha and M2 limit enforcement are complete.
-> M3 brings web filtering (DNS/hosts blocking, NSFW obfuscation) and a fully
-> automated Windows installer pipeline via Tauri v2.
+[![CI](https://github.com/distru3/tether/actions/workflows/ci.yml/badge.svg)](https://github.com/distru3/tether/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Rust](https://img.shields.io/badge/rust-1.83%2B-orange.svg)](rust-toolchain.toml)
+
+Tether is a self-control aid, not spyware. Everything is stored in a local SQLite
+database on your own machine — nothing is uploaded, nothing is cloud-synced. It is
+designed to be friction *you* opt into, and it is honest about what it can and
+cannot enforce (see [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md)).
+
+> **Naming:** "Tether" is the product name. The Rust crates and binaries still use
+> the historical `screentime-*` prefix (`screentime-agent`, `screentime-session`,
+> `screentime-ui`) — those are implementation details, not user-facing names.
+
+## What it does
+
+| Capability | How it works |
+| --- | --- |
+| **Automatic tracking** | Samples the foreground window + idle state locally, once a second |
+| **Smart categorization** | Apps auto-classify into categories (manual override + tags supported) |
+| **Daily limits** | Per-app and per-category budgets, with optional per-weekday minutes |
+| **Freeze, don't kill** | Limits suspend the process tree instead of killing it, so your work survives |
+| **PIN + recovery code** | Limit changes are gated behind a PIN (Argon2id-hashed), with a recovery code |
+| **Anti-impulse cooldown** | Loosening a limit waits 24 h; tightening or removing it is instant |
+| **Web filtering** | Hosts-based blocking with adult + social-media blocklists and manual domains |
+| **Overrides** | A PIN-gated "+15 minutes" escape hatch, with fail-closed expiry |
+| **Fail-closed enforcement** | Blocks survive restarts until end-of-day; expired blocks thaw automatically |
+
+## Why Tether
+
+Most "focus" apps are either walled SaaS gardens or blunt website blockers.
+Tether is neither: it's a local, single-machine tool that tracks *applications*
+(not just browser tabs), enforces limits by freezing processes so no work is
+lost, and treats the user as a grown-up — overrides are a feature, and the
+threat model says plainly where the limits of enforcement are.
+
+## Getting started
+
+### Prerequisites
+
+- **Windows 10 or 11**
+- **Rust 1.83+** (via [rustup](https://rustup.rs); the toolchain is pinned in
+  [`rust-toolchain.toml`](rust-toolchain.toml))
+- **Visual Studio Build Tools 2022** with the "Desktop development with C++" workload
+- **Node.js 20+** and **npm**
+- **WebView2 runtime** (preinstalled on Windows 11)
+
+Install the Tauri CLI once:
+
+```powershell
+cargo install tauri-cli --version "^2.1" --locked
+```
+
+### Build & run
+
+Tether is three processes; start them in this order:
+
+```powershell
+# 1. The privileged agent (database, limits engine, enforcement, IPC server)
+$env:SCREENTIME_DATA_DIR = "$PWD\local\data"   # else defaults to C:\ProgramData\screentime
+cargo run -p st-agent
+
+# 2. The per-user session helper (samples the foreground window, drives the overlay)
+cargo run -p st-session
+
+# 3. The dashboard (spawns the Vite dev server)
+cd ui
+npm install
+npm run tauri dev
+```
+
+## Installing for daily use
+
+For everyday use, run the agent as a Windows service and start the session helper
+at logon. From an **elevated** PowerShell, in the repository root:
+
+```powershell
+.\packaging\install.ps1                       # build, register service, enable autostart
+```
+
+Or step by step:
+
+```powershell
+# Elevated prompt — registers + starts the agent via sc.exe
+target\release\screentime-agent.exe --install
+
+# No elevation — writes the HKCU Run key
+target\debug\screentime-session.exe --autostart on
+```
+
+Reverse with `--uninstall` and `--autostart off`. Logs live in
+`C:\ProgramData\screentime\logs\` (agent) and `%LOCALAPPDATA%\screentime\logs`
+(session). A bundled NSIS installer story is documented in
+[packaging/README.md](packaging/README.md).
+
+## Configuration
+
+| Setting | Where | Description |
+| --- | --- | --- |
+| `SCREENTIME_DATA_DIR` | env var | Agent data directory; defaults to `C:\ProgramData\screentime` |
+| `SCREENTIME_SELF_SAMPLE=1` | env var | Dev fallback: re-enable in-agent sampling (agent alone doesn't track usage) |
+| `RUST_LOG` | env var | Log filter, e.g. `st_agent=debug,st_session=debug,info` |
+
+Agent flags:
+
+```text
+screentime-agent [FLAG]
+  (no args)         run in console mode (foreground)
+  --service         run under the Windows service controller (SCM only)
+  --install         register the Windows service (elevated)
+  --uninstall       remove the Windows service (elevated)
+  --reset-network   undo all DNS/hosts/firewall changes and exit (emergency recovery)
+```
+
+Session flags:
+
+```text
+screentime-session --autostart on|off|status
+```
+
+## How it works
+
+Three binaries because Windows forces three privilege levels:
+
+| Binary | Runs as | Owns |
+| --- | --- | --- |
+| `screentime-agent` | Windows service (SYSTEM) | SQLite, limits engine, enforcement, IPC on `\\.\pipe\screentime` |
+| `screentime-session` | Per-user login session | Foreground-window + idle sampling, persistent pipe link, block overlay |
+| `screentime-ui` | Interactive user | Tauri dashboard; one-shot pipe commands |
+
+The agent cannot see the interactive desktop (Session 0 isolation), so the
+session helper samples it locally and reports usage over a persistent named-pipe
+connection. Full details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
+[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
 
 ## Repository layout
 
-    crates/
-      core/            portable domain logic, no OS or I/O
-      storage/         SQLite schema + queries
-      ipc/             wire protocol
-      st-win32/        shared Win32 helpers (handles, image paths, wide strings)
-      tracker-win/     Win32 foreground + idle (dev fallback sampler)
-      tracker-linux/   X11 stub (M0 spike target)
-      enforce-win/     process freeze + hosts writer
-      enforce-linux/   stub
-      agent/           screentime-agent (privileged)
-      session/         screentime-session (per-user sampling front)
-    ui/                Tauri 2 + React + Vite dashboard
-    docs/              architecture and threat model
-    packaging/         NSIS installer documentation and hooks
+```text
+crates/
+  core/            portable domain logic — no OS APIs, no wall clock, no SQL
+  storage/         SQLite schema, migrations and queries
+  ipc/             wire protocol + generated TypeScript bindings (ts-rs)
+  st-win32/        shared Win32 helpers
+  tracker-win/     Win32 foreground + idle sampling
+  tracker-linux/   X11 stub
+  enforce-win/     process freeze + hosts writer
+  enforce-linux/   stub
+  agent/           screentime-agent (privileged daemon)
+  session/         screentime-session (per-user sampling front)
+ui/                Tauri 2 + React + Vite dashboard
+docs/              architecture, threat model, ADRs
+packaging/         installer script + NSIS hooks
+```
 
-See `docs/ARCHITECTURE.md` and `docs/THREAT_MODEL.md`.
+## Development
 
-## Prerequisites
+The verification gate (CI runs exactly this):
 
-* **Windows 10 or 11.**
-* **Rust 1.83+** via [rustup](https://rustup.rs/). The toolchain is pinned in
-  `rust-toolchain.toml`, so `cargo` picks the right version automatically.
-* **Microsoft Visual Studio Build Tools 2022** with the "Desktop development
-  with C++" workload (needed by `rustc` on Windows and by
-  [Tauri prerequisites](https://tauri.app/start/prerequisites/#windows)).
-* **Node.js 20+** and **npm** (you already have Node 24, that's fine).
-* **WebView2 runtime** (pre-installed on Windows 11; use the evergreen
-  installer on Windows 10).
+```powershell
+cargo fmt --all -- --check
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+```
 
-Install the Tauri CLI once you have Rust:
+Frontend typecheck and build (from `ui/`):
 
-    cargo install tauri-cli --version "^2.1" --locked
+```powershell
+npx tsc --noEmit
+npm run build
+```
 
-## Building
+TypeScript bindings under `ui/src/types/generated/` are generated by
+`cargo test -p st-ipc` — never edit them by hand.
 
-Everything Rust:
+## Contributing
 
-    cargo build --workspace
-
-Run the tests without an OS:
-
-    cargo test --workspace
-
-Development runs as two processes before the dashboard has anything to
-show. The database lands in `.\local\data\`; set this once per shell:
-
-    set SCREENTIME_DATA_DIR=%CD%\local\data
-    set RUST_LOG=st_agent=debug,st_session=debug,st_core=debug,info
-
-Terminal 1 — the privileged agent (database, limits engine, enforcement,
-IPC server):
-
-    cargo run -p st-agent
-
-Terminal 2 — the unprivileged session helper. Session 0 isolation means the
-agent cannot see the desktop; the session helper samples the foreground
-window and idle time and feeds them to the agent over the named pipe:
-
-    cargo run -p st-session
-
-Then the Tauri dashboard (spawns `npm run dev` and rebuilds the Rust host as
-needed):
-
-    cd ui
-    npm install
-    npm run tauri dev
-
-## Installing (service + autostart)
-
-For daily use, run the agent as a Windows service and start the session
-helper at logon. From an **elevated** PowerShell, in the repository root:
-
-    # Elevated prompt:
-    .\packaging\install.ps1                    # end-to-end: build, service, autostart
-
-    # Or step by step:
-    target\release\screentime-agent.exe --install     # registers + starts via sc.exe
-    target\debug\screentime-session.exe --autostart on  # HKCU Run key, no elevation
-
-`--uninstall` / `--autostart off` reverse each. Logs live in
-`C:\ProgramData\screentime\logs\` (agent) and `%LOCALAPPDATA%\screentime\logs`
-(session). See `packaging/README.md` for the bundled-installer story.
-
-## Milestones
-
-| M   | Scope                                                                  |
-| --- | ---------------------------------------------------------------------- |
-| M0  | Spikes: Win32 tracking + freeze + overlay, X11 tracking, DNS proxy     |
-| M1  | Insight alpha: tracking, dashboard, categories, dogfood                |
-| M2  | Limits & app blocking: agent service, IPC, PIN, freeze + overlay       |
-| M3  | Web filtering: DNS proxy, DoH lockdown, adult-content blocklists       |
-| M4  | Polish: downtime, focus sessions, weekly report, guardian mode, i18n   |
-| M5  | Packaging, signing, release                                            |
-
-Deliberately cut from v1: browser extension, multi-device sync, Wayland,
-eBPF/fanotify, kernel driver.
-
-## Verification checklist (M0)
-
-- [x] `cargo build --workspace` on Windows with MSVC Build Tools installed
-- [x] `cargo test --workspace` all green (67 tests)
-- [x] `cargo run -p st-agent` writes intervals to `.\local\data\screentime.db`
-      (validated 2026-08-21: Brave / Telegram / VS Code tracked, correct
-      `day_key`, clean app-switch boundaries)
-- [x] `ui: npm install && npm run tauri dev` opens the dashboard and shows
-      "tracker_backend: win32"
-- [x] Manual smoke: verify `NtSuspendProcess` freezes and thaws a process
-      (validated 2026-08-21: a plain single-process Win32 window app froze —
-      heartbeat stopped — and resumed on thaw)
-- [x] Manual smoke: verify hosts writer round-trips a rule without disturbing
-      an existing `127.0.0.1 localhost` line
-      (validated 2026-08-21 against a throwaway temp hosts file)
-
-## Verification checklist (M1)
-
-- [x] Apps auto-classify into categories on first sight (curated signature
-      table; never overwrites a user decision)
-- [x] Named-pipe transport: UI talks to the agent over `\\.\pipe\screentime`;
-      `agent_connected` reflects reality
-- [x] Dashboard shows per-app and per-category usage for today, polling every 3s
-- [x] Live `DaySummary` round trip validated against a seeded database
-
-## Verification checklist (M2)
-
-- [x] PIN vault: Argon2id hashing; limit changes allowed before a PIN is set,
-      PIN required once configured
-- [x] Limit CRUD over IPC: `Catalog`, `SetLimit`, `DeleteLimit`, `GrantOverride`
-- [x] Anti-impulse cooldown: loosening applies after `limit_cooldown_hours`
-      (default 24h), tightening immediately; pending changes promote on time
-- [x] Enforcer: exhausted limits freeze the process tree; overrides thaw live;
-      day rollover thaws everything; NeverBlock categories never freeze
-      (covered by unit tests with a fake `ProcessController`)
-- [x] UI: limit editor, PIN setup, "+15 minutes" override, blocked banner
-
-
-## Verification checklist (M3)
-
-- [x] Web filtering UI with categorical blocking and domain wildcards
-- [x] NSFW domain obfuscation and PIN-gated overrides
-- [x] DNS/Hosts blocking rules enforced by the agent
-- [x] Automated, zero-setup NSIS installer via Tauri (`installer_hooks.nsh`)
-- [x] Session tracker runs fully invisibly (`windows_subsystem`) and auto-launches on boot
-
-## Refactor 2026-08
-
-A structural pass after M2; the checklists above remain accurate as written.
-
-- `screentime-session` is now the sampling front: it reads foreground window +
-  idle locally and reports them to the agent over a persistent pipe connection
-  (`ReportUsage`). In-agent sampling remains only as a dev fallback
-  (`SCREENTIME_SELF_SAMPLE=1`).
-- Enforcement and hosts writes are fail-closed: blocks persist their
-  end-of-day expiry across agent restarts, and the hosts writer aborts on
-  read failure instead of wiping unmanaged lines.
-- `crates/storage` split into modules (migrations, taxonomy, usage, limits,
-  enforcement, settings, reporting); new shared `crates/st-win32`.
-- IPC DTOs generate TypeScript bindings into `ui/src/types/generated/`;
-  errors cross the wire as structured `{code, message}`.
-- Dashboard redesigned as a ledger-style light dashboard.
-
-`cargo test --workspace` stands at 179 tests.
+Pull requests are welcome. Open an issue to discuss larger changes first. CI
+must pass (`fmt`, `clippy` with `-D warnings`, and `cargo test --workspace`) —
+see [AGENTS.md](AGENTS.md) for the repo's working conventions and gotchas.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+[MIT](LICENSE)

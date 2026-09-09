@@ -1,9 +1,8 @@
 //! `hosts`-file cleaner and legacy remover.
 //!
-//! Domain blocking is handled STRICTLY in-memory by `DnsProxyFilter` on UDP port 53.
-//! The `HostsFileFilter` exists ONLY to clean up any legacy managed blocks
-//! from previous versions and will NEVER write 0.0.0.0 or any domain entries
-//! to the system `hosts` file.
+//! Domain blocking is applied through one bounded, managed block in the
+//! Windows `hosts` file. The bounds are deliberate: a malformed or imported
+//! list must never be able to fill the file and disrupt normal name lookup.
 
 use std::fs;
 use std::path::PathBuf;
@@ -14,6 +13,8 @@ use st_core::platform::{
 
 const BEGIN_MARKER: &str = "# >>> screentime managed block >>>";
 const END_MARKER: &str = "# <<< screentime managed block <<<";
+const MAX_MANAGED_RULES: usize = 512;
+const MAX_MANAGED_BYTES: usize = 64 * 1024;
 
 pub struct HostsFileFilter {
     path: PathBuf,
@@ -61,17 +62,23 @@ impl HostsFileFilter {
 
 impl NetworkFilter for HostsFileFilter {
     fn apply(&mut self, rules: &[BlockRule]) -> PlatformResult<()> {
-        let rules_vec = rules.to_vec();
-        let res = self.build_replacement(move |existing| render_with_rules(existing, &rules_vec));
+        if rules.len() > MAX_MANAGED_RULES {
+            return self.reject_oversized_rules(rules.len());
+        }
+
+        let existing = fs::read_to_string(&self.path)
+            .map_err(|e| map_io("reading the existing hosts file", e))?;
+        let rendered = render_with_rules(&existing, rules);
+        if rendered.len() > existing.len().saturating_add(MAX_MANAGED_BYTES) {
+            return self.reject_oversized_rules(rules.len());
+        }
+
+        let res = self.write_atomic(&rendered);
         if res.is_ok() {
             flush_dns_cache();
         }
         res
     }
-
-    
-
-    
 
     fn clear(&mut self) -> PlatformResult<()> {
         let res = self.build_replacement(move |existing| render_with_rules(existing, &[]));
@@ -91,6 +98,24 @@ impl NetworkFilter for HostsFileFilter {
 
     fn backend(&self) -> &'static str {
         "windows-hosts-filter"
+    }
+}
+
+impl HostsFileFilter {
+    /// Remove a legacy managed block before rejecting an unsafe update. This
+    /// guarantees that a previously generated oversized block cannot remain in
+    /// place after the safety check trips.
+    fn reject_oversized_rules(&self, count: usize) -> PlatformResult<()> {
+        let existing = fs::read_to_string(&self.path)
+            .map_err(|e| map_io("reading the existing hosts file", e))?;
+        let cleared = render_with_rules(&existing, &[]);
+        let res = self.write_atomic(&cleared);
+        if res.is_ok() {
+            flush_dns_cache();
+        }
+        res.and(Err(PlatformError::Other(format!(
+            "refusing to write {count} managed hosts rules; maximum is {MAX_MANAGED_RULES}"
+        ))))
     }
 }
 
@@ -129,7 +154,7 @@ fn render_with_rules(existing: &str, rules: &[BlockRule]) -> String {
             out.push_str("0.0.0.0 ");
             out.push_str(&rule.domain);
             out.push('\n');
-            
+
             // Mirror common subdomains if wildcarding isn't possible in hosts
             if rule.include_subdomains {
                 if !rule.domain.starts_with("www.") {
@@ -161,6 +186,14 @@ fn map_io(action: &'static str, err: std::io::Error) -> PlatformError {
             source: err,
         }
     }
+}
+
+fn flush_dns_cache() {
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("ipconfig")
+        .arg("/flushdns")
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW
+        .output();
 }
 
 #[cfg(test)]
@@ -228,6 +261,8 @@ mod tests {
             "127.0.0.1 localhost\n\n",
             "# >>> screentime managed block >>>\n",
             "0.0.0.0 tiktok.com\n",
+            "0.0.0.0 www.tiktok.com\n",
+            "0.0.0.0 m.tiktok.com\n",
             "# <<< screentime managed block <<<\n",
         );
         assert_eq!(out, expected);
@@ -274,13 +309,22 @@ mod tests {
 
         assert_eq!(hosts.contents(), "127.0.0.1 localhost\n");
     }
-}
 
+    #[test]
+    fn oversized_rule_set_is_rejected_and_managed_block_is_cleared() {
+        let hosts = TempHosts::seeded(
+            "oversized",
+            "127.0.0.1 localhost\n# >>> screentime managed block >>>\n0.0.0.0 old.example\n# <<< screentime managed block <<<\n",
+        );
+        let rules = (0..=MAX_MANAGED_RULES)
+            .map(|n| rule(&format!("domain-{n}.example")))
+            .collect::<Vec<_>>();
 
-fn flush_dns_cache() {
-    use std::os::windows::process::CommandExt;
-    let _ = std::process::Command::new("ipconfig")
-        .arg("/flushdns")
-        .creation_flags(0x08000000) // CREATE_NO_WINDOW
-        .output();
+        let error = hosts
+            .filter()
+            .apply(&rules)
+            .expect_err("oversized list must fail");
+        assert!(error.to_string().contains("maximum is"));
+        assert_eq!(hosts.contents(), "127.0.0.1 localhost\n");
+    }
 }

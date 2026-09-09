@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-
+import { useTranslation } from "react-i18next";
 import { describeError, recoverPin } from "../api";
 import { Dialog } from "./Dialog";
 
@@ -12,6 +12,7 @@ interface PinGateProps {
 }
 
 export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps) {
+    const { t } = useTranslation();
     const [mode, setMode] = useState<"pin" | "forgot">("pin");
     const [pin, setPin] = useState("");
     const [code, setCode] = useState("");
@@ -32,11 +33,11 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
         event.preventDefault();
         if (recovering) return;
         if (code.trim().length === 0 || newPin.trim().length === 0) {
-            setLocalError("Fill in the recovery code and a new PIN.");
+            setLocalError(t("pinGate.errFill"));
             return;
         }
         if (newPin !== confirmPin) {
-            setLocalError("The two new PINs differ.");
+            setLocalError(t("pinGate.errDiff"));
             return;
         }
         setLocalError(null);
@@ -62,10 +63,10 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
     };
 
     return (
-        <Dialog label="PIN required" onClose={guardedClose}>
+        <Dialog label={t("pinGate.title")} onClose={guardedClose}>
             {mode === "pin" ? (
                 <form onSubmit={submit}>
-                    <p className="dialog-eyebrow">PIN required</p>
+                    <p className="dialog-eyebrow">{t("pinGate.title")}</p>
                     <h2 className="dialog-title">{label}</h2>
                     <input
                         className="pin-input"
@@ -88,7 +89,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             className="btn btn--primary"
                             disabled={busy || pin.trim().length === 0}
                         >
-                            {busy ? "Checking…" : "Confirm"}
+                            {busy ? t("pinGate.checking") : t("pinGate.confirm")}
                         </button>
                         <button
                             type="button"
@@ -96,7 +97,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             onClick={guardedClose}
                             disabled={busy}
                         >
-                            Cancel
+                            {t("common.cancel")}
                         </button>
                     </div>
                     <button
@@ -108,19 +109,18 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                         }}
                         disabled={busy || recovering}
                     >
-                        Forgot the PIN?
+                        {t("pinGate.forgot")}
                     </button>
                 </form>
             ) : (
                 <form onSubmit={(e) => void submitRecovery(e)}>
-                    <p className="dialog-eyebrow">Recovery</p>
-                    <h2 className="dialog-title">Forgot the PIN</h2>
+                    <p className="dialog-eyebrow">{t("pinGate.recovery")}</p>
+                    <h2 className="dialog-title">{t("pinGate.forgotTitle")}</h2>
                     <p className="panel-note">
-                        Enter the recovery code you wrote down when the PIN was set, and choose a
-                        replacement. The old code stops working immediately.
+                        {t("pinGate.forgotDesc")}
                     </p>
                     <label className="field">
-                        <span className="field-label">Recovery code</span>
+                        <span className="field-label">{t("pinGate.recoveryCode")}</span>
                         <input
                             className="recovery-input"
                             type="text"
@@ -137,7 +137,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                         />
                     </label>
                     <label className="field">
-                        <span className="field-label">New PIN</span>
+                        <span className="field-label">{t("pinGate.newPin")}</span>
                         <input
                             type="password"
                             inputMode="numeric"
@@ -152,7 +152,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                         />
                     </label>
                     <label className="field">
-                        <span className="field-label">Repeat new PIN</span>
+                        <span className="field-label">{t("pinGate.repeatPin")}</span>
                         <input
                             type="password"
                             inputMode="numeric"
@@ -175,7 +175,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             className="btn btn--primary"
                             disabled={recovering}
                         >
-                            {recovering ? "Replacing…" : "Replace PIN"}
+                            {recovering ? t("pinGate.replacing") : t("pinGate.replacePin")}
                         </button>
                         <button
                             type="button"
@@ -186,7 +186,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             }}
                             disabled={recovering}
                         >
-                            Back
+                            {t("pinGate.back")}
                         </button>
                     </div>
                 </form>

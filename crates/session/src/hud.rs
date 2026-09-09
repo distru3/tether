@@ -2,9 +2,9 @@ use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{COLORREF, HWND, LPARAM, LRESULT, WPARAM};
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
-    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostMessageW,
-    PostQuitMessage, RegisterClassExW, SetLayeredWindowAttributes, TranslateMessage, MSG, WM_CLOSE,
-    WM_DESTROY, WM_PAINT, WM_USER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST,
+    CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, PostMessageW, PostQuitMessage,
+    RegisterClassExW, SetLayeredWindowAttributes, TranslateMessage, MSG, WM_CLOSE, WM_DESTROY,
+    WM_PAINT, WM_USER, WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST,
     WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
 };
 
@@ -104,7 +104,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let _ = windows::Win32::Graphics::Gdi::InvalidateRect(hwnd, None, true);
             LRESULT(0)
         }
-                WM_PAINT => {
+        WM_PAINT => {
             let mut ps = windows::Win32::Graphics::Gdi::PAINTSTRUCT::default();
             let hdc = windows::Win32::Graphics::Gdi::BeginPaint(hwnd, &mut ps);
 
@@ -117,20 +117,53 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
 
             let hbrush = windows::Win32::Graphics::Gdi::CreateSolidBrush(bg_color);
             let hpen = windows::Win32::Graphics::Gdi::CreatePen(
-                windows::Win32::Graphics::Gdi::PS_SOLID, 
-                1, 
-                if IS_TIMER { timer_border } else { normal_border }
+                windows::Win32::Graphics::Gdi::PS_SOLID,
+                1,
+                if IS_TIMER {
+                    timer_border
+                } else {
+                    normal_border
+                },
             );
-            
+
             let old_brush = windows::Win32::Graphics::Gdi::SelectObject(hdc, hbrush);
             let old_pen = windows::Win32::Graphics::Gdi::SelectObject(hdc, hpen);
 
-            let _ = windows::Win32::Graphics::Gdi::RoundRect(hdc, rect.left, rect.top, rect.right, rect.bottom, 10, 10);
+            let _ = windows::Win32::Graphics::Gdi::RoundRect(
+                hdc,
+                rect.left,
+                rect.top,
+                rect.right,
+                rect.bottom,
+                10,
+                10,
+            );
 
-            let font = windows::Win32::Graphics::Gdi::CreateFontW(14, 0, 0, 0, 600, 0, 0, 0, 0, 0, 0, 5, 0, w!("Segoe UI"));
+            let font = windows::Win32::Graphics::Gdi::CreateFontW(
+                14,
+                0,
+                0,
+                0,
+                600,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                5,
+                0,
+                w!("Segoe UI"),
+            );
             let old_font = windows::Win32::Graphics::Gdi::SelectObject(hdc, font);
-            windows::Win32::Graphics::Gdi::SetBkMode(hdc, windows::Win32::Graphics::Gdi::TRANSPARENT);
-            windows::Win32::Graphics::Gdi::SetTextColor(hdc, windows::Win32::Foundation::COLORREF(0x00_F4_F4_F5)); // Zinc 100
+            windows::Win32::Graphics::Gdi::SetBkMode(
+                hdc,
+                windows::Win32::Graphics::Gdi::TRANSPARENT,
+            );
+            windows::Win32::Graphics::Gdi::SetTextColor(
+                hdc,
+                windows::Win32::Foundation::COLORREF(0x00_F4_F4_F5),
+            ); // Zinc 100
 
             let hrs = REMAINING / 3600;
             let mins = (REMAINING % 3600) / 60;

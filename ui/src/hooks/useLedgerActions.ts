@@ -1,4 +1,5 @@
 import { useCallback, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import * as api from "../api";
 import { effectClause, targetLabel } from "../format";
@@ -26,7 +27,9 @@ export interface EditorRequest {
 }
 
 export function useLedgerActions(deps: Deps) {
+    const { t } = useTranslation();
     const [busy, setBusy] = useState(false);
+
     const [editor, setEditor] = useState<EditorRequest | null>(null);
     const [gate, setGate] = useState<GateRequest | null>(null);
     const [gateError, setGateError] = useState<string | null>(null);
@@ -113,9 +116,9 @@ export function useLedgerActions(deps: Deps) {
     const submitEditor = useCallback(
         (target: LimitTargetDto, minutes: number, weekdayMinutes: api.WeekdayMinutes, enabled: boolean) => {
             if (busyRef.current) return;
-            attempt(`Apply the order for ${targetLabel(target, depsRef.current.catalog)}`, async (pin) => {
+            attempt(t("pinGate.applyOrder", { target: targetLabel(target, depsRef.current.catalog) }), async (pin) => {
                 const effective = await api.setLimit(target, minutes, weekdayMinutes, enabled, pin);
-                depsRef.current.notify("success", `Order recorded.${effectClause(effective)}`);
+                depsRef.current.notify("success", t("actions.orderRecorded") + effectClause(effective));
                 depsRef.current.invalidate();
                 closeEditor();
             });
@@ -137,10 +140,7 @@ export function useLedgerActions(deps: Deps) {
                         next,
                         pin,
                     );
-                    depsRef.current.notify(
-                        next ? "success" : "info",
-                        `Order ${next ? "reinstated" : "suspended"}.${effectClause(effective)}`,
-                    );
+                    depsRef.current.notify(next ? "success" : "info", (next ? t("actions.orderReinstated") : t("actions.orderSuspended")) + effectClause(effective));
                     depsRef.current.invalidate();
                 },
             );
@@ -150,9 +150,9 @@ export function useLedgerActions(deps: Deps) {
 
     const removeLimit = useCallback(
         (target: LimitTargetDto) => {
-            attempt(`Remove the order for ${targetLabel(target, depsRef.current.catalog)}`, async (pin) => {
+            attempt(t("pinGate.removeOrder", { target: targetLabel(target, depsRef.current.catalog) }), async (pin) => {
                 const effective = await api.deleteLimit(target, pin);
-                depsRef.current.notify("info", `Order removed.${effectClause(effective)}`);
+                depsRef.current.notify("info", t("actions.orderRemoved") + effectClause(effective));
                 depsRef.current.invalidate();
             });
         },
@@ -161,9 +161,9 @@ export function useLedgerActions(deps: Deps) {
 
     const cancelPendingLimit = useCallback(
         (target: LimitTargetDto) => {
-            attempt(`Cancel the pending limit change for ${targetLabel(target, depsRef.current.catalog)}`, async (pin) => {
+            attempt(t("pinGate.cancelPending", { target: targetLabel(target, depsRef.current.catalog) }), async (pin) => {
                 const effective = await api.cancelPendingLimit(target, pin);
-                depsRef.current.notify("info", `Pending limit change cancelled.`);
+                depsRef.current.notify("info", t("actions.pendingCancelled"));
                 depsRef.current.invalidate();
             });
         },
@@ -172,9 +172,9 @@ export function useLedgerActions(deps: Deps) {
 
     const override = useCallback(
         (row: UsageRowDto) => {
-            attempt(`Grant fifteen more minutes to ${row.label}`, async (pin) => {
+            attempt(t("pinGate.grantMinutes", { target: row.label }), async (pin) => {
                 await api.grantOverride({ kind: "app", id: row.id }, api.OVERRIDE_SECONDS, pin);
-                depsRef.current.notify("success", `+15 minutes granted to ${row.label}.`);
+                depsRef.current.notify("success", t("actions.minutesGranted", { app: row.label }));
             });
         },
         [attempt],
@@ -185,7 +185,7 @@ export function useLedgerActions(deps: Deps) {
 
     const submitPinSetup = useCallback(async (newPin: string, currentPin: string) => {
         const reply = await api.setPin(newPin, currentPin.length > 0 ? currentPin : null);
-        depsRef.current.notify("success", "PIN saved — note the recovery code.");
+        depsRef.current.notify("success", t("actions.pinSaved"));
         // The dialog stays open to display the one-time recovery code; it
         // closes when the user confirms they wrote the code down.
         return reply;
@@ -212,7 +212,7 @@ export function useLedgerActions(deps: Deps) {
             if (categorizeTarget === null) return;
             runExclusive(async () => {
                 await api.categorizeApp(categorizeTarget.appId, primaryId, tagIds);
-                depsRef.current.notify("success", `${categorizeTarget.appName} categorized.`);
+                depsRef.current.notify("success", t("actions.categorized", { app: categorizeTarget.appName }));
                 depsRef.current.invalidate();
                 setCategorizeTarget(null);
             });
@@ -223,8 +223,8 @@ export function useLedgerActions(deps: Deps) {
     const resetCategorize = useCallback(() => {
         if (categorizeTarget === null) return;
         runExclusive(async () => {
-            await api.categorizeApp(categorizeTarget.appId, 0, []);
-            depsRef.current.notify("info", `${categorizeTarget.appName} reset to auto-detect.`);
+            await api.categorizeApp(categorizeTarget.appId, null, []);
+            depsRef.current.notify("info", t("actions.resetAutoDetect", { app: categorizeTarget.appName }));
             depsRef.current.invalidate();
             setCategorizeTarget(null);
         });
@@ -235,7 +235,7 @@ export function useLedgerActions(deps: Deps) {
             setBusy(true);
             await api.setSetting(key, value);
             deps.invalidate();
-            deps.notify("success", "Setting saved.");
+            deps.notify("success", t("actions.settingSaved"));
         } catch (e) {
             deps.notify("error", String(e));
         } finally {

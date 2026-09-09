@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import { formatDayLabel, formatDuration, heroParts, sharePercent } from "../format";
 import { ChevronLeftIcon, ChevronRightIcon, SparklesIcon } from "./icons/Icons";
@@ -21,7 +22,9 @@ export function Hero({
     goNextDay,
     goToday,
 }: HeroProps) {
-    if (loading || summary === null) {
+    const { t } = useTranslation();
+
+    if (summary === null) {
         return (
             <div className="hero-card glass-card skeleton-loading">
                 <div className="skeleton-line skeleton-title" />
@@ -39,18 +42,18 @@ export function Hero({
             <div className="hero-content">
                 <header className="hero-meta">
                     <h2 className="hero-heading">
-                        {isViewingToday ? "Today" : viewDay ? formatDayLabel(viewDay) : "Day View"}
+                        {isViewingToday ? t("hero.today") : viewDay ? formatDayLabel(viewDay) : t("hero.dayView")}
                     </h2>
                     {!isViewingToday && goToday && (
                         <button type="button" className="btn btn-secondary btn-sm" onClick={goToday}>
-                            Back to Today
+                            {t("hero.backToToday")}
                         </button>
                     )}
                 </header>
 
                 <div className="hero-time-cluster">
                     {canBrowse && (
-                        <button type="button" className="stepper-nav-btn" aria-label="Previous day" onClick={goPrevDay} title="Previous day">
+                        <button type="button" className="stepper-nav-btn" aria-label={t("hero.prevDay")} onClick={goPrevDay} title={t("hero.prevDay")}>
                             <ChevronLeftIcon size={16} />
                         </button>
                     )}
@@ -68,10 +71,10 @@ export function Hero({
                         <button
                             type="button"
                             className="stepper-nav-btn"
-                            aria-label="Next day"
+                            aria-label={t("hero.nextDay")}
                             onClick={goNextDay}
                             disabled={isViewingToday}
-                            title="Next day"
+                            title={t("hero.nextDay")}
                         >
                             <ChevronRightIcon size={16} />
                         </button>
@@ -82,14 +85,21 @@ export function Hero({
                     {lead ? (
                         <div className="lead-category-chip">
                             <span className="lead-dot" style={{ backgroundColor: lead.color || "var(--accent-indigo)" }} />
-                            <span className="lead-text">
-                                Most time in <strong>{lead.label}</strong> ({formatDuration(lead.seconds)}, {sharePercent(lead.seconds, total)}%)
-                            </span>
+                            <span 
+                                className="lead-text" 
+                                dangerouslySetInnerHTML={{ 
+                                    __html: t("hero.mostTimeIn", { 
+                                        label: lead.label, 
+                                        duration: formatDuration(lead.seconds), 
+                                        percent: sharePercent(lead.seconds, total) 
+                                    }) 
+                                }} 
+                            />
                         </div>
                     ) : (
                         <div className="clean-slate-container">
                             <SparklesIcon size={16} color="var(--accent-emerald)" />
-                            <span className="clean-slate-text">No active usage recorded yet today.</span>
+                            <span className="clean-slate-text">{isViewingToday ? t("hero.noUsage") : t("hero.noUsageDay")}</span>
                         </div>
                     )}
                 </footer>

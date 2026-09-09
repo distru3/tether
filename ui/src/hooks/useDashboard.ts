@@ -122,14 +122,21 @@ export function useDashboard(): Dashboard {
     }, []);
 
     useEffect(() => {
-        void poll();
-        refreshCatalog();
-    }, [poll, refreshCatalog]);
+        let active = true;
+        let timer: number | undefined;
 
-    useEffect(() => {
-        const timer = window.setInterval(() => {
-            if (!document.hidden) void poll();
-        }, POLL_MS);
+        const runPoll = async () => {
+            if (!document.hidden) {
+                await poll();
+            }
+            if (active) {
+                timer = window.setTimeout(runPoll, POLL_MS);
+            }
+        };
+
+        void runPoll();
+        refreshCatalog();
+
         const onVisibility = () => {
             if (!document.hidden) {
                 void poll();
@@ -138,7 +145,8 @@ export function useDashboard(): Dashboard {
         };
         document.addEventListener("visibilitychange", onVisibility);
         return () => {
-            window.clearInterval(timer);
+            active = false;
+            window.clearTimeout(timer);
             document.removeEventListener("visibilitychange", onVisibility);
         };
     }, [poll, refreshCatalog]);

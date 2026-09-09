@@ -37,6 +37,13 @@ pub struct DaySummary {
     pub total_seconds: i64,
     pub apps: Vec<UsageRow>,
     pub categories: Vec<CategoryRow>,
+    pub intervals: Vec<IntervalRow>,
+}
+
+pub struct IntervalRow {
+    pub start_utc: String,
+    pub duration_seconds: i64,
+    pub app_id: i64,
 }
 
 pub struct UsageRow {
@@ -218,11 +225,28 @@ impl Db {
             })?
             .collect::<std::result::Result<Vec<_>, _>>()?;
 
+        let mut stmt = self.conn.prepare(
+            "SELECT start_utc, duration_secs, subject_id
+             FROM usage_intervals
+             WHERE subject_type = 'app' AND day_key = ?1
+             ORDER BY start_utc",
+        )?;
+        let intervals = stmt
+            .query_map(params![day.0], |row| {
+                Ok(IntervalRow {
+                    start_utc: row.get(0)?,
+                    duration_seconds: row.get(1)?,
+                    app_id: row.get(2)?,
+                })
+            })?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+
         Ok(DaySummary {
             day,
             total_seconds,
             apps,
             categories,
+            intervals,
         })
     }
 

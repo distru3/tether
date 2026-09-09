@@ -33,6 +33,7 @@ windows = { workspace = true, features = ["Win32_Foundation", "Win32_System_Cons
 # handling and status reporting. Hand-rolling StartServiceCtrlDispatcherW
 # marshalling is error-prone; this crate wraps exactly that surface.
 windows-service = "0.8"
+st-dns = { path = "../dnsproxy" }
 
 [target.'cfg(unix)'.dependencies]
 st-tracker-linux.workspace = true

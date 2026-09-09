@@ -77,8 +77,8 @@ pub enum Request {
     Categorize {
         #[ts(as = "i32")]
         app_id: i64,
-        #[ts(as = "i32")]
-        primary: i64,
+        #[ts(as = "Option<i32>")]
+        primary: Option<i64>,
         #[ts(as = "Vec<i32>")]
         tags: Vec<i64>,
     },
@@ -356,6 +356,18 @@ pub struct DaySummaryDto {
     /// Per-primary-category usage. Sums to `total_seconds`; tags are excluded
     /// here precisely so the chart cannot exceed 100%.
     pub categories: Vec<UsageRowDto>,
+    /// Chronological usage intervals for the true timeline.
+    pub intervals: Vec<IntervalDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+pub struct IntervalDto {
+    pub start_utc: String,
+    #[ts(as = "i32")]
+    pub duration_seconds: i64,
+    #[ts(as = "i32")]
+    pub app_id: i64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -411,6 +423,10 @@ pub struct StatusDto {
     pub strict_mode: bool,
     pub pin_configured: bool,
     pub show_hud_overlay: bool,
+    pub social_filter_enabled: bool,
+    pub limit_cooldown_hours: i64,
+    pub day_start_minutes: i64,
+    pub idle_threshold_secs: i64,
     /// The active filter can enforce wildcard (subdomain) rules. True only when
     /// the DNS-proxy backend is genuinely applied, not just present.
     pub wildcard_domains: bool,
