@@ -126,8 +126,6 @@ pub struct Policy {
     pub idle_threshold_secs: i64,
     /// Whether to show the remaining time HUD on limited apps.
     pub show_hud_overlay: bool,
-    /// Whether the curated social-media domain list is active.
-    pub social_filter_enabled: bool,
 }
 
 /// Runtime-updated facts shared between IPC workers and the main loop.
@@ -469,7 +467,6 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
                     "day_start_minutes" => if let Ok(v) = value.parse() { p.day_start_minutes = v; }
                     "idle_threshold_secs" => if let Ok(v) = value.parse() { p.idle_threshold_secs = v; }
                     "show_hud_overlay" => p.show_hud_overlay = value != "false",
-                    "social_filter_enabled" => p.social_filter_enabled = value == "true",
                     _ => {}
                 }
             }
@@ -541,7 +538,6 @@ fn status_response(ctx: &Ctx) -> Response {
         strict_mode: policy.strict_mode,
         pin_configured,
         show_hud_overlay: policy.show_hud_overlay,
-        social_filter_enabled: policy.social_filter_enabled,
         limit_cooldown_hours: policy.limit_cooldown_hours,
         day_start_minutes: policy.day_start_minutes,
         idle_threshold_secs: policy.idle_threshold_secs,
@@ -1544,7 +1540,6 @@ mod tests {
                 day_start_minutes: 0,
                 idle_threshold_secs: 60,
                 show_hud_overlay: true,
-                social_filter_enabled: false,
             })),
             processes: Arc::new(Mutex::new(Box::new(FakeProcesses::default()))),
             clock: Arc::new(clock),
@@ -1559,7 +1554,6 @@ mod tests {
             day_start_minutes: 0,
             idle_threshold_secs: 60,
             show_hud_overlay: true,
-            social_filter_enabled: false,
         };
         tweak(&mut policy);
         Ctx {
@@ -2477,7 +2471,6 @@ mod tests {
                 day_start_minutes: 0,
                 idle_threshold_secs: 60,
                 show_hud_overlay: true,
-                social_filter_enabled: false,
             },
             Arc::new(Mutex::new(Box::<FakeProcesses>::default())),
             Arc::new(TestClock::new(at("2026-08-20T12:00:00Z"), 0)),

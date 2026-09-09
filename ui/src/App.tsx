@@ -327,24 +327,6 @@ export function App() {
                         <span className="slider"></span>
                       </label>
                     </div>
-                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
-                      <div>
-                        <div className="form-label">Social media protection</div>
-                        <div className="form-hint" style={{ marginTop: 0 }}>
-                          Blocks a small curated list of social-media domains. Adult filtering remains handled by Family DNS.
-                        </div>
-                      </div>
-                      <label className="switch">
-                        <input
-                          type="checkbox"
-                          checked={statusInfo?.social_filter_enabled ?? false}
-                          onChange={(e) => {
-                            actions.setSetting("social_filter_enabled", e.target.checked.toString());
-                          }}
-                        />
-                        <span className="slider"></span>
-                      </label>
-                    </div>
                   </div>
                 </section>
 

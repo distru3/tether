@@ -305,7 +305,6 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
         .flatten()
         .map(|v| v == "true")
         .unwrap_or(false);
-
     let ipc = ipc_server::spawn(
         PIPE_NAME,
         db.clone(),
@@ -321,12 +320,6 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
                 .flatten()
                 .map(|v| v != "false")
                 .unwrap_or(true),
-            social_filter_enabled: lock_db(&db)
-                .setting("social_filter_enabled")
-                .ok()
-                .flatten()
-                .map(|v| v == "true")
-                .unwrap_or(false),
         },
         processes,
         clock.clone(),
@@ -367,38 +360,22 @@ fn run_main_loop(
 
     tracing::info!("agent running; press Ctrl+C to stop");
 
-    let mut last_filter_domains: Vec<String> = vec!["__FORCE_INIT__".to_string()];
+    let mut last_manual_domains: Vec<String> = vec!["__FORCE_INIT__".to_string()];
 
     while !shutdown_requested() {
         let now = clock.now_utc();
         let tz_offset = clock.local_offset_seconds();
 
-        // Check for manual web blocks and the small, curated social list. The
-        // adult list is intentionally not part of this path; Family DNS owns
-        // adult filtering separately.
+        // Check for manual web blocks
         if let Ok(rules) = lock_db(&db).list_block_rules() {
             let mut current_domains: Vec<String> = rules
                 .into_iter()
                 .filter(|r| r.blocklist_id.is_none() && r.category_id.is_none())
                 .map(|r| r.domain)
                 .collect();
-            let social_filter_enabled = lock_db(&db)
-                .setting("social_filter_enabled")
-                .ok()
-                .flatten()
-                .map(|v| v == "true")
-                .unwrap_or(false);
-            if social_filter_enabled {
-                current_domains.extend(
-                    st_storage::DEFAULT_SOCIAL_MEDIA_DOMAINS
-                        .iter()
-                        .map(|domain| (*domain).to_string()),
-                );
-            }
             current_domains.sort();
-            current_domains.dedup();
 
-            if current_domains != last_filter_domains {
+            if current_domains != last_manual_domains {
                 let apply_rules: Vec<st_core::platform::BlockRule> = current_domains
                     .iter()
                     .map(|d| st_core::platform::BlockRule {
@@ -410,11 +387,11 @@ fn run_main_loop(
                     tracing::error!(error = %e, "failed to apply manual block rules to hosts file");
                 } else {
                     tracing::info!(
-                        "applied {} web filter rules to hosts file",
+                        "applied {} manual block rules to hosts file",
                         apply_rules.len()
                     );
                 }
-                last_filter_domains = current_domains;
+                last_manual_domains = current_domains;
             }
         }
         let verdict = guard.check(&*clock);

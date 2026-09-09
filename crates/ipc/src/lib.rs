@@ -423,7 +423,6 @@ pub struct StatusDto {
     pub strict_mode: bool,
     pub pin_configured: bool,
     pub show_hud_overlay: bool,
-    pub social_filter_enabled: bool,
     pub limit_cooldown_hours: i64,
     pub day_start_minutes: i64,
     pub idle_threshold_secs: i64,

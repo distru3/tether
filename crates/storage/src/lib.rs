@@ -32,7 +32,7 @@ pub use crate::limits::{LimitRow, PendingLimitRow};
 pub use crate::reporting::{
     CategoryRow, DailyTotal, DaySnapshot, DaySummary, UsageRow, WeeklySummary,
 };
-pub use crate::web::{normalize_domain, BlockRuleRow, BlocklistRow, DEFAULT_SOCIAL_MEDIA_DOMAINS};
+pub use crate::web::{normalize_domain, BlockRuleRow, BlocklistRow};
 
 use std::path::Path;
 
