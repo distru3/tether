@@ -138,7 +138,7 @@ export function LimitsPanel({
                         return (
                             <div className={`glass-card rich-limit-card ${limit.enabled ? "" : "limit-card--disabled"}`} key={limit.id}>
                                 <div className="rich-limit-card-header">
-                                    <div className="rich-limit-icon-box" style={{ backgroundColor: isCategory ? 'rgba(99, 102, 241, 0.1)' : 'rgba(16, 185, 129, 0.1)', color: isCategory ? 'var(--color-primary)' : '#10b981' }}>
+                                    <div className="rich-limit-icon-box" style={{ backgroundColor: isCategory ? 'rgba(79, 28, 81, 0.6)' : 'rgba(165, 91, 75, 0.2)', color: isCategory ? 'var(--color-accent)' : 'var(--color-primary)' }}>
                                         {isCategory ? <FolderTree size={20} /> : <AppWindow size={20} />}
                                     </div>
                                     <div className="rich-limit-title-group">
@@ -168,7 +168,7 @@ export function LimitsPanel({
                                         <div className="rich-limit-progress-track">
                                             <div 
                                                 className="rich-limit-progress-fill" 
-                                                style={{ width: `${progressPercent}%`, backgroundColor: overLimit ? 'var(--color-danger)' : 'var(--color-primary)' }}
+                                                style={{ width: `${progressPercent}%`, backgroundColor: overLimit ? 'var(--color-danger)' : 'var(--color-accent)' }}
                                             />
                                         </div>
                                     </div>
@@ -210,13 +210,13 @@ export function LimitsPanel({
                     return (
                         <div className="glass-card rich-limit-card limit-card--pending" key={`pending-${pending.id}`}>
                             <div className="rich-limit-card-header">
-                                <div className="rich-limit-icon-box" style={{ backgroundColor: "var(--accent-amber-subtle)", color: "var(--color-warning)" }}>
+                                <div className="rich-limit-icon-box" style={{ backgroundColor: "rgba(220, 160, 109, 0.15)", color: "var(--color-warning)" }}>
                                     <WarningIcon size={20} color="var(--color-warning)" />
                                 </div>
                                 <div className="rich-limit-title-group">
                                     <h3 className="limit-target-name">{label}</h3>
                                     <div className="limit-badges">
-                                        <span className="target-badge" style={{ backgroundColor: "var(--accent-amber)", color: "black" }}>
+                                        <span className="target-badge" style={{ backgroundColor: "rgba(220, 160, 109, 0.2)", color: "var(--color-accent)" }}>
                                             {t("limits.pending")}
                                         </span>
                                     </div>

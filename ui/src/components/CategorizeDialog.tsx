@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import { Dialog } from "./Dialog";
+import { ChevronDownIcon } from "./icons/Icons";
 
 interface CategorizeDialogProps {
     appName: string;
@@ -12,6 +13,112 @@ interface CategorizeDialogProps {
     onClose: () => void;
     onCategorize: (primaryId: number, tagIds: number[]) => void;
     onAutoDetect: () => void;
+}
+
+interface CategoryOption {
+    value: number | null;
+    label: string;
+}
+
+function CategorySelect({
+    options,
+    value,
+    disabled,
+    onChange,
+}: {
+    options: CategoryOption[];
+    value: number | null;
+    disabled: boolean;
+    onChange: (val: number | null) => void;
+}) {
+    const [open, setOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+    const selected = options.find((o) => o.value === value);
+
+    useEffect(() => {
+        if (!open) return;
+        const handler = (e: MouseEvent) => {
+            if (!containerRef.current?.contains(e.target as Node)) {
+                setOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handler);
+        return () => document.removeEventListener("mousedown", handler);
+    }, [open]);
+
+    return (
+        <div ref={containerRef} className="app-picker" style={{ position: "relative" }}>
+            <button
+                type="button"
+                className="app-picker__trigger"
+                disabled={disabled}
+                onClick={() => setOpen((prev) => !prev)}
+                aria-haspopup="listbox"
+                aria-expanded={open}
+            >
+                <span>{selected ? selected.label : "Auto-detect"}</span>
+                <ChevronDownIcon size={14} />
+            </button>
+
+            {open && (
+                <div
+                    className="app-picker__dropdown"
+                    style={{
+                        position: "absolute",
+                        top: "calc(100% + 4px)",
+                        left: 0,
+                        right: 0,
+                        zIndex: 100,
+                        background: "#2a1442",
+                        border: "1px solid rgba(220, 160, 109, 0.25)",
+                        borderRadius: "10px",
+                        boxShadow: "0 12px 32px rgba(15, 5, 25, 0.8)",
+                        maxHeight: "220px",
+                        overflowY: "auto",
+                        padding: "6px",
+                    }}
+                >
+                    <ul role="listbox" style={{ listStyle: "none", margin: 0, padding: 0 }}>
+                        {options.map((opt) => {
+                            const isSelected = opt.value === value;
+                            return (
+                                <li
+                                    key={opt.value ?? "auto"}
+                                    role="option"
+                                    aria-selected={isSelected}
+                                    onClick={() => {
+                                        onChange(opt.value);
+                                        setOpen(false);
+                                    }}
+                                    style={{
+                                        padding: "8px 12px",
+                                        borderRadius: "6px",
+                                        cursor: "pointer",
+                                        fontSize: "13px",
+                                        color: isSelected ? "var(--color-accent)" : "var(--text-primary)",
+                                        background: isSelected ? "rgba(220, 160, 109, 0.15)" : "transparent",
+                                        display: "flex",
+                                        alignItems: "center",
+                                        justifyContent: "space-between",
+                                        fontWeight: isSelected ? 600 : 400,
+                                    }}
+                                    onMouseEnter={(e) => {
+                                        if (!isSelected) (e.currentTarget as HTMLElement).style.background = "rgba(79, 28, 81, 0.4)";
+                                    }}
+                                    onMouseLeave={(e) => {
+                                        if (!isSelected) (e.currentTarget as HTMLElement).style.background = "transparent";
+                                    }}
+                                >
+                                    <span>{opt.label}</span>
+                                    {isSelected && <span style={{ fontSize: "11px", color: "var(--color-accent)" }}>✓</span>}
+                                </li>
+                            );
+                        })}
+                    </ul>
+                </div>
+            )}
+        </div>
+    );
 }
 
 export function CategorizeDialog({
@@ -29,6 +136,11 @@ export function CategorizeDialog({
     const [selectedTags, setSelectedTags] = useState<number[]>(currentTagIds ?? []);
 
     const limitableCategories = (catalog?.categories ?? []).filter((c) => c.kind === "limitable");
+
+    const categoryOptions: CategoryOption[] = [
+        { value: null, label: t("categorize.autoDetect") },
+        ...limitableCategories.map((c) => ({ value: c.id, label: c.name })),
+    ];
 
     const toggleTag = (tagId: number) => {
         setSelectedTags((prev) =>
@@ -52,24 +164,15 @@ export function CategorizeDialog({
                 {t("categorize.desc")}
             </p>
 
-            <label className="field">
+            <div className="field">
                 <span className="field-label">{t("categorize.primary")}</span>
-                <select
-                    value={selectedPrimary ?? ""}
+                <CategorySelect
+                    options={categoryOptions}
+                    value={selectedPrimary}
                     disabled={busy}
-                    onChange={(event) => {
-                        const value = event.target.value;
-                        setSelectedPrimary(value === "" ? null : parseInt(value, 10));
-                    }}
-                >
-                    <option value="">{t("categorize.autoDetect")}</option>
-                    {limitableCategories.map((category) => (
-                        <option key={category.id} value={category.id}>
-                            {category.name}
-                        </option>
-                    ))}
-                </select>
-            </label>
+                    onChange={(val) => setSelectedPrimary(val)}
+                />
+            </div>
 
             {limitableCategories.length > 0 && selectedPrimary !== null && catalog?.categories.find(c => c.id === selectedPrimary)?.slug !== "uncategorized" && (
                 <div className="field">

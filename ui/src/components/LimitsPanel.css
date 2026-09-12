@@ -6,7 +6,17 @@
 .rich-limit-card {
     display: flex;
     flex-direction: column;
-    padding: 20px;
+    padding: 22px 24px;
+    background: rgba(79, 28, 81, 0.45);
+    border: 1px solid rgba(220, 160, 109, 0.15);
+    box-shadow: 0 8px 24px rgba(15, 5, 25, 0.35);
+    border-radius: 16px;
+    transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.rich-limit-card:hover {
+    border-color: rgba(220, 160, 109, 0.3);
+    box-shadow: 0 12px 32px rgba(15, 5, 25, 0.5);
 }
 
 .rich-limit-card-header {
@@ -75,7 +85,8 @@
 .rich-limit-progress-track {
     width: 100%;
     height: 8px;
-    background-color: var(--bg-recessed);
+    background-color: rgba(33, 15, 55, 0.8);
+    border: 1px solid rgba(220, 160, 109, 0.1);
     border-radius: 9999px;
     overflow: hidden;
 }
@@ -91,7 +102,7 @@
     align-items: center;
     justify-content: space-between;
     padding-top: 16px;
-    border-top: 1px solid var(--border-subtle);
+    border-top: 1px solid rgba(220, 160, 109, 0.1);
 }
 
 .limit-footer-actions {
@@ -100,6 +111,21 @@
 }
 
 .limits-grid { display: flex; flex-direction: column; gap: 16px; width: 100%; }
-.rich-limit-card { border: 1px solid var(--border-subtle); box-shadow: var(--shadow-sm); border-radius: 12px; }
-
 .rich-limits-list { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+
+.banner-warning-card {
+    background: rgba(79, 28, 81, 0.35);
+    border: 1px solid rgba(220, 160, 109, 0.25);
+    border-left: 4px solid var(--accent-amber);
+    border-radius: 12px;
+    padding: 16px 20px;
+    box-shadow: 0 4px 16px rgba(15, 5, 25, 0.25);
+}
+
+.empty-card {
+    background: rgba(79, 28, 81, 0.25);
+    border: 1px dashed rgba(220, 160, 109, 0.2);
+    border-radius: 16px;
+    padding: 48px 24px;
+    text-align: center;
+}

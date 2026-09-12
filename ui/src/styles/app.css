@@ -2179,26 +2179,28 @@ body {
 
 .pin-input {
   width: 100%;
-  margin-top: 14px;
-  padding: 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  background-color: var(--bg-card);
-  color: var(--text-primary);
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid rgba(220, 160, 109, 0.25);
+  border-radius: 12px;
+  background-color: rgba(33, 15, 55, 0.85);
+  color: var(--color-accent, #DCA06D);
   font-family: var(--font-mono);
-  font-size: 18px;
-  letter-spacing: 0.3em;
+  font-size: 24px;
+  letter-spacing: 0.45em;
   text-align: center;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .pin-input:focus {
-  border-color: var(--color-focus);
-  outline: 1px solid var(--color-focus);
+  border-color: var(--color-accent, #DCA06D);
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(220, 160, 109, 0.25);
 }
 
 .pin-input::placeholder {
-  color: var(--text-faint);
-  letter-spacing: 0.3em;
+  color: rgba(220, 160, 109, 0.25);
+  letter-spacing: 0.45em;
 }
 
 
@@ -2522,22 +2524,38 @@ body {
 
 /* ---- Tag / Categorize Dialog ---- */
 .tag-list {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
+  max-height: 180px;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .tag-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   font-size: 13px;
   cursor: pointer;
+  background: rgba(33, 15, 55, 0.6);
+  border: 1px solid rgba(220, 160, 109, 0.15);
+  border-radius: 8px;
+  padding: 8px 12px;
+  transition: all 0.15s ease;
+}
+
+.tag-item:hover {
+  background: rgba(79, 28, 81, 0.5);
+  border-color: rgba(220, 160, 109, 0.3);
 }
 
 .tag-item input[type="checkbox"] {
   cursor: pointer;
+  accent-color: var(--color-accent, #DCA06D);
+  width: 15px;
+  height: 15px;
 }
 
 .tag-item input[type="checkbox"]:disabled {
@@ -2547,6 +2565,8 @@ body {
 
 .tag-item span {
   user-select: none;
+  color: var(--text-primary);
+  font-weight: 500;
 }
 
 
@@ -2658,16 +2678,18 @@ body {
 
 .recovery-code {
   font-family: var(--font-mono);
-  font-size: 17px;
+  font-size: 20px;
   font-weight: 700;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.18em;
   text-align: center;
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-strong);
-  padding: 12px 8px;
-  margin: 14px 0 4px;
+  background-color: rgba(33, 15, 55, 0.9);
+  border: 1px solid rgba(220, 160, 109, 0.35);
+  color: var(--color-accent, #DCA06D);
+  padding: 16px 12px;
+  margin: 16px 0 6px;
   user-select: all;
-  border-radius: var(--radius-sm);
+  border-radius: 12px;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .recovery-input {

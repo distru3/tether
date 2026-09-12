@@ -1350,7 +1350,34 @@ dialog::backdrop,
 }
 
 .settings-page .card-header {
-  border-bottom-color: var(--redesign-line-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(220, 160, 109, 0.12);
+}
+
+.settings-page .card-header h2 {
+  margin: 0;
+  font-size: 15.5px;
+  font-weight: 650;
+  color: var(--text-primary);
+  letter-spacing: -0.015em;
+}
+
+.settings-page .card-subtitle {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.settings-page .settings-card--tutorial .card-header {
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .settings-page .form-row {
@@ -1366,9 +1393,30 @@ dialog::backdrop,
   background: rgba(255, 255, 255, 0.055);
 }
 
-.settings-page .switch input:checked + .slider,
+.settings-page .toggle-switch {
+  width: 40px;
+  height: 22px;
+  border-radius: 11px;
+  background: rgba(33, 15, 55, 0.85);
+  border: 1px solid rgba(220, 160, 109, 0.25);
+}
+
+.settings-page .toggle-switch::after {
+  width: 16px;
+  height: 16px;
+  top: 2px;
+  left: 2px;
+  background-color: var(--text-secondary);
+}
+
 .settings-page .toggle-switch:checked {
-  background: var(--redesign-orange);
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+}
+
+.settings-page .toggle-switch:checked::after {
+  transform: translateX(18px);
+  background-color: #210F37;
 }
 
 /* Cross-page structure refinements. */
@@ -1507,18 +1555,18 @@ dialog::backdrop,
 
 .limits-page-shell .metric-card {
   min-height: 126px;
-  border-color: rgba(0, 139, 255, 0.24);
-  background: rgba(9, 21, 64, 0.72);
+  border-color: rgba(220, 160, 109, 0.2);
+  background: rgba(79, 28, 81, 0.45);
 }
 
 .limits-page-shell .metric-card:nth-child(2) {
-  border-color: rgba(0, 139, 255, 0.3);
-  background: rgba(9, 21, 64, 0.72);
+  border-color: rgba(220, 160, 109, 0.25);
+  background: rgba(79, 28, 81, 0.45);
 }
 
 .limits-page-shell .metric-card:nth-child(3) {
-  border-color: rgba(228, 255, 48, 0.22);
-  background: rgba(9, 21, 64, 0.72);
+  border-color: rgba(220, 160, 109, 0.2);
+  background: rgba(79, 28, 81, 0.45);
 }
 
 .limits-page-shell .limits-list-header {
@@ -1533,17 +1581,17 @@ dialog::backdrop,
   position: relative;
   overflow: hidden;
   min-height: 206px;
-  border-color: rgba(0, 139, 255, 0.24);
-  border-radius: 12px;
-  background: rgba(9, 21, 64, 0.78);
-  box-shadow: 0 18px 36px rgba(19, 13, 38, 0.26);
+  border-color: rgba(220, 160, 109, 0.18);
+  border-radius: 14px;
+  background: rgba(79, 28, 81, 0.45);
+  box-shadow: 0 12px 28px rgba(15, 5, 25, 0.35);
 }
 
 .limits-page-shell .rich-limit-card::before {
   position: absolute;
   inset: 0 auto 0 0;
   width: 3px;
-  background: var(--redesign-violet);
+  background: var(--color-accent);
   content: "";
 }
 
@@ -1553,12 +1601,12 @@ dialog::backdrop,
 }
 
 .limits-page-shell .rich-limit-card.limit-card--pending {
-  border-color: rgba(228, 255, 48, 0.3);
-  background: rgba(9, 21, 64, 0.78);
+  border-color: rgba(220, 160, 109, 0.35);
+  background: rgba(79, 28, 81, 0.55);
 }
 
 .limits-page-shell .rich-limit-card.limit-card--pending::before {
-  background: var(--redesign-green);
+  background: var(--color-warning);
 }
 
 .limits-page-shell .rich-limit-icon-box {
@@ -1568,12 +1616,12 @@ dialog::backdrop,
 .limits-page-shell .rich-limit-progress-track {
   height: 7px;
   border-radius: 999px;
-  background: rgba(0, 139, 255, 0.12);
+  background: rgba(33, 15, 55, 0.8);
 }
 
 .limits-page-shell .rich-limit-progress-fill {
   border-radius: inherit;
-  background: var(--redesign-violet) !important;
+  background: var(--color-accent) !important;
 }
 
 .limits-page-shell .rich-limit-card-footer {
@@ -1581,13 +1629,80 @@ dialog::backdrop,
 }
 
 .settings-page .settings-card {
-  border-color: rgba(243, 244, 244, 0.13);
-  background: rgba(243, 244, 244, 0.055);
-  box-shadow: none;
+  border-color: rgba(220, 160, 109, 0.15);
+  background: rgba(79, 28, 81, 0.4);
+  box-shadow: 0 8px 24px rgba(15, 5, 25, 0.25);
+  border-radius: 14px;
 }
 
 .settings-page .settings-card:hover {
-  border-color: rgba(0, 139, 255, 0.24);
+  border-color: rgba(220, 160, 109, 0.3);
+}
+
+.language-selector-group {
+  display: inline-flex;
+  padding: 3px;
+  background: rgba(33, 15, 55, 0.7);
+  border: 1px solid rgba(220, 160, 109, 0.2);
+  border-radius: 8px;
+  gap: 3px;
+}
+
+.lang-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.lang-btn:hover {
+  color: var(--text-primary);
+}
+
+.lang-btn--active {
+  background: rgba(220, 160, 109, 0.2);
+  color: var(--color-accent);
+  font-weight: 600;
+}
+
+.input-with-suffix {
+  display: inline-flex;
+  align-items: center;
+  background: rgba(33, 15, 55, 0.7);
+  border: 1px solid rgba(220, 160, 109, 0.2);
+  border-radius: 8px;
+  padding-right: 10px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.input-with-suffix:focus-within {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px rgba(220, 160, 109, 0.15);
+}
+
+.input-with-suffix .input {
+  border: none !important;
+  background: transparent !important;
+  padding: 7px 10px;
+  color: var(--text-primary);
+  font-size: 13.5px;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  outline: none;
+}
+
+.input-suffix {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  user-select: none;
 }
 
 @media (max-width: 760px) {

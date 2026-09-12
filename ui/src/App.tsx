@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Clock, Flame, Hourglass, ShieldCheck } from "lucide-react";
+import { Clock, Flame, Hourglass, ShieldCheck, ChevronDown } from "lucide-react";
 import { applyLanguage } from "./i18n";
 import { formatDayLabel, formatDuration } from "./format";
 import { MetricCards } from "./components/MetricCards";
@@ -338,16 +338,22 @@ export function App() {
                       <div>
                         <div className="form-label">{t("settings.language")}</div>
                       </div>
-                      <select
-                        className="select-input"
-                        value={i18n.language}
-                        onChange={(e) => {
-                          applyLanguage(e.target.value);
-                        }}
-                      >
-                        <option value="en">{t("settings.english")}</option>
-                        <option value="ar">{t("settings.arabic")}</option>
-                      </select>
+                      <div className="language-selector-group">
+                        <button
+                          type="button"
+                          className={`lang-btn ${i18n.language?.startsWith("en") ? "lang-btn--active" : ""}`}
+                          onClick={() => applyLanguage("en")}
+                        >
+                          {t("settings.english")}
+                        </button>
+                        <button
+                          type="button"
+                          className={`lang-btn ${i18n.language?.startsWith("ar") ? "lang-btn--active" : ""}`}
+                          onClick={() => applyLanguage("ar")}
+                        >
+                          {t("settings.arabic")}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -366,16 +372,14 @@ export function App() {
                           {t("settings.showHudDesc")}
                         </div>
                       </div>
-                      <label className="switch">
-                        <input
-                          type="checkbox"
-                          checked={statusInfo?.show_hud_overlay ?? true}
-                          onChange={(e) => {
-                            actions.setSetting("show_hud_overlay", e.target.checked.toString());
-                          }}
-                        />
-                        <span className="slider"></span>
-                      </label>
+                      <input
+                        type="checkbox"
+                        className="toggle-switch"
+                        checked={statusInfo?.show_hud_overlay ?? true}
+                        onChange={(e) => {
+                          actions.setSetting("show_hud_overlay", e.target.checked.toString());
+                        }}
+                      />
                     </div>
                   </div>
                 </section>
@@ -389,51 +393,60 @@ export function App() {
                   <div className="card-body">
                     <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                       <div>
-                        <div className="form-label">Anti-impulse Cooldown (Hours)</div>
+                        <div className="form-label">Anti-impulse Cooldown</div>
                         <div className="form-hint" style={{ marginTop: 0 }}>
                           Time delay before a relaxed limit takes effect. Tightening applies instantly.
                         </div>
                       </div>
-                      <input
-                        type="number"
-                        className="input"
-                        style={{ width: '80px' }}
-                        key={`cooldown_${statusInfo?.limit_cooldown_hours}`}
-                        defaultValue={statusInfo?.limit_cooldown_hours?.toString() ?? "24"}
-                        onBlur={(e) => actions.setSetting("limit_cooldown_hours", e.target.value)}
-                      />
+                      <div className="input-with-suffix">
+                        <input
+                          type="number"
+                          className="input"
+                          style={{ width: '60px' }}
+                          key={`cooldown_${statusInfo?.limit_cooldown_hours}`}
+                          defaultValue={statusInfo?.limit_cooldown_hours?.toString() ?? "24"}
+                          onBlur={(e) => actions.setSetting("limit_cooldown_hours", e.target.value)}
+                        />
+                        <span className="input-suffix">hrs</span>
+                      </div>
                     </div>
                     <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                       <div>
-                        <div className="form-label">Idle Threshold (Seconds)</div>
+                        <div className="form-label">Idle Threshold</div>
                         <div className="form-hint" style={{ marginTop: 0 }}>
                           Seconds without input before usage stops accruing.
                         </div>
                       </div>
-                      <input
-                        type="number"
-                        className="input"
-                        style={{ width: '80px' }}
-                        key={`idle_${statusInfo?.idle_threshold_secs}`}
-                        defaultValue={statusInfo?.idle_threshold_secs?.toString() ?? "60"}
-                        onBlur={(e) => actions.setSetting("idle_threshold_secs", e.target.value)}
-                      />
+                      <div className="input-with-suffix">
+                        <input
+                          type="number"
+                          className="input"
+                          style={{ width: '60px' }}
+                          key={`idle_${statusInfo?.idle_threshold_secs}`}
+                          defaultValue={statusInfo?.idle_threshold_secs?.toString() ?? "60"}
+                          onBlur={(e) => actions.setSetting("idle_threshold_secs", e.target.value)}
+                        />
+                        <span className="input-suffix">sec</span>
+                      </div>
                     </div>
                     <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
-                        <div className="form-label">Day Start Offset (Minutes)</div>
+                        <div className="form-label">Day Start Offset</div>
                         <div className="form-hint" style={{ marginTop: 0 }}>
                           Minutes after local midnight at which daily budgets reset (0 = midnight).
                         </div>
                       </div>
-                      <input
-                        type="number"
-                        className="input"
-                        style={{ width: '80px' }}
-                        key={`day_start_${statusInfo?.day_start_minutes}`}
-                        defaultValue={statusInfo?.day_start_minutes?.toString() ?? "0"}
-                        onBlur={(e) => actions.setSetting("day_start_minutes", e.target.value)}
-                      />
+                      <div className="input-with-suffix">
+                        <input
+                          type="number"
+                          className="input"
+                          style={{ width: '60px' }}
+                          key={`day_start_${statusInfo?.day_start_minutes}`}
+                          defaultValue={statusInfo?.day_start_minutes?.toString() ?? "0"}
+                          onBlur={(e) => actions.setSetting("day_start_minutes", e.target.value)}
+                        />
+                        <span className="input-suffix">min</span>
+                      </div>
                     </div>
                   </div>
                 </section>
@@ -452,16 +465,14 @@ export function App() {
                           Prevents circumvention by blocking task manager and registry edits while limits are active.
                         </div>
                       </div>
-                      <label className="switch">
-                        <input
-                          type="checkbox"
-                          checked={statusInfo?.strict_mode ?? false}
-                          onChange={(e) => {
-                            actions.setSetting("strict_mode", e.target.checked.toString());
-                          }}
-                        />
-                        <span className="slider"></span>
-                      </label>
+                      <input
+                        type="checkbox"
+                        className="toggle-switch"
+                        checked={statusInfo?.strict_mode ?? false}
+                        onChange={(e) => {
+                          actions.setSetting("strict_mode", e.target.checked.toString());
+                        }}
+                      />
                     </div>
                     <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
@@ -485,7 +496,14 @@ export function App() {
                 <section className="card settings-card settings-card--tutorial" style={{ marginTop: 16 }}>
                   <header className="card-header" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} onClick={() => setTutorialOpen(!tutorialOpen)}>
                     <h2>{t("tutorial.title")}</h2>
-                    <span>{tutorialOpen ? "▲" : "▼"}</span>
+                    <ChevronDown
+                      size={18}
+                      style={{
+                        transform: tutorialOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.2s ease',
+                        color: 'var(--text-muted)'
+                      }}
+                    />
                   </header>
                   <div style={{ maxHeight: tutorialOpen ? '2000px' : '0', opacity: tutorialOpen ? 1 : 0, overflow: 'hidden', transition: 'all 0.4s ease-in-out' }}>
                     <div className="card-body">
