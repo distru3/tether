@@ -9,7 +9,8 @@ import {
     ChevronLeft,
     ChevronRight,
     Activity,
-    Info
+    Info,
+    Clock3
 } from "lucide-react";
 import { formatDayLabel } from "../format";
 
@@ -51,15 +52,16 @@ export function Sidebar({
         <aside className="app-sidebar" aria-label="Main Navigation">
             <div className="sidebar-brand">
                 <div className="brand-logo">
-                    <img src="/app-icon.png" alt="Screentime" className="brand-app-icon" />
+                    <span className="brand-mark" aria-hidden="true"><Clock3 size={17} strokeWidth={1.8} /></span>
                     <span className="logo-title">Screentime</span>
                 </div>
                 <div className="daemon-status" title={`Daemon status: ${phase}`}>
                     <span className={`status-dot ${isLive ? "status-dot--live" : "status-dot--offline"}`} />
-                    <span className="status-label">{isLive ? t("sidebar.statusLive") : phase === "connecting" ? t("sidebar.statusConnecting") : t("sidebar.statusOffline")}</span>
+                    <span className="status-label">{isLive ? "Live" : phase === "connecting" ? t("sidebar.statusConnecting") : t("sidebar.statusOffline")}</span>
                 </div>
             </div>
 
+            <div className="sidebar-nav-label">Workspace</div>
             <nav className="sidebar-nav">
                 <button
                     type="button"

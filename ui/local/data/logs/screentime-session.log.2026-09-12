@@ -1,0 +1,3 @@
+2026-09-12T14:07:21.788091Z  INFO screentime_session: screentime-session running (sampling front)
+2026-09-12T14:07:21.788192Z  INFO screentime_session: connected to agent
+2026-09-12T14:07:21.788716Z  INFO screentime_session: usage reporting acknowledged by agent

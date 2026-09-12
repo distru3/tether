@@ -126,8 +126,8 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
     ];
 
     return (
-        <div className="view-container">
-            <div className="view-header">
+        <div className="view-container web-filter-page-shell">
+            <div className="view-header page-intro">
                 <div>
                     <h2 className="view-title">{t("webFilter.customBlockedDomains", "Web Shield")}</h2>
                     <p className="view-subtitle">{t("webFilter.desc", "Manage blocked domains and bulk upload custom lists.")}</p>
@@ -136,7 +136,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
 
             <MetricCards metrics={metrics} />
 
-            <section className="card limits-panel">
+            <section className="card limits-panel web-filter-command-panel">
                 <div className="card-body">
                     {error && (
                         <div className="error-text" style={{ marginBottom: "16px", color: "var(--color-danger)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
@@ -202,7 +202,11 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                             </button>
                         </div>
                     </div>
+                </div>
+            </section>
 
+            <section className="card limits-panel web-filter-domain-panel">
+                <div className="card-body">
                     <div className="ledger-table-wrapper" style={{ marginTop: 24 }}>
                         <table className="ledger-table">
                             <thead>

@@ -3556,6 +3556,7 @@ name = "st-tracker-win"
 version = "0.1.0"
 dependencies = [
  "st-core",
+ "st-ipc",
  "tracing",
  "windows 0.58.0",
 ]

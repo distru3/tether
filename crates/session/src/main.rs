@@ -211,6 +211,11 @@ fn main() -> anyhow::Result<()> {
     let mut active: Option<(i64, overlay::OverlayRun)> = None;
     let mut active_hud: Option<((i32, i32, i32, i32), hud::HudOverlayRun)> = None;
 
+    // Proactive app discovery runs once per process lifetime, on first successful
+    // agent connection. It must run in the session helper (not the agent) because
+    // the agent runs as SYSTEM in Session 0 and cannot read HKCU / %APPDATA%.
+    let mut discovery_done = false;
+
     loop {
         let tick = Instant::now();
         let now = Utc::now();
@@ -247,6 +252,47 @@ fn main() -> anyhow::Result<()> {
                 Ok(s) => {
                     tracing::info!("connected to agent");
                     stream = Some(s);
+
+                    // -- 2a. Proactive discovery (once, on first connect) ------
+                    if !discovery_done {
+                        discovery_done = true;
+                        #[cfg(windows)]
+                        std::thread::Builder::new()
+                            .name("discovery".into())
+                            .spawn(|| {
+                                tracing::debug!("starting proactive app discovery scan");
+                                let apps = st_tracker_win::scan_installed_apps();
+                                if apps.is_empty() {
+                                    tracing::debug!("discovery found no apps");
+                                    return;
+                                }
+                                tracing::debug!(count = apps.len(), "discovery scan complete; registering with agent");
+                                match transport::client_connect(PIPE_NAME) {
+                                    Ok(mut s) => {
+                                        let req = Request::RegisterDiscoveredApps { apps };
+                                        if let Err(e) = st_ipc::write_message(&mut s, &req) {
+                                            tracing::warn!(error = %e, "failed to send discovered apps to agent");
+                                            return;
+                                        }
+                                        match st_ipc::read_message::<_, Response>(&mut s) {
+                                            Ok(Response::Accepted { .. }) => {
+                                                tracing::debug!("agent accepted discovered apps");
+                                            }
+                                            Ok(other) => {
+                                                tracing::warn!(response = ?other, "unexpected response from agent on discovered apps");
+                                            }
+                                            Err(e) => {
+                                                tracing::warn!(error = %e, "error reading response for discovered apps");
+                                            }
+                                        }
+                                    }
+                                    Err(e) => {
+                                        tracing::warn!(error = %e, "could not connect to agent for discovery registration");
+                                    }
+                                }
+                            })
+                            .ok();
+                    }
                 }
                 Err(e) => {
                     retry_at = Instant::now() + backoff.on_failure();

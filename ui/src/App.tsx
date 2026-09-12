@@ -1,15 +1,16 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Monitor, Target, PauseCircle, Shield } from "lucide-react";
+import { Clock, Flame, Hourglass, ShieldCheck } from "lucide-react";
 import { applyLanguage } from "./i18n";
 import { formatDayLabel, formatDuration } from "./format";
 import { MetricCards } from "./components/MetricCards";
+import { UsageAside } from "./components/UsageAside";
+import { CategoryMix } from "./components/CategoryMix";
 
 import { BlockedBanner } from "./components/BlockedBanner";
 import { CategorizeDialog } from "./components/CategorizeDialog";
 import { Hero } from "./components/Hero";
 import { LedgerRule } from "./components/LedgerRule";
-import { LedgerSection } from "./components/LedgerSection";
 import { LimitEditorDialog } from "./components/LimitEditorDialog";
 import { LimitsPanel } from "./components/LimitsPanel";
 import { OnboardingSlider } from "./components/OnboardingSlider";
@@ -127,6 +128,54 @@ export function App() {
 
   const activeLimitsCount = catalog ? catalog.limits.filter(l => l.enabled).length : 0;
 
+  // Real telemetry calculations for overview metric cards
+  const intervals = summary?.intervals ?? [];
+  let maxIntervalSeconds = 0;
+  let maxIntervalAppId = 0;
+  for (const interval of intervals) {
+    if (interval.durationSeconds > maxIntervalSeconds) {
+      maxIntervalSeconds = interval.durationSeconds;
+      maxIntervalAppId = interval.appId;
+    }
+  }
+  const maxApp = apps.find((a) => a.id === maxIntervalAppId);
+  const maxAppName = maxApp?.label ?? apps[0]?.label ?? null;
+  const streakBadge = maxIntervalSeconds >= 2700 ? "Deep Focus" : maxIntervalSeconds >= 1200 ? "Steady Flow" : maxIntervalSeconds > 0 ? "Active" : undefined;
+  const streakSubtitle = maxIntervalSeconds > 0 && maxAppName
+    ? `Longest stretch in ${maxAppName}`
+    : "No focus runs recorded";
+
+  const weekDays = week?.days ?? [];
+  const validWeekDays = weekDays.filter((d) => d.total_seconds > 0);
+  const avgSeconds = validWeekDays.length > 0
+    ? Math.round(validWeekDays.reduce((acc, d) => acc + d.total_seconds, 0) / validWeekDays.length)
+    : total;
+  const deltaPercent = avgSeconds > 0 ? Math.round(((total - avgSeconds) / avgSeconds) * 100) : 0;
+  const vsAvgText = validWeekDays.length > 1
+    ? deltaPercent === 0
+      ? "Right on 7-day avg"
+      : deltaPercent > 0
+        ? `+${deltaPercent}% vs 7-day avg`
+        : `${deltaPercent}% vs 7-day avg`
+    : "Baseline day";
+
+  const enabledLimits = catalog?.limits.filter((l) => l.enabled) ?? [];
+  let totalBudgetSeconds = 0;
+  let totalUsedOnLimitsSeconds = 0;
+  for (const lim of enabledLimits) {
+    totalBudgetSeconds += lim.default_minutes * 60;
+    if (lim.target.kind === "app") {
+      const match = apps.find((a) => a.id === (lim.target as any).id);
+      if (match) totalUsedOnLimitsSeconds += match.seconds;
+    } else if (lim.target.kind === "category") {
+      const match = categories.find((c) => c.id === (lim.target as any).id);
+      if (match) totalUsedOnLimitsSeconds += match.seconds;
+    } else if (lim.target.kind === "total") {
+      totalUsedOnLimitsSeconds += total;
+    }
+  }
+  const remainingBudgetSeconds = Math.max(0, totalBudgetSeconds - totalUsedOnLimitsSeconds);
+
   // Show onboarding overlay on first run
   if (showOnboarding) {
     return <OnboardingSlider onComplete={handleOnboardingComplete} />;
@@ -169,89 +218,84 @@ export function App() {
               <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)", display: "flex", flexDirection: "column", gap: "24px" }}>
                 <MetricCards
                   metrics={[
-                      {
-                          label: "SCREEN TIME TODAY",
-                          value: formatDuration(total),
-                          icon: <Monitor size={20} color="var(--color-primary)" />,
-                          trend: "Active screen time recorded"
-                      },
-                      {
-                          label: "FOCUS TIME",
-                          value: "3h 15m",
-                          icon: <Target size={20} color="var(--color-primary)" />,
-                          trend: "Placeholder (coming soon)",
-                          badge: "57% of screen time"
-                      },
-                      {
-                          label: "APP LIMITS HIT",
-                          value: `${catalog?.limits.filter(l => l.target.kind === "app" && (summary?.apps ?? []).find(r => r.id === (l.target as any).id)?.blocked).length || 0} Apps`,
-                          icon: <PauseCircle size={20} color="var(--color-danger)" />,
-                          trend: "Suspended automatically",
-                          badge: "Protected"
-                      },
-                      {
-                          label: "DISTRACTIONS DEFLECTED",
-                          value: "14 Sites",
-                          icon: <Shield size={20} color="var(--color-primary)" />,
-                          trend: "Estimated time saved: 45 mins"
-                      }
+                    {
+                      label: "SCREEN TIME TODAY",
+                      value: formatDuration(total),
+                      icon: <Clock size={18} color="var(--color-primary)" />,
+                      trend: vsAvgText,
+                      badge: total > 0 ? `${apps.length} apps` : undefined,
+                    },
+                    {
+                      label: "LONGEST FOCUS STREAK",
+                      value: maxIntervalSeconds > 0 ? formatDuration(maxIntervalSeconds) : "—",
+                      icon: <Flame size={18} color="#f59e0b" />,
+                      trend: streakSubtitle,
+                      badge: streakBadge,
+                    },
+                    {
+                      label: "REMAINING BUDGET",
+                      value: enabledLimits.length > 0 ? formatDuration(remainingBudgetSeconds) : "No limits",
+                      icon: <Hourglass size={18} color="var(--color-primary)" />,
+                      trend: enabledLimits.length > 0
+                        ? `${enabledLimits.length} active budget${enabledLimits.length === 1 ? "" : "s"}`
+                        : "Configure in App Limits",
+                      badge: enabledLimits.length > 0
+                        ? remainingBudgetSeconds === 0
+                          ? "Exhausted"
+                          : "In Budget"
+                        : undefined,
+                    },
+                    {
+                      label: "PROTECTION STATUS",
+                      value: blockedCount > 0 ? `${blockedCount} Blocked` : "Active",
+                      icon: (
+                        <ShieldCheck
+                          size={18}
+                          color={blockedCount > 0 ? "var(--color-danger)" : "var(--color-success)"}
+                        />
+                      ),
+                      trend: blockedCount > 0
+                        ? `${blocked.map((a) => a.label).join(", ")} suspended`
+                        : "Zero limit violations today",
+                      badge: blockedCount > 0 ? "Action Needed" : "Protected",
+                    },
                   ]}
                 />
                 
-                <div className="card" style={{ padding: "24px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "24px" }}>
-                    <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0" }}>Daily Timeline</h3>
-                    <div style={{ display: "flex", gap: "12px", alignItems: "center" }}>
-                        <div className="date-picker-placeholder" style={{ display: "flex", alignItems: "center", background: "var(--bg-card)", border: "1px solid var(--border-subtle)", borderRadius: "8px", padding: "4px" }}>
-                            <button className="btn btn-ghost btn-sm" onClick={goPrevDay}>&lt;</button>
-                            <span style={{ padding: "0 12px", fontSize: "14px", fontWeight: "500" }}>{isViewingToday ? "Today" : formatDayLabel(viewDay!)}</span>
-                            <button className="btn btn-ghost btn-sm" onClick={goNextDay} disabled={isViewingToday}>&gt;</button>
-                        </div>
+                <div className="overview-activity-grid">
+                  <div className="card timeline-panel">
+                    <div className="timeline-panel__header">
+                      <div>
+                        <p className="panel-eyebrow">Today at a glance</p>
+                        <h3>Daily Timeline</h3>
+                      </div>
+                      <div className="date-picker-placeholder">
+                        <button className="btn btn-ghost btn-sm" onClick={goPrevDay}>&lt;</button>
+                        <span>{isViewingToday ? "Today" : formatDayLabel(viewDay!)}</span>
+                        <button className="btn btn-ghost btn-sm" onClick={goNextDay} disabled={isViewingToday}>&gt;</button>
+                      </div>
                     </div>
+                    {pastDayEmpty ? (
+                      <p className="empty-day">{t("hero.noUsageDay")}</p>
+                    ) : (
+                      <LedgerRule summary={summary} loading={loading} now={now} catalog={catalog} />
+                    )}
                   </div>
-                  {pastDayEmpty ? (
-                    <p className="empty-day">{t("hero.noUsageDay")}</p>
-                  ) : (
-                    <LedgerRule summary={summary} loading={loading} now={now} />
-                  )}
+                  <UsageAside entries={apps} total={total} />
                 </div>
 
-                {!pastDayEmpty && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
-                    <LedgerSection
-                      label={t("ledger.byApp", "By application")}
-                      kind="app"
-                      entries={apps}
-                      total={total}
-                      limitFor={limitFor}
-                      canLimit={() => true}
-                      busy={actions.busy}
-                      onEdit={actions.openEditor}
-                      onCategorize={actions.openCategorize}
-                      catalog={catalog}
-                    />
-                    <LedgerSection
-                      label={t("ledger.byCategory", "By category")}
-                      kind="category"
-                      entries={categories}
-                      total={total}
-                      limitFor={limitFor}
-                      canLimit={(entry) => catalog?.categories.find((c) => c.id === entry.id)?.kind === "limitable"}
-                      busy={actions.busy}
-                      onEdit={actions.openEditor}
-                    />
+                  <div className="overview-chart-grid">
+                    <div className="card" style={{ padding: "24px" }}>
+                      <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0 0 16px 0" }}>Weekly History</h3>
+                      <WeeklyChart week={week} viewDay={viewDay} loading={weekLoading} onSelectDay={setViewDay} />
+                    </div>
+                    <CategoryMix categories={categories} total={total} />
                   </div>
-                )}
-                
-                <div className="card" style={{ padding: "24px" }}>
-                  <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0 0 16px 0" }}>Weekly History</h3>
-                  <WeeklyChart week={week} viewDay={viewDay} loading={weekLoading} onSelectDay={setViewDay} />
-                </div>
               </div>
             )}
 
             {activeTab === "limits" && (
-              <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
+              <div className="tab-page" style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
                 <LimitsPanel
                   limits={catalog ? catalog.limits.filter(l => l.target.kind !== "total") : []}
                   catalog={catalog}
@@ -269,16 +313,22 @@ export function App() {
             )}
 
             {activeTab === "web-filtering" && (
-              <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
+              <div className="tab-page" style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
                 <WebFilteringPanel onAttempt={actions.attempt} />
               </div>
             )}
 
             {activeTab === "settings" && (
-              <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
+              <div className="tab-page settings-page" style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
+
+                <div className="settings-page-intro">
+                  <span className="section-kicker">Workspace</span>
+                  <h2>{t("settings.title")}</h2>
+                  <p>Shape how Screentime tracks, protects, and presents your day.</p>
+                </div>
 
                 {/* Language */}
-                <section className="card">
+                <section className="card settings-card settings-card--language">
                   <header className="card-header">
                     <h2>{t("settings.language")}</h2>
                     <div className="card-subtitle">{t("settings.languageDesc")}</div>
@@ -303,7 +353,7 @@ export function App() {
                 </section>
 
                 {/* Appearance */}
-                <section className="card" style={{ marginTop: 16 }}>
+                <section className="card settings-card settings-card--appearance" style={{ marginTop: 16 }}>
                   <header className="card-header">
                     <h2>{t("settings.appearance")}</h2>
                     <div className="card-subtitle">{t("settings.appearanceDesc")}</div>
@@ -331,7 +381,7 @@ export function App() {
                 </section>
 
                 {/* Advanced Parameters */}
-                <section className="card" style={{ marginTop: 16 }}>
+                <section className="card settings-card settings-card--advanced" style={{ marginTop: 16 }}>
                   <header className="card-header">
                     <h2>Advanced Parameters</h2>
                     <div className="card-subtitle">Fine-tune system thresholds and enforcement behaviour.</div>
@@ -389,7 +439,7 @@ export function App() {
                 </section>
 
                 {/* Security */}
-                <section className="card" style={{ marginTop: 16 }}>
+                <section className="card settings-card settings-card--security" style={{ marginTop: 16 }}>
                   <header className="card-header">
                     <h2>{t("settings.security")}</h2>
                     <div className="card-subtitle">{t("settings.securityDesc")}</div>
@@ -432,7 +482,7 @@ export function App() {
                 </section>
 
                 {/* How to Use (collapsible) */}
-                <section className="card" style={{ marginTop: 16 }}>
+                <section className="card settings-card settings-card--tutorial" style={{ marginTop: 16 }}>
                   <header className="card-header" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} onClick={() => setTutorialOpen(!tutorialOpen)}>
                     <h2>{t("tutorial.title")}</h2>
                     <span>{tutorialOpen ? "▲" : "▼"}</span>
@@ -445,7 +495,7 @@ export function App() {
                 </section>
 
                 {/* About */}
-                <section className="card" style={{ marginTop: 16 }}>
+                <section className="card settings-card settings-card--about" style={{ marginTop: 16 }}>
                   <header className="card-header">
                     <h2>{t("settings.about")}</h2>
                   </header>

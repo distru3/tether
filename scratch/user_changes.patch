@@ -1,0 +1,110 @@
+diff --git a/ui/src/components/LimitsPanel.tsx b/ui/src/components/LimitsPanel.tsx
+index 4b52d5f..f8e68f1 100644
+--- a/ui/src/components/LimitsPanel.tsx
++++ b/ui/src/components/LimitsPanel.tsx
+@@ -81,8 +81,8 @@ export function LimitsPanel({
+     });
+ 
+     return (
+-        <div className="limits-container view-container">
+-            <div className="view-header">
++        <div className="limits-container view-container limits-page-shell">
++            <div className="view-header page-intro">
+                 <div>
+                     <h2 className="view-title">{t("limits.title")}</h2>
+                     <p className="view-subtitle">{t("limits.subtitle")}</p>
+@@ -110,7 +110,11 @@ export function LimitsPanel({
+                 </div>
+             )}
+ 
+-            <div className="limits-list-header" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
++            <div className="limits-list-header">
++                <div>
++                    <span className="section-kicker">Guardrails</span>
++                    <h3 className="section-title">Your limits</h3>
++                </div>
+                 <FilterTabs tabs={["All", "Active", "Disabled"]} activeTab={activeTab} onChange={setActiveTab} />
+             </div>
+ 
+diff --git a/ui/src/components/Sidebar.tsx b/ui/src/components/Sidebar.tsx
+index 946c15b..4a06d64 100644
+--- a/ui/src/components/Sidebar.tsx
++++ b/ui/src/components/Sidebar.tsx
+@@ -9,7 +9,8 @@ import {
+     ChevronLeft,
+     ChevronRight,
+     Activity,
+-    Info
++    Info,
++    Clock3
+ } from "lucide-react";
+ import { formatDayLabel } from "../format";
+ 
+@@ -51,15 +52,16 @@ export function Sidebar({
+         <aside className="app-sidebar" aria-label="Main Navigation">
+             <div className="sidebar-brand">
+                 <div className="brand-logo">
+-                    <img src="/app-icon.png" alt="Screentime" className="brand-app-icon" />
++                    <span className="brand-mark" aria-hidden="true"><Clock3 size={17} strokeWidth={1.8} /></span>
+                     <span className="logo-title">Screentime</span>
+                 </div>
+                 <div className="daemon-status" title={`Daemon status: ${phase}`}>
+                     <span className={`status-dot ${isLive ? "status-dot--live" : "status-dot--offline"}`} />
+-                    <span className="status-label">{isLive ? t("sidebar.statusLive") : phase === "connecting" ? t("sidebar.statusConnecting") : t("sidebar.statusOffline")}</span>
++                    <span className="status-label">{isLive ? "Live" : phase === "connecting" ? t("sidebar.statusConnecting") : t("sidebar.statusOffline")}</span>
+                 </div>
+             </div>
+ 
++            <div className="sidebar-nav-label">Workspace</div>
+             <nav className="sidebar-nav">
+                 <button
+                     type="button"
+diff --git a/ui/src/components/WebFilteringPanel.tsx b/ui/src/components/WebFilteringPanel.tsx
+index d2e0b03..1c74c65 100644
+--- a/ui/src/components/WebFilteringPanel.tsx
++++ b/ui/src/components/WebFilteringPanel.tsx
+@@ -126,8 +126,8 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
+     ];
+ 
+     return (
+-        <div className="view-container">
+-            <div className="view-header">
++        <div className="view-container web-filter-page-shell">
++            <div className="view-header page-intro">
+                 <div>
+                     <h2 className="view-title">{t("webFilter.customBlockedDomains", "Web Shield")}</h2>
+                     <p className="view-subtitle">{t("webFilter.desc", "Manage blocked domains and bulk upload custom lists.")}</p>
+@@ -136,7 +136,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
+ 
+             <MetricCards metrics={metrics} />
+ 
+-            <section className="card limits-panel">
++            <section className="card limits-panel web-filter-command-panel">
+                 <div className="card-body">
+                     {error && (
+                         <div className="error-text" style={{ marginBottom: "16px", color: "var(--color-danger)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
+@@ -202,7 +202,11 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
+                             </button>
+                         </div>
+                     </div>
++                </div>
++            </section>
+ 
++            <section className="card limits-panel web-filter-domain-panel">
++                <div className="card-body">
+                     <div className="ledger-table-wrapper" style={{ marginTop: 24 }}>
+                         <table className="ledger-table">
+                             <thead>
+diff --git a/ui/src/main.tsx b/ui/src/main.tsx
+index c68e307..3e453c9 100644
+--- a/ui/src/main.tsx
++++ b/ui/src/main.tsx
+@@ -6,6 +6,7 @@ import "./i18n";
+ import { initDirection } from "./i18n";
+ import "./styles/tokens.css";
+ import "./styles/app.css";
++import "./styles/redesign.css";
+ 
+ const root = document.getElementById("root");
+ if (!root) {
+

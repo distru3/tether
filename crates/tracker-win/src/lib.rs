@@ -10,4 +10,14 @@
 mod win;
 
 #[cfg(windows)]
+pub mod discovery;
+
+#[cfg(windows)]
+pub use discovery::scan_installed_apps;
+#[cfg(windows)]
 pub use win::{Win32IdleMonitor, Win32WindowTracker};
+
+#[cfg(not(windows))]
+pub fn scan_installed_apps() -> Vec<st_ipc::DiscoveredAppDto> {
+    Vec::new()
+}

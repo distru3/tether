@@ -504,6 +504,7 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
             primary,
             tags,
         } => categorize(ctx, app_id, primary, &tags),
+        Request::RegisterDiscoveredApps { apps } => register_discovered_apps(ctx, apps, now),
         Request::ReportUsage { report } => report_usage(ctx, report),
         Request::ListManualBlocks => list_manual_blocks(ctx),
         Request::AddManualBlock { domain } => add_manual_block(ctx, &domain),
@@ -1042,6 +1043,56 @@ fn categorize(ctx: &Ctx, app_id: i64, primary: Option<i64>, tags: &[i64]) -> Res
             }
         }
     }
+}
+
+fn register_discovered_apps(
+    ctx: &Ctx,
+    apps: Vec<st_ipc::DiscoveredAppDto>,
+    now: DateTime<Utc>,
+) -> Response {
+    let mut db = lock_db(&ctx.db);
+    let default_category = match db.category_id("uncategorized") {
+        Ok(id) => id,
+        Err(e) => return error_internal(format!("missing uncategorized category: {e}")),
+    };
+
+    let mut registered_count = 0usize;
+    for app in apps {
+        let app_id = match db.upsert_app(
+            &app.key,
+            &app.display_name,
+            app.publisher.as_deref(),
+            default_category,
+            now,
+        ) {
+            Ok(id) => id,
+            Err(e) => {
+                tracing::warn!(key = %app.key.to_db_string(), error = %e, "failed to upsert discovered app");
+                continue;
+            }
+        };
+        registered_count += 1;
+
+        // Auto-classify if not user classified and currently uncategorized
+        if let Ok((primary, user_classified)) = db.app_category_state(app_id) {
+            if !user_classified && primary == default_category {
+                if let Some(classification) = crate::classify::classify(&app.key) {
+                    if let Ok(primary_id) = db.category_id(classification.primary) {
+                        let mut tags = Vec::with_capacity(classification.tags.len());
+                        for tag in classification.tags {
+                            if let Ok(tag_id) = db.category_id(tag) {
+                                tags.push(tag_id);
+                            }
+                        }
+                        let _ = db.set_app_categories(app_id, primary_id, &tags, false);
+                    }
+                }
+            }
+        }
+    }
+
+    tracing::debug!(count = registered_count, "proactively registered discovered apps in catalog");
+    accepted(now)
 }
 
 /// Ingest one session-helper report.

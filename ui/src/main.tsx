@@ -6,6 +6,7 @@ import "./i18n";
 import { initDirection } from "./i18n";
 import "./styles/tokens.css";
 import "./styles/app.css";
+import "./styles/redesign.css";
 
 const root = document.getElementById("root");
 if (!root) {

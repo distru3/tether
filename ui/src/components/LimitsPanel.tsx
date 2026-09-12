@@ -81,8 +81,8 @@ export function LimitsPanel({
     });
 
     return (
-        <div className="limits-container view-container">
-            <div className="view-header">
+        <div className="limits-container view-container limits-page-shell">
+            <div className="view-header page-intro">
                 <div>
                     <h2 className="view-title">{t("limits.title")}</h2>
                     <p className="view-subtitle">{t("limits.subtitle")}</p>
@@ -110,7 +110,11 @@ export function LimitsPanel({
                 </div>
             )}
 
-            <div className="limits-list-header" style={{ marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="limits-list-header">
+                <div>
+                    <span className="section-kicker">Guardrails</span>
+                    <h3 className="section-title">Your limits</h3>
+                </div>
                 <FilterTabs tabs={["All", "Active", "Disabled"]} activeTab={activeTab} onChange={setActiveTab} />
             </div>
 

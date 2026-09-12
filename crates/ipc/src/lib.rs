@@ -203,6 +203,17 @@ pub enum Request {
     EndFocusSession {
         pin: Option<String>,
     },
+    /// Register applications discovered on the local system (proactive app discovery).
+    RegisterDiscoveredApps {
+        apps: Vec<DiscoveredAppDto>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct DiscoveredAppDto {
+    pub key: AppKey,
+    pub display_name: String,
+    pub publisher: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

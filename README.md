@@ -134,8 +134,12 @@ Three binaries because Windows forces three privilege levels:
 
 The agent cannot see the interactive desktop (Session 0 isolation), so the
 session helper samples it locally and reports usage over a persistent named-pipe
-connection. Full details: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) and
-[docs/THREAT_MODEL.md](docs/THREAT_MODEL.md).
+connection. Full details:
+- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — High-level design and privilege models
+- [docs/SYSTEM_MAP.md](docs/SYSTEM_MAP.md) — End-to-end data flows and storage invariants
+- [docs/UI_SPECIFICATION.md](docs/UI_SPECIFICATION.md) — Smoked-glass analytics UI and layout hierarchy
+- [docs/IPC_CATALOG.md](docs/IPC_CATALOG.md) — Complete IPC named pipe request/response specification
+- [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md) — Threat model and bypass resistance
 
 ## Repository layout
 

@@ -1,4 +1,19 @@
-import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
+
+import sys
+
+with open("ui/src/App.tsx", "r", encoding="utf-8") as f:
+    app_tsx = f.read()
+
+app_tsx = app_tsx.replace("<LedgerRule summary={summary} loading={loading} now={now} />", "<LedgerRule summary={summary} loading={loading} now={now} catalog={catalog} />")
+
+with open("ui/src/App.tsx", "w", encoding="utf-8") as f:
+    f.write(app_tsx)
+
+
+with open("ui/src/components/LedgerRule.tsx", "r", encoding="utf-8") as f:
+    ledger_tsx = f.read()
+
+new_ledger_tsx = """import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import { formatDuration } from "../format";
 import { colorForCategory } from "../categoryColors";
@@ -95,3 +110,8 @@ export function LedgerRule({ summary, loading, now, catalog }: LedgerRuleProps) 
         </div>
     );
 }
+"""
+
+with open("ui/src/components/LedgerRule.tsx", "w", encoding="utf-8") as f:
+    f.write(new_ledger_tsx)
+
