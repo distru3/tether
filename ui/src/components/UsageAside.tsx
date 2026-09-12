@@ -8,7 +8,7 @@ interface UsageAsideProps {
 }
 
 export function UsageAside({ entries, total }: UsageAsideProps) {
-  const ranked = [...entries].sort((a, b) => b.seconds - a.seconds);
+  const ranked = [...entries].sort((a, b) => b.seconds - a.seconds).slice(0, 5);
   const max = Math.max(ranked[0]?.seconds ?? 0, 1);
 
   return (
