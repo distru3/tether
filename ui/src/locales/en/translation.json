@@ -251,7 +251,7 @@
       "not_found": "That entry is no longer on the books.",
       "bad_request": "The request didn't parse — try again.",
       "internal": "Something went wrong on our side.",
-      "unreachable": "Can't reach the screentime agent right now.",
+      "unreachable": "Can't reach the Tether agent right now.",
       "unexpected_response": "Unexpected response from the backend."
     }
   },

@@ -817,12 +817,12 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
         let card = card_geometry(cw, ch, state.mode);
         draw_round_rect(hdc, &card, CORNER_RADIUS, BG_OBSIDIAN, Some(BORDER_CARD));
 
-        // 3. Header brand voice: uppercase SCREENTIME.
+        // 3. Header brand voice: uppercase TETHER.
         draw_tracked_caps(
             hdc,
             card.x + PAD,
             card.y + 20,
-            "SCREENTIME",
+            "TETHER",
             &fonts.brand,
             TEXT_MUTED,
             2,

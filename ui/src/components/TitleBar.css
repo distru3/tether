@@ -1,20 +1,21 @@
 .titlebar {
-    height: 36px;
-    background: var(--bg-app);
+    height: 34px;
+    background: rgba(22, 10, 36, 0.98);
     display: flex;
     user-select: none;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--border-subtle);
+    border-bottom: 1px solid rgba(220, 160, 109, 0.08);
     flex-shrink: 0;
     direction: ltr;
+    z-index: 50;
 }
 
 .titlebar-left {
     display: flex;
     align-items: center;
-    padding-left: 16px;
-    gap: 12px;
+    padding-left: 14px;
+    gap: 8px;
     flex-grow: 1;
     height: 100%;
 }
@@ -23,13 +24,24 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    color: var(--text-muted);
 }
 
 .titlebar-title {
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 650;
+    color: var(--redesign-ink, #f5ede8);
+    letter-spacing: -0.01em;
+}
+
+.titlebar-version {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--redesign-muted, #9b7e7a);
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1px 5px;
+    border-radius: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    letter-spacing: 0.02em;
 }
 
 .titlebar-controls {
@@ -41,21 +53,33 @@
     display: flex;
     justify-content: center;
     align-items: center;
-    width: 48px;
+    width: 46px;
     height: 100%;
     background: transparent;
     border: none;
-    color: var(--text-muted);
+    color: var(--redesign-muted, #9b7e7a);
     cursor: default;
+    transition: background 120ms ease, color 120ms ease;
 }
 
 .titlebar-btn:hover {
-    background: rgba(0, 0, 0, 0.05);
-    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--redesign-ink, #f5ede8);
+}
+
+.titlebar-btn:active {
+    transform: none !important;
+    background: rgba(255, 255, 255, 0.12);
 }
 
 .titlebar-btn-close:hover {
-    background: #e81123;
-    color: white;
+    background: #e81123 !important;
+    color: #ffffff !important;
 }
+
+.titlebar-btn-close:active {
+    background: #c40f1f !important;
+}
+
 .titlebar { view-transition-name: titlebar; }
+

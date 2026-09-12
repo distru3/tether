@@ -1,10 +1,12 @@
-# Screentime UI Architecture & Redesign Specification
+# Tether UI Architecture & Redesign Specification
 
-This document defines the frontend layout, design system tokens, and component architecture for the Screentime dashboard. Verified against the codebase on **2026-09-12**.
+This document defines the frontend layout, design system tokens, and component architecture for the **Tether** dashboard. Verified against the codebase on **2026-09-13**.
 
 ---
 
-## 1. Design System: Color Hunt Smoked-Glass Workspace
+## 1. Design System & Brand Identity: Tether Smoked-Glass Workspace
+
+The application is branded as **Tether**, featuring an official brand mark depicting an architectural "T" encircled by an orbital tether connecting to a clock/timer orb in warm terracotta and caramel hues.
 
 The UI uses a dark obsidian purple and warm amber smoked-glass aesthetic defined in `ui/src/styles/tokens.css`, `ui/src/styles/redesign.css`, and `ui/src/styles/app.css`:
 
@@ -12,25 +14,25 @@ The UI uses a dark obsidian purple and warm amber smoked-glass aesthetic defined
 - **Obsidian Purple Base**: `#210F37` (`--bg-canvas`, `--bg-app`, `--redesign-bg`) — Deep background canvas.
 - **Rich Purple Glass Surfaces**: `#4F1C51` (`--bg-card`, `--bg-surface`, `--redesign-panel`) — Floating glass cards with subtle border illumination.
 - **Warm Terracotta Accents**: `#A55B4B` (`--accent-indigo`, `--color-primary`) — Primary action buttons, progress bars, category highlights.
-- **Amber Gold Highlights**: `#DCA06D` (`--color-accent`, `--accent-amber`, `--redesign-orange`) — Eye-catching badges, timer readouts, glowing PIN dots, active states.
+- **Amber Gold Highlights**: `#DCA06D` (`--color-accent`, `--accent-amber`, `--redesign-orange`) — Badges, timer readouts, glowing PIN dots, active tab icons.
 - **Danger / Urgent Warning**: `#DF5E4E` (`--color-danger`, `--accent-rose`) — Limit reached, destructive actions, error prompts.
-- **Borders**: Translucent amber/terracotta rules (`rgba(220, 160, 109, 0.18)`).
+- **Borders**: Translucent amber/terracotta rules (`rgba(220, 160, 109, 0.14)`).
 - **Typography**: System sans-serif for headings/copy, monospace for tabular numbers and time codes.
 - **Elevation & Blur**: `backdrop-filter: blur(24px); box-shadow: 0 16px 40px rgba(15, 5, 25, 0.45); border-radius: 14px;`.
-
 
 ---
 
 ## 2. Layout Structure & Top Navigation
 
-Unlike the legacy 240px vertical sidebar, the redesigned layout is a **top navigation bar** spanning the full width of the window:
+The top chrome consists of a streamlined App Bar (TitleBar) and a horizontal Top Navigation Bar:
 
 ```
 +-----------------------------------------------------------------------------------------+
-| [TitleBar] Screentime (36px, custom drag region, minimize, maximize, close)             |
+| [TitleBar] Tether (34px, custom drag region, logo, version tag, minimize/maximize/close)|
 +-----------------------------------------------------------------------------------------+
-| [Top Nav Bar: .app-sidebar] (74px sticky)                                               |
-|  [Logo + Live Status]  |  [Dashboard] [Web Filter] [App Limits] [Settings]  | [Stepper] |
+| [Top Nav Bar: .app-sidebar] (58px sticky smoked glass)                                  |
+|  [Tether Logo + Live Pill]  |  ( [Dashboard] [Web Filter] [App Limits] [Settings] )  |  |
+|                             |               (Segmented Capsule)       | (< Today >)   |
 +-----------------------------------------------------------------------------------------+
 | [Main Content Area: .app-main-content]                                                  |
 |                                                                                         |
@@ -39,8 +41,19 @@ Unlike the legacy 240px vertical sidebar, the redesigned layout is a **top navig
 +-----------------------------------------------------------------------------------------+
 ```
 
-### Nav Items (`Sidebar.tsx`)
-1. **Dashboard** (`overview`): Daily timeline, top applications, weekly chart, category distribution.
+### App Bar (`TitleBar.tsx` & `TitleBar.css`)
+- **Height**: 34px, `background: rgba(22, 10, 36, 0.98)` matching deep horizon obsidian purple.
+- **Left Cluster**: 16px Tether brand logo, crisp "Tether" title (`12px`, font-weight 650), and `v0.1` version badge.
+- **Window Controls**: Minimize, Maximize/Restore, Close caption buttons (46px hit width, hover states, `#e81123` close hover, with `transform: none !important` to prevent active-state distortion).
+
+### Navigation Bar (`Sidebar.tsx` & `redesign.css`)
+- **Container**: 58px min-height, `rgba(26, 11, 42, 0.94)` smoked glass, `backdrop-filter: blur(20px) saturate(135%)`.
+- **Brand Cluster**: 34x34px rounded Tether emblem with warm shadow, "Tether" logotype (`1.02rem`, font-weight 750), and adjacent inline **Live Status Pill** (`status-pill--live` with green pulsing dot).
+- **Center Nav Segmented Capsule**: Floating pill track (`rgba(16, 7, 28, 0.68)`) hosting 4 tab buttons. Active tab highlighted with elevated warm terracotta gradient (`rgba(165, 91, 75, 0.35)` to `rgba(122, 62, 48, 0.28)`) and amber icon highlight. Old dangling underline removed.
+- **Date Stepper Capsule**: Matching floating pill track on the right with previous/next buttons and an interactive "Today" / date label with calendar icon for returning to Today when viewing past ledger records.
+
+### Nav Items
+1. **Dashboard** (`overview`): Daily timeline, top applications, weekly chart, category distribution (includes blocked app count badge).
 2. **Web Filter** (`web-filtering`): Domain block rules, bulk uploading, NSFW protection.
 3. **App Limits** (`limits`): Target limits (apps and categories), status filters, limit creator.
 4. **Settings** (`settings`): Language, Appearance, Advanced Parameters, Security & PIN, About.

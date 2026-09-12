@@ -339,7 +339,7 @@ export function App() {
                 <div className="settings-page-intro">
                   <span className="section-kicker">Workspace</span>
                   <h2>{t("settings.title")}</h2>
-                  <p>Shape how Screentime tracks, protects, and presents your day.</p>
+                  <p>Shape how Tether tracks, protects, and presents your day.</p>
                 </div>
 
                 {/* Language */}

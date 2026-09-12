@@ -2,6 +2,8 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import React, { useState, useEffect } from 'react';
 import './TitleBar.css';
 
+import { TetherLogo } from './TetherLogo';
+
 export function TitleBar() {
     const appWindow = getCurrentWindow();
     const [isMaximized, setIsMaximized] = useState(false);
@@ -26,12 +28,10 @@ export function TitleBar() {
         <div data-tauri-drag-region className="titlebar">
             <div className="titlebar-left" data-tauri-drag-region>
                 <div className="titlebar-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <path d="M12 6v6l4 2" />
-                    </svg>
+                    <TetherLogo size={16} />
                 </div>
-                <span className="titlebar-title" data-tauri-drag-region>Screentime</span>
+                <span className="titlebar-title" data-tauri-drag-region>Tether</span>
+                <span className="titlebar-version" data-tauri-drag-region>v0.1</span>
             </div>
 
             <div className="titlebar-controls">
