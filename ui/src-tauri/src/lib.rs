@@ -61,6 +61,10 @@ pub struct AgentStatus {
     pub pin_configured: bool,
     pub strict_mode: bool,
     pub show_hud_overlay: bool,
+    pub limit_cooldown_hours: i64,
+    pub idle_threshold_secs: i64,
+    pub day_start_minutes: i64,
+    pub family_dns_enabled: bool,
 }
 
 /// Structured failure for every fallible command.
@@ -132,6 +136,10 @@ fn get_status() -> AgentStatus {
             pin_configured: dto.pin_configured,
             strict_mode: dto.strict_mode,
             show_hud_overlay: dto.show_hud_overlay,
+            limit_cooldown_hours: dto.limit_cooldown_hours,
+            idle_threshold_secs: dto.idle_threshold_secs,
+            day_start_minutes: dto.day_start_minutes,
+            family_dns_enabled: dto.family_dns_enabled,
         },
         Ok(_) | Err(_) => AgentStatus {
             version: env!("CARGO_PKG_VERSION").to_string(),
@@ -147,6 +155,10 @@ fn get_status() -> AgentStatus {
             pin_configured: false,
             strict_mode: false,
             show_hud_overlay: true,
+            limit_cooldown_hours: 24,
+            idle_threshold_secs: 60,
+            day_start_minutes: 0,
+            family_dns_enabled: false,
         },
     }
 }

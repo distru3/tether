@@ -31,6 +31,7 @@ export interface Dashboard {
     week: WeeklySummaryDto | null;
     weekLoading: boolean;
     refreshCatalog: () => void;
+    refreshStatus: () => Promise<void>;
     setViewDay: (day: number) => void;
     goPrevDay: () => void;
     goNextDay: () => void;
@@ -80,6 +81,15 @@ export function useDashboard(): Dashboard {
                 if (ticket === catalogSeq.current) setCatalog(next);
             })
             .catch(() => { });
+    }, []);
+
+    const refreshStatus = useCallback(async () => {
+        try {
+            const next = await getStatus();
+            setStatusInfo(next);
+        } catch {
+            // fail-safe ignore
+        }
     }, []);
 
     const fetchWeek = useCallback(async () => {
@@ -200,6 +210,7 @@ export function useDashboard(): Dashboard {
         week,
         weekLoading,
         refreshCatalog,
+        refreshStatus,
         setViewDay,
         goPrevDay,
         goNextDay,

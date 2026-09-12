@@ -117,11 +117,12 @@ The dashboard overview is structured as an interactive grid:
 
 ### Settings (`App.tsx` Settings Tab)
 - Shell class: `.settings-page`.
-- Cards: `.settings-card--language`, `.settings-card--appearance`, `.settings-card--network`, `.settings-card--advanced`, `.settings-card--security`, `.settings-card--tutorial`, `.settings-card--about`.
-- **Network & Family DNS Card** (`.settings-card--network`):
-  - Dedicated toggle for Cloudflare Family DNS with live status indicator dot (Emerald green when protected, muted gray when disabled).
-  - Shows `<LoadingSpinner size="sm" />` while toggling.
-  - Explanatory copy clarifying that original DNS configurations are preserved and will be restored on disable.
+- Cards: `.settings-card--language`, `.settings-card--appearance`, `.settings-card--advanced`, `.settings-card--security`, `.settings-card--tutorial`, `.settings-card--about`.
+- **Security Card** (`.settings-card--security`):
+  - **Strict Mode Toggle**: Prevents circumvention with inline `<LoadingSpinner size="sm" />`.
+  - **Family DNS Protection Toggle**: Toggles Cloudflare Family DNS system-wide with live status indicator dot (Emerald green when protected, muted gray when disabled), copy explaining automatic preservation/restoration of original DNS, and an inline `<LoadingSpinner size="sm" />`.
+  - **Admin PIN**: Displays current configuration state with Set/Change PIN modal triggers.
+- **Loading Animations Across Settings**: Every toggle (`show_hud_overlay`, `strict_mode`, `family_dns`) and advanced parameter input (`limit_cooldown_hours`, `idle_threshold_secs`, `day_start_minutes`) displays a dedicated `<LoadingSpinner />` while persisting changes and temporarily locks input to prevent race conditions.
 - Direct controls for idle threshold, day reset offset, strict mode, and anti-impulse cooldown.
 
 ### Onboarding Flow (`OnboardingSlider.tsx`)

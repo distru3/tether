@@ -14,6 +14,7 @@ interface Deps {
     pinConfigured: boolean;
     notify: (kind: ToastKind, message: string) => void;
     invalidate: () => void;
+    refreshStatus?: () => Promise<void>;
 }
 
 export interface GateRequest {
@@ -234,14 +235,18 @@ export function useLedgerActions(deps: Deps) {
         try {
             setBusy(true);
             await api.setSetting(key, value);
+            if (deps.refreshStatus) {
+                await deps.refreshStatus();
+            }
             deps.invalidate();
             deps.notify("success", t("actions.settingSaved"));
         } catch (e) {
             deps.notify("error", String(e));
+            throw e;
         } finally {
             setBusy(false);
         }
-    }, [deps]);
+    }, [deps, t]);
 
     return {
         attempt,

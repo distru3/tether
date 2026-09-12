@@ -40,6 +40,7 @@ export function App() {
     catalog,
     lastError,
     refreshCatalog,
+    refreshStatus,
     viewDay,
     isViewingToday,
     week,
@@ -56,10 +57,22 @@ export function App() {
     pinConfigured: statusInfo?.pin_configured ?? false,
     notify: push,
     invalidate: refreshCatalog,
+    refreshStatus,
   });
 
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
-  const [dnsSaving, setDnsSaving] = useState(false);
+  const [pendingSettings, setPendingSettings] = useState<Record<string, boolean>>({});
+
+  async function handleUpdateSetting(key: string, value: string) {
+    setPendingSettings((prev) => ({ ...prev, [key]: true }));
+    try {
+      await actions.setSetting(key, value);
+    } catch {
+      // handled
+    } finally {
+      setPendingSettings((prev) => ({ ...prev, [key]: false }));
+    }
+  }
 
   // First-run onboarding state
   const [showOnboarding, setShowOnboarding] = useState(() => {
@@ -374,26 +387,142 @@ export function App() {
                           {t("settings.showHudDesc")}
                         </div>
                       </div>
-                      <input
-                        type="checkbox"
-                        className="toggle-switch"
-                        checked={statusInfo?.show_hud_overlay ?? true}
-                        onChange={(e) => {
-                          actions.setSetting("show_hud_overlay", e.target.checked.toString());
-                        }}
-                      />
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {pendingSettings["show_hud_overlay"] && <LoadingSpinner size="sm" />}
+                        <input
+                          type="checkbox"
+                          className="toggle-switch"
+                          checked={statusInfo?.show_hud_overlay ?? true}
+                          disabled={pendingSettings["show_hud_overlay"]}
+                          onChange={(e) => {
+                            void handleUpdateSetting("show_hud_overlay", e.target.checked.toString());
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </section>
 
-                {/* Network & Family DNS */}
-                <section className="card settings-card settings-card--network" style={{ marginTop: 16 }}>
+                {/* Advanced Parameters */}
+                <section className="card settings-card settings-card--advanced" style={{ marginTop: 16 }}>
                   <header className="card-header">
-                    <h2>{t("settings.networkTitle", "Network & Family DNS")}</h2>
-                    <div className="card-subtitle">{t("settings.networkDesc", "System-wide domain filtering and upstream DNS configuration.")}</div>
+                    <h2>Advanced Parameters</h2>
+                    <div className="card-subtitle">Fine-tune system thresholds and enforcement behaviour.</div>
                   </header>
                   <div className="card-body">
+                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <div>
+                        <div className="form-label">Anti-impulse Cooldown</div>
+                        <div className="form-hint" style={{ marginTop: 0 }}>
+                          Time delay before a relaxed limit takes effect. Tightening applies instantly.
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {pendingSettings["limit_cooldown_hours"] && <LoadingSpinner size="xs" />}
+                        <div className="input-with-suffix">
+                          <input
+                            type="number"
+                            className="input"
+                            style={{ width: '60px' }}
+                            key={`cooldown_${statusInfo?.limit_cooldown_hours}`}
+                            defaultValue={statusInfo?.limit_cooldown_hours?.toString() ?? "24"}
+                            disabled={pendingSettings["limit_cooldown_hours"]}
+                            onBlur={(e) => {
+                              if (e.target.value !== statusInfo?.limit_cooldown_hours?.toString()) {
+                                void handleUpdateSetting("limit_cooldown_hours", e.target.value);
+                              }
+                            }}
+                          />
+                          <span className="input-suffix">hrs</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <div>
+                        <div className="form-label">Idle Threshold</div>
+                        <div className="form-hint" style={{ marginTop: 0 }}>
+                          Seconds without input before usage stops accruing.
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {pendingSettings["idle_threshold_secs"] && <LoadingSpinner size="xs" />}
+                        <div className="input-with-suffix">
+                          <input
+                            type="number"
+                            className="input"
+                            style={{ width: '60px' }}
+                            key={`idle_${statusInfo?.idle_threshold_secs}`}
+                            defaultValue={statusInfo?.idle_threshold_secs?.toString() ?? "60"}
+                            disabled={pendingSettings["idle_threshold_secs"]}
+                            onBlur={(e) => {
+                              if (e.target.value !== statusInfo?.idle_threshold_secs?.toString()) {
+                                void handleUpdateSetting("idle_threshold_secs", e.target.value);
+                              }
+                            }}
+                          />
+                          <span className="input-suffix">sec</span>
+                        </div>
+                      </div>
+                    </div>
                     <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <div className="form-label">Day Start Offset</div>
+                        <div className="form-hint" style={{ marginTop: 0 }}>
+                          Minutes after local midnight at which daily budgets reset (0 = midnight).
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {pendingSettings["day_start_minutes"] && <LoadingSpinner size="xs" />}
+                        <div className="input-with-suffix">
+                          <input
+                            type="number"
+                            className="input"
+                            style={{ width: '60px' }}
+                            key={`day_start_${statusInfo?.day_start_minutes}`}
+                            defaultValue={statusInfo?.day_start_minutes?.toString() ?? "0"}
+                            disabled={pendingSettings["day_start_minutes"]}
+                            onBlur={(e) => {
+                              if (e.target.value !== statusInfo?.day_start_minutes?.toString()) {
+                                void handleUpdateSetting("day_start_minutes", e.target.value);
+                              }
+                            }}
+                          />
+                          <span className="input-suffix">min</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                {/* Security */}
+                <section className="card settings-card settings-card--security" style={{ marginTop: 16 }}>
+                  <header className="card-header">
+                    <h2>{t("settings.security")}</h2>
+                    <div className="card-subtitle">{t("settings.securityDesc")}</div>
+                  </header>
+                  <div className="card-body">
+                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <div>
+                        <div className="form-label">Strict Mode</div>
+                        <div className="form-hint" style={{ marginTop: 0 }}>
+                          Prevents circumvention by blocking task manager and registry edits while limits are active.
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {pendingSettings["strict_mode"] && <LoadingSpinner size="sm" />}
+                        <input
+                          type="checkbox"
+                          className="toggle-switch"
+                          checked={statusInfo?.strict_mode ?? false}
+                          disabled={pendingSettings["strict_mode"]}
+                          onChange={(e) => {
+                            void handleUpdateSetting("strict_mode", e.target.checked.toString());
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
                       <div style={{ flex: 1, paddingRight: '16px' }}>
                         <div className="form-label">{t("settings.familyDns", "Family DNS Protection")}</div>
                         <div className="form-hint" style={{ marginTop: 0 }}>
@@ -418,116 +547,19 @@ export function App() {
                         </div>
                       </div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {dnsSaving && <LoadingSpinner size="sm" />}
+                        {pendingSettings["family_dns"] && <LoadingSpinner size="sm" />}
                         <input
                           type="checkbox"
                           className="toggle-switch"
                           checked={statusInfo?.family_dns_enabled ?? false}
-                          disabled={dnsSaving}
-                          onChange={async (e) => {
-                            setDnsSaving(true);
-                            try {
-                              await actions.setSetting("family_dns", e.target.checked.toString());
-                            } finally {
-                              setDnsSaving(false);
-                            }
+                          disabled={pendingSettings["family_dns"]}
+                          onChange={(e) => {
+                            void handleUpdateSetting("family_dns", e.target.checked.toString());
                           }}
                         />
                       </div>
                     </div>
-                  </div>
-                </section>
 
-                {/* Advanced Parameters */}
-                <section className="card settings-card settings-card--advanced" style={{ marginTop: 16 }}>
-                  <header className="card-header">
-                    <h2>Advanced Parameters</h2>
-                    <div className="card-subtitle">Fine-tune system thresholds and enforcement behaviour.</div>
-                  </header>
-                  <div className="card-body">
-                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                      <div>
-                        <div className="form-label">Anti-impulse Cooldown</div>
-                        <div className="form-hint" style={{ marginTop: 0 }}>
-                          Time delay before a relaxed limit takes effect. Tightening applies instantly.
-                        </div>
-                      </div>
-                      <div className="input-with-suffix">
-                        <input
-                          type="number"
-                          className="input"
-                          style={{ width: '60px' }}
-                          key={`cooldown_${statusInfo?.limit_cooldown_hours}`}
-                          defaultValue={statusInfo?.limit_cooldown_hours?.toString() ?? "24"}
-                          onBlur={(e) => actions.setSetting("limit_cooldown_hours", e.target.value)}
-                        />
-                        <span className="input-suffix">hrs</span>
-                      </div>
-                    </div>
-                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                      <div>
-                        <div className="form-label">Idle Threshold</div>
-                        <div className="form-hint" style={{ marginTop: 0 }}>
-                          Seconds without input before usage stops accruing.
-                        </div>
-                      </div>
-                      <div className="input-with-suffix">
-                        <input
-                          type="number"
-                          className="input"
-                          style={{ width: '60px' }}
-                          key={`idle_${statusInfo?.idle_threshold_secs}`}
-                          defaultValue={statusInfo?.idle_threshold_secs?.toString() ?? "60"}
-                          onBlur={(e) => actions.setSetting("idle_threshold_secs", e.target.value)}
-                        />
-                        <span className="input-suffix">sec</span>
-                      </div>
-                    </div>
-                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <div>
-                        <div className="form-label">Day Start Offset</div>
-                        <div className="form-hint" style={{ marginTop: 0 }}>
-                          Minutes after local midnight at which daily budgets reset (0 = midnight).
-                        </div>
-                      </div>
-                      <div className="input-with-suffix">
-                        <input
-                          type="number"
-                          className="input"
-                          style={{ width: '60px' }}
-                          key={`day_start_${statusInfo?.day_start_minutes}`}
-                          defaultValue={statusInfo?.day_start_minutes?.toString() ?? "0"}
-                          onBlur={(e) => actions.setSetting("day_start_minutes", e.target.value)}
-                        />
-                        <span className="input-suffix">min</span>
-                      </div>
-                    </div>
-                  </div>
-                </section>
-
-                {/* Security */}
-                <section className="card settings-card settings-card--security" style={{ marginTop: 16 }}>
-                  <header className="card-header">
-                    <h2>{t("settings.security")}</h2>
-                    <div className="card-subtitle">{t("settings.securityDesc")}</div>
-                  </header>
-                  <div className="card-body">
-                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                      <div>
-                        <div className="form-label">Strict Mode</div>
-                        <div className="form-hint" style={{ marginTop: 0 }}>
-                          Prevents circumvention by blocking task manager and registry edits while limits are active.
-                        </div>
-                      </div>
-                      <input
-                        type="checkbox"
-                        className="toggle-switch"
-                        checked={statusInfo?.strict_mode ?? false}
-                        onChange={(e) => {
-                          actions.setSetting("strict_mode", e.target.checked.toString());
-                        }}
-                      />
-                    </div>
                     <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div className="form-label">{t("settings.adminPin")}</div>
