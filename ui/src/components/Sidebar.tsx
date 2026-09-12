@@ -11,7 +11,6 @@ import {
     Calendar,
 } from "lucide-react";
 import { formatDayLabel } from "../format";
-import { TetherLogo } from "./TetherLogo";
 
 export type TabKey = "overview" | "limits" | "web-filtering" | "settings";
 
@@ -50,15 +49,10 @@ export function Sidebar({
     return (
         <aside className="app-sidebar" aria-label="Main Navigation">
             <div className="sidebar-brand">
-                <div className="brand-cluster">
-                    <TetherLogo size={30} />
-                    <div className="brand-title-group">
-                        <span className="logo-title">Tether</span>
-                        <div className={`status-pill ${isLive ? "status-pill--live" : "status-pill--offline"}`} title={`Daemon status: ${phase}`}>
-                            <span className={`status-dot ${isLive ? "status-dot--live" : "status-dot--offline"}`} />
-                            <span className="status-label">{isLive ? "Live" : phase === "connecting" ? t("sidebar.statusConnecting") : t("sidebar.statusOffline")}</span>
-                        </div>
-                    </div>
+                <span className="logo-title">Tether</span>
+                <div className={`status-pill ${isLive ? "status-pill--live" : "status-pill--offline"}`} title={`Daemon status: ${phase}`}>
+                    <span className={`status-dot ${isLive ? "status-dot--live" : "status-dot--offline"}`} />
+                    <span className="status-label">{isLive ? "Live" : phase === "connecting" ? t("sidebar.statusConnecting") : t("sidebar.statusOffline")}</span>
                 </div>
             </div>
 
