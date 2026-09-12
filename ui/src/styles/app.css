@@ -144,25 +144,26 @@ body {
 
 .sidebar-nav {
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
 }
 
 .nav-item {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 10px;
+  gap: 8px;
+  padding: 6px 12px;
   border-radius: var(--radius-sm);
   color: var(--text-secondary);
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
   border: none;
   background-color: transparent;
   transition: all var(--transition-fast);
   text-align: left;
-  width: 100%;
+  width: auto;
 }
 
 .nav-item:hover {

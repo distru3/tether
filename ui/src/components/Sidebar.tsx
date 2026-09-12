@@ -51,9 +51,7 @@ export function Sidebar({
         <aside className="app-sidebar" aria-label="Main Navigation">
             <div className="sidebar-brand">
                 <div className="brand-cluster">
-                    <div className="brand-logo" title="Tether">
-                        <TetherLogo size={28} />
-                    </div>
+                    <TetherLogo size={30} />
                     <div className="brand-title-group">
                         <span className="logo-title">Tether</span>
                         <div className={`status-pill ${isLive ? "status-pill--live" : "status-pill--offline"}`} title={`Daemon status: ${phase}`}>
