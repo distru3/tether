@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
+import type { CatalogDto } from "../types/generated/CatalogDto";
+import { colorForCategory } from "../categoryColors";
 import { BlockedIcon } from "./icons/Icons";
 
 interface BlockedBannerProps {
     blocked: UsageRowDto[];
     busy: boolean;
     onOverride: (row: UsageRowDto) => void;
+    catalog?: CatalogDto | null;
 }
 
 function minutesUntilLocalMidnight(now: Date): number {
@@ -15,7 +18,7 @@ function minutesUntilLocalMidnight(now: Date): number {
     return Math.max(0, Math.floor((midnight.getTime() - now.getTime()) / 60000));
 }
 
-export function BlockedBanner({ blocked, busy, onOverride }: BlockedBannerProps) {
+export function BlockedBanner({ blocked, busy, onOverride, catalog }: BlockedBannerProps) {
     const { t } = useTranslation();
     const [now, setNow] = useState(() => new Date());
 
@@ -43,22 +46,39 @@ export function BlockedBanner({ blocked, busy, onOverride }: BlockedBannerProps)
             </div>
 
             <div className="blocked-items-list">
-                {blocked.map((row) => (
-                    <div key={row.id} className="blocked-item-row">
-                        <div className="blocked-item-info">
-                            <BlockedIcon size={16} color="var(--accent-rose)" />
-                            <strong className="blocked-item-name">{row.label}</strong>
+                {blocked.map((row, index) => {
+                    const appObj = catalog?.apps.find((a) => a.id === row.id);
+                    const category = appObj ? catalog?.categories.find((c) => c.id === appObj.primary_category) : null;
+                    const catName = category?.name ?? "Uncategorized";
+                    const catColor = colorForCategory(catName, category?.color ?? row.color, index);
+
+                    return (
+                        <div key={row.id} className="blocked-item-row">
+                            <div className="blocked-item-info">
+                                <BlockedIcon size={16} color="var(--accent-rose)" />
+                                <strong className="blocked-item-name">{row.label}</strong>
+                                <span 
+                                    className="usage-category-pill"
+                                    style={{
+                                        color: catColor,
+                                        backgroundColor: `${catColor}1c`,
+                                        borderColor: `${catColor}38`,
+                                    }}
+                                >
+                                    {catName}
+                                </span>
+                            </div>
+                            <button
+                                type="button"
+                                className="btn btn-danger btn-sm"
+                                disabled={busy}
+                                onClick={() => onOverride(row)}
+                            >
+                                {t("banner.override")}
+                            </button>
                         </div>
-                        <button
-                            type="button"
-                            className="btn btn-danger btn-sm"
-                            disabled={busy}
-                            onClick={() => onOverride(row)}
-                        >
-                            {t("banner.override")}
-                        </button>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         </div>
     );

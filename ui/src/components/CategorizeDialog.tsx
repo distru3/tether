@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import type { CatalogDto } from "../types/generated/CatalogDto";
+import { colorForCategory } from "../categoryColors";
 import { Dialog } from "./Dialog";
 import { ChevronDownIcon } from "./icons/Icons";
 
@@ -18,6 +19,7 @@ interface CategorizeDialogProps {
 interface CategoryOption {
     value: number | null;
     label: string;
+    color?: string;
 }
 
 function CategorySelect({
@@ -56,7 +58,12 @@ function CategorySelect({
                 aria-haspopup="listbox"
                 aria-expanded={open}
             >
-                <span>{selected ? selected.label : "Auto-detect"}</span>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    {selected?.color && (
+                        <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: selected.color, flexShrink: 0 }} />
+                    )}
+                    <span>{selected ? selected.label : "Auto-detect"}</span>
+                </div>
                 <ChevronDownIcon size={14} />
             </button>
 
@@ -109,7 +116,12 @@ function CategorySelect({
                                         if (!isSelected) (e.currentTarget as HTMLElement).style.background = "transparent";
                                     }}
                                 >
-                                    <span>{opt.label}</span>
+                                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                        {opt.color && (
+                                            <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: opt.color, flexShrink: 0 }} />
+                                        )}
+                                        <span>{opt.label}</span>
+                                    </div>
                                     {isSelected && <span style={{ fontSize: "11px", color: "var(--color-accent)" }}>✓</span>}
                                 </li>
                             );
@@ -139,7 +151,11 @@ export function CategorizeDialog({
 
     const categoryOptions: CategoryOption[] = [
         { value: null, label: t("categorize.autoDetect") },
-        ...limitableCategories.map((c) => ({ value: c.id, label: c.name })),
+        ...limitableCategories.map((c) => ({ 
+            value: c.id, 
+            label: c.name, 
+            color: colorForCategory(c.name, c.color) 
+        })),
     ];
 
     const toggleTag = (tagId: number) => {
@@ -178,17 +194,21 @@ export function CategorizeDialog({
                 <div className="field">
                     <span className="field-label">{t("categorize.tags")}</span>
                     <div className="tag-list">
-                        {limitableCategories.map((category) => (
-                            <label key={category.id} className="tag-item">
-                                <input
-                                    type="checkbox"
-                                    checked={selectedTags.includes(category.id)}
-                                    disabled={busy || category.id === selectedPrimary}
-                                    onChange={() => toggleTag(category.id)}
-                                />
-                                <span>{category.name}</span>
-                            </label>
-                        ))}
+                        {limitableCategories.map((category) => {
+                            const color = colorForCategory(category.name, category.color);
+                            return (
+                                <label key={category.id} className="tag-item">
+                                    <input
+                                        type="checkbox"
+                                        checked={selectedTags.includes(category.id)}
+                                        disabled={busy || category.id === selectedPrimary}
+                                        onChange={() => toggleTag(category.id)}
+                                    />
+                                    <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: color, flexShrink: 0 }} />
+                                    <span>{category.name}</span>
+                                </label>
+                            );
+                        })}
                     </div>
                 </div>
             )}

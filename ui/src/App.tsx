@@ -276,6 +276,15 @@ export function App() {
                     },
                   ]}
                 />
+
+                {blocked.length > 0 && (
+                  <BlockedBanner
+                    blocked={blocked}
+                    busy={actions.busy}
+                    onOverride={actions.override}
+                    catalog={catalog}
+                  />
+                )}
                 
                 <div className="overview-activity-grid">
                   <div className="card timeline-panel">
@@ -296,7 +305,7 @@ export function App() {
                       <LedgerRule summary={summary} loading={loading} now={now} catalog={catalog} />
                     )}
                   </div>
-                  <UsageAside entries={apps} total={total} />
+                  <UsageAside entries={apps} total={total} catalog={catalog} />
                 </div>
 
                   <div className="overview-chart-grid">

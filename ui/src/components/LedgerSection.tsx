@@ -7,6 +7,7 @@ import { LiveTimer } from "./LiveTimer";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
 import { formatDuration, sharePercent } from "../format";
+import { colorForCategory } from "../categoryColors";
 import { FilterTabs } from "./FilterTabs";
 import './LedgerSection.css';
 
@@ -100,14 +101,22 @@ export function LedgerSection({
                             const isUncat = kind === "app" && catalog && isUncategorizedApp(catalog, entry.id);
 
                             let categoryName = "—";
+                            let catColor = entry.color ?? "var(--color-primary)";
                             if (kind === "app" && catalog) {
                                 const appInfo = catalog.apps.find((a) => a.id === entry.id);
                                 if (appInfo && appInfo.primary_category) {
                                     const catInfo = catalog.categories.find(c => c.id === appInfo.primary_category);
                                     if (catInfo) {
                                         categoryName = catInfo.name;
+                                        catColor = colorForCategory(catInfo.name, catInfo.color);
                                     }
+                                } else {
+                                    categoryName = "Uncategorized";
+                                    catColor = colorForCategory("Uncategorized", entry.color);
                                 }
+                            } else if (kind === "category") {
+                                categoryName = entry.label;
+                                catColor = colorForCategory(entry.label, entry.color);
                             }
 
                             return (
@@ -116,7 +125,11 @@ export function LedgerSection({
                                         <div className="ledger-app-cell">
                                             <div 
                                                 className="ledger-icon-box"
-                                                style={{ backgroundColor: `${entry.color ?? 'var(--color-primary)'}22`, color: entry.color ?? 'var(--color-primary)' }}
+                                                style={{ 
+                                                    backgroundColor: `${catColor}24`, 
+                                                    color: catColor,
+                                                    borderColor: `${catColor}44`,
+                                                }}
                                             >
                                                 {kind === "app" ? <AppWindow size={16} /> : <FolderTree size={16} />}
                                             </div>
@@ -124,11 +137,16 @@ export function LedgerSection({
                                         </div>
                                     </td>
                                     <td>
-                                        {kind === "app" ? (
-                                            <span className="ledger-category-pill">{categoryName}</span>
-                                        ) : (
-                                            <span className="ledger-category-pill">Category Group</span>
-                                        )}
+                                        <span 
+                                            className="ledger-category-pill"
+                                            style={{
+                                                color: catColor,
+                                                backgroundColor: `${catColor}1c`,
+                                                border: `1px solid ${catColor}38`,
+                                            }}
+                                        >
+                                            {kind === "app" ? categoryName : "Category Group"}
+                                        </span>
                                         {isUncat && <span className="badge badge-sm badge--warning ml-2">{t("ledger.uncategorized")}</span>}
                                     </td>
                                     <td>
@@ -143,10 +161,10 @@ export function LedgerSection({
                                         <div className="ledger-progress-cell">
                                             <div className="ledger-progress-track">
                                                 <div 
-                                                    className="ledger-progress-fill"
+                                                    className="ledger-progress-fill" 
                                                     style={{ 
                                                         width: `${limitSeconds !== null ? limitPercent(entry.seconds, limitSeconds) : share}%`,
-                                                        backgroundColor: overLimit ? "var(--color-danger)" : (entry.color ?? "var(--color-primary)")
+                                                        backgroundColor: overLimit ? "var(--color-danger)" : catColor
                                                     }}
                                                 />
                                             </div>

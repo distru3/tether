@@ -1,13 +1,16 @@
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
+import type { CatalogDto } from "../types/generated/CatalogDto";
 import { formatDuration } from "../format";
+import { colorForCategory } from "../categoryColors";
 import { LiveTimer } from "./LiveTimer";
 
 interface UsageAsideProps {
   entries: UsageRowDto[];
   total: number;
+  catalog?: CatalogDto | null;
 }
 
-export function UsageAside({ entries, total }: UsageAsideProps) {
+export function UsageAside({ entries, total, catalog }: UsageAsideProps) {
   const ranked = [...entries].sort((a, b) => b.seconds - a.seconds).slice(0, 5);
   const max = Math.max(ranked[0]?.seconds ?? 0, 1);
 
@@ -27,6 +30,11 @@ export function UsageAside({ entries, total }: UsageAsideProps) {
           {ranked.map((entry, index) => {
             const percent = total > 0 ? Math.round((entry.seconds / total) * 100) : 0;
             const width = Math.max(8, Math.round((entry.seconds / max) * 100));
+            const appObj = catalog?.apps.find((a) => a.id === entry.id);
+            const category = appObj ? catalog?.categories.find((c) => c.id === appObj.primary_category) : null;
+            const catName = category?.name ?? "Uncategorized";
+            const catColor = colorForCategory(catName, category?.color ?? entry.color, index);
+
             return (
               <div className="usage-list-row" key={entry.id}>
                 <span className="usage-rank">0{index + 1}</span>
@@ -41,9 +49,21 @@ export function UsageAside({ entries, total }: UsageAsideProps) {
                     <span>{formatDuration(entry.seconds)}</span>
                   </div>
                   <div className="usage-bar-track">
-                    <span className="usage-bar-fill" style={{ width: `${width}%` }} />
+                    <span className="usage-bar-fill" style={{ width: `${width}%`, backgroundColor: catColor }} />
                   </div>
-                  <small>{percent}% of today</small>
+                  <div className="usage-app-subline">
+                    <small>{percent}% of today</small>
+                    <span 
+                      className="usage-category-pill"
+                      style={{
+                        color: catColor,
+                        backgroundColor: `${catColor}1c`,
+                        borderColor: `${catColor}38`,
+                      }}
+                    >
+                      {catName}
+                    </span>
+                  </div>
                 </div>
               </div>
             );

@@ -211,7 +211,9 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
         }
         for (const app of (catalog?.apps ?? [])) {
             if (!catalog?.limits.some((l) => l.target.kind === "app" && l.target.id === app.id)) {
-                opts.push({ value: `app:${app.id}`, label: app.display_name, group: "app" });
+                const cat = catalog?.categories.find((c) => c.id === app.primary_category);
+                const catSuffix = cat ? ` • ${cat.name}` : "";
+                opts.push({ value: `app:${app.id}`, label: `${app.display_name}${catSuffix}`, group: "app" });
             }
         }
         return opts;

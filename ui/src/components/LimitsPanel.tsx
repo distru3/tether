@@ -7,6 +7,7 @@ import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
 import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import { describeWeekdayOverrides, targetLabel, formatDuration } from "../format";
 import { CalendarIcon, LimitsIcon, PlusIcon, WarningIcon } from "./icons/Icons";
+import { colorForCategory } from "../categoryColors";
 import { LiveTimer } from "./LiveTimer";
 import { ToggleSwitch } from "./ToggleSwitch";
 import { FilterTabs } from "./FilterTabs";
@@ -133,6 +134,7 @@ export function LimitsPanel({
                         const varies = describeWeekdayOverrides(limit.weekday_minutes);
                         const label = targetLabel(limit.target, catalog);
                         const isCategory = limit.target.kind === "category";
+                        const isApp = limit.target.kind === "app";
                         const targetId = limit.target.kind === "total" ? 0 : (limit.target as any).id;
                         const limitSeconds = limit.default_minutes * 60;
                         const usedSeconds = limitUsageMap.get(`${limit.target.kind}-${targetId}`) ?? 0;
@@ -140,18 +142,66 @@ export function LimitsPanel({
                         const overLimit = usedSeconds >= limitSeconds;
                         const progressPercent = limitSeconds > 0 ? Math.min(100, (usedSeconds / limitSeconds) * 100) : 100;
 
+                        let categoryName: string | null = null;
+                        let categoryColor: string = "var(--color-primary)";
+
+                        if (isCategory) {
+                            const catObj = catalog?.categories.find(c => c.id === targetId);
+                            categoryName = catObj?.name ?? label;
+                            categoryColor = colorForCategory(categoryName, catObj?.color);
+                        } else if (isApp) {
+                            const appObj = catalog?.apps.find(a => a.id === targetId);
+                            const catObj = appObj ? catalog?.categories.find(c => c.id === appObj.primary_category) : null;
+                            categoryName = catObj?.name ?? "Uncategorized";
+                            categoryColor = colorForCategory(categoryName, catObj?.color);
+                        }
+
                         return (
                             <div className={`glass-card rich-limit-card ${limit.enabled ? "" : "limit-card--disabled"} ${activeTimerExpiresUtc ? "limit-card--extended" : ""}`} key={limit.id}>
                                 <div className="rich-limit-card-header">
-                                    <div className="rich-limit-icon-box" style={{ backgroundColor: isCategory ? 'rgba(79, 28, 81, 0.6)' : 'rgba(165, 91, 75, 0.2)', color: isCategory ? 'var(--color-accent)' : 'var(--color-primary)' }}>
+                                    <div 
+                                        className="rich-limit-icon-box" 
+                                        style={{ 
+                                            backgroundColor: `${categoryColor}24`, 
+                                            color: categoryColor,
+                                            borderColor: `${categoryColor}44`,
+                                        }}
+                                    >
                                         {isCategory ? <FolderTree size={20} /> : <AppWindow size={20} />}
                                     </div>
                                     <div className="rich-limit-title-group">
                                         <h3 className="limit-target-name">{label}</h3>
                                         <div className="limit-badges">
-                                            <span className={`target-badge ${isCategory ? "target-badge--category" : "target-badge--app"}`}>
-                                                {isCategory ? t("limits.category") : t("limits.app")}
-                                            </span>
+                                            {isCategory ? (
+                                                <span 
+                                                    className="target-badge target-badge--category"
+                                                    style={{ 
+                                                        backgroundColor: `${categoryColor}22`, 
+                                                        color: categoryColor, 
+                                                        borderColor: `${categoryColor}44` 
+                                                    }}
+                                                >
+                                                    {t("limits.category")}
+                                                </span>
+                                            ) : (
+                                                <>
+                                                    <span className="target-badge target-badge--app">
+                                                        {t("limits.app")}
+                                                    </span>
+                                                    {categoryName && (
+                                                        <span 
+                                                            className="target-badge target-badge--category-tag"
+                                                            style={{ 
+                                                                backgroundColor: `${categoryColor}22`, 
+                                                                color: categoryColor, 
+                                                                borderColor: `${categoryColor}44` 
+                                                            }}
+                                                        >
+                                                            {categoryName}
+                                                        </span>
+                                                    )}
+                                                </>
+                                            )}
                                             {overLimit && !activeTimerExpiresUtc && <span className="badge badge-sm badge--danger">Limit Reached</span>}
                                             {activeTimerExpiresUtc && (
                                                 <LiveTimer expiresUtc={activeTimerExpiresUtc} showLabel label="+15m" />
@@ -175,7 +225,10 @@ export function LimitsPanel({
                                         <div className="rich-limit-progress-track">
                                             <div 
                                                 className="rich-limit-progress-fill" 
-                                                style={{ width: `${progressPercent}%`, backgroundColor: overLimit ? 'var(--color-danger)' : 'var(--color-accent)' }}
+                                                style={{ 
+                                                    width: `${progressPercent}%`, 
+                                                    backgroundColor: overLimit ? 'var(--color-danger)' : categoryColor 
+                                                }}
                                             />
                                         </div>
                                     </div>
