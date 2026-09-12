@@ -129,3 +129,53 @@
     padding: 48px 24px;
     text-align: center;
 }
+
+/* Active 15m Extension Card Banner */
+.rich-limit-card.limit-card--extended {
+    border-color: rgba(220, 160, 109, 0.4);
+    box-shadow: 0 8px 32px rgba(220, 160, 109, 0.12), 0 8px 24px rgba(15, 5, 25, 0.35);
+}
+
+.limit-card-extension-banner {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: rgba(220, 160, 109, 0.1);
+    border: 1px solid rgba(220, 160, 109, 0.3);
+    border-radius: 10px;
+    backdrop-filter: blur(8px);
+}
+
+.extension-banner-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.extension-pulse-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--color-accent, #DCA06D);
+    box-shadow: 0 0 8px var(--color-accent, #DCA06D);
+    animation: live-timer-pulse 1.8s ease-in-out infinite;
+}
+
+.extension-banner-icon {
+    color: var(--color-accent, #DCA06D);
+}
+
+.extension-banner-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--color-accent, #DCA06D);
+    letter-spacing: 0.02em;
+}
+
+.extension-banner-countdown {
+    display: flex;
+    align-items: center;
+}
+

@@ -90,6 +90,11 @@ The dashboard overview is structured as an interactive grid:
 - Top metrics: Total Limits, Active Limits, Limits Reached.
 - `FilterTabs`: "All", "Active", "Disabled".
 - Limit cards grid displaying budget progress rings, weekday override badges, and quick toggles.
+- **Active +15m Extension Live Timer**:
+  - When an override is active (`activeTimerExpiresUtc`), the card receives an elevated amber border and glow (`.limit-card--extended`).
+  - Card Header Badge: Displays `<LiveTimer />` with an animated pulsing dot and countdown indicator.
+  - Card Body Banner (`.limit-card-extension-banner`): Dedicated frosted amber strip displaying `+15m Extension Active` with an animated pulsing dot and real-time second-by-second countdown.
+  - Dashboard Integration: Also surfaces the live countdown pill next to the app name in `UsageAside` on the Overview tab.
 
 ### Web Filtering (`WebFilteringPanel.tsx`)
 - Shell class: `.web-filter-page-shell`.

@@ -47,6 +47,7 @@ export function LimitsPanel({
     let limitsReached = 0;
     
     const limitUsageMap = new Map<string, number>();
+    const limitTimerMap = new Map<string, string>();
 
     if (summary) {
         limits.forEach(l => {
@@ -57,6 +58,9 @@ export function LimitsPanel({
                     limitUsageMap.set(`${l.target.kind}-${(l.target as any).id}`, entry.seconds);
                     if (entry.seconds >= l.default_minutes * 60) {
                         limitsReached++;
+                    }
+                    if (entry.timer_expires_utc) {
+                        limitTimerMap.set(`${l.target.kind}-${(l.target as any).id}`, entry.timer_expires_utc);
                     }
                 }
             } else if (l.target.kind === "total") {
@@ -132,11 +136,12 @@ export function LimitsPanel({
                         const targetId = limit.target.kind === "total" ? 0 : (limit.target as any).id;
                         const limitSeconds = limit.default_minutes * 60;
                         const usedSeconds = limitUsageMap.get(`${limit.target.kind}-${targetId}`) ?? 0;
+                        const activeTimerExpiresUtc = limit.timer_expires_utc || limitTimerMap.get(`${limit.target.kind}-${targetId}`) || null;
                         const overLimit = usedSeconds >= limitSeconds;
                         const progressPercent = limitSeconds > 0 ? Math.min(100, (usedSeconds / limitSeconds) * 100) : 100;
 
                         return (
-                            <div className={`glass-card rich-limit-card ${limit.enabled ? "" : "limit-card--disabled"}`} key={limit.id}>
+                            <div className={`glass-card rich-limit-card ${limit.enabled ? "" : "limit-card--disabled"} ${activeTimerExpiresUtc ? "limit-card--extended" : ""}`} key={limit.id}>
                                 <div className="rich-limit-card-header">
                                     <div className="rich-limit-icon-box" style={{ backgroundColor: isCategory ? 'rgba(79, 28, 81, 0.6)' : 'rgba(165, 91, 75, 0.2)', color: isCategory ? 'var(--color-accent)' : 'var(--color-primary)' }}>
                                         {isCategory ? <FolderTree size={20} /> : <AppWindow size={20} />}
@@ -147,8 +152,10 @@ export function LimitsPanel({
                                             <span className={`target-badge ${isCategory ? "target-badge--category" : "target-badge--app"}`}>
                                                 {isCategory ? t("limits.category") : t("limits.app")}
                                             </span>
-                                            {overLimit && <span className="badge badge-sm badge--danger">Limit Reached</span>}
-                                            {limit.timer_expires_utc && <LiveTimer expiresUtc={limit.timer_expires_utc} />}
+                                            {overLimit && !activeTimerExpiresUtc && <span className="badge badge-sm badge--danger">Limit Reached</span>}
+                                            {activeTimerExpiresUtc && (
+                                                <LiveTimer expiresUtc={activeTimerExpiresUtc} showLabel label="+15m" />
+                                            )}
                                         </div>
                                     </div>
                                     <div className="rich-limit-toggle">
@@ -172,6 +179,18 @@ export function LimitsPanel({
                                             />
                                         </div>
                                     </div>
+                                    {activeTimerExpiresUtc && (
+                                        <div className="limit-card-extension-banner">
+                                            <div className="extension-banner-info">
+                                                <span className="extension-pulse-dot" />
+                                                <Timer size={14} className="extension-banner-icon" />
+                                                <span className="extension-banner-title">{t("limits.extensionActive", "+15m Extension Active")}</span>
+                                            </div>
+                                            <div className="extension-banner-countdown">
+                                                <LiveTimer expiresUtc={activeTimerExpiresUtc} showPulse={false} />
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <div className="rich-limit-card-footer">

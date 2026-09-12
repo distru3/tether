@@ -1,5 +1,6 @@
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
 import { formatDuration } from "../format";
+import { LiveTimer } from "./LiveTimer";
 
 interface UsageAsideProps {
   entries: UsageRowDto[];
@@ -31,7 +32,12 @@ export function UsageAside({ entries, total }: UsageAsideProps) {
                 <span className="usage-rank">0{index + 1}</span>
                 <div className="usage-app-copy">
                   <div className="usage-app-line">
-                    <strong>{entry.label}</strong>
+                    <div style={{ display: "inline-flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+                      <strong style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{entry.label}</strong>
+                      {entry.timer_expires_utc && (
+                        <LiveTimer expiresUtc={entry.timer_expires_utc} showLabel label="+15m" />
+                      )}
+                    </div>
                     <span>{formatDuration(entry.seconds)}</span>
                   </div>
                   <div className="usage-bar-track">

@@ -1,0 +1,58 @@
+/* Live Timer Badge Styling (Color Hunt Palette: #210F37, #4F1C51, #A55B4B, #DCA06D) */
+
+.live-timer-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 8px;
+    border-radius: 9999px;
+    background: rgba(220, 160, 109, 0.15);
+    border: 1px solid rgba(220, 160, 109, 0.4);
+    color: var(--color-accent, #DCA06D);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: 0.02em;
+    box-shadow: 0 0 10px rgba(220, 160, 109, 0.12);
+    vertical-align: middle;
+}
+
+.live-timer-dot-pulse {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background-color: var(--color-accent, #DCA06D);
+    box-shadow: 0 0 6px var(--color-accent, #DCA06D);
+    animation: live-timer-pulse 1.8s ease-in-out infinite;
+    flex-shrink: 0;
+}
+
+.live-timer-icon {
+    color: var(--color-accent, #DCA06D);
+    flex-shrink: 0;
+}
+
+.live-timer-label {
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    opacity: 0.9;
+}
+
+.live-timer-digits {
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+@keyframes live-timer-pulse {
+    0%, 100% {
+        transform: scale(1);
+        opacity: 1;
+    }
+    50% {
+        transform: scale(1.4);
+        opacity: 0.4;
+    }
+}

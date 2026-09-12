@@ -577,11 +577,13 @@ fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
             .map(|l| i64::from(l.default_minutes) * 60)
     };
 
+    let now = ctx.clock.now_utc();
     let snapshot = db.day_snapshot(summary.day).ok();
     let timer_expires = |target: LimitTarget| -> Option<String> {
         snapshot
             .as_ref()
             .and_then(|s| s.active_timer_expires_utc(&target))
+            .filter(|t| *t > now)
             .map(|t| t.to_rfc3339())
     };
 
@@ -651,6 +653,13 @@ fn weekly_summary(ctx: &Ctx, end_day: DayKey) -> Response {
 
 fn catalog(ctx: &Ctx) -> Response {
     let db = lock_db(&ctx.db);
+    let now = ctx.clock.now_utc();
+    let day = DayKey::from_utc(
+        now,
+        ctx.clock.local_offset_seconds(),
+        ctx.policy.read().unwrap().day_start_minutes,
+    );
+    let snapshot = db.day_snapshot(day).ok();
     let (apps, categories, limits, pending_limits) = match (
         db.list_apps(),
         db.list_categories(),
@@ -692,7 +701,10 @@ fn catalog(ctx: &Ctx) -> Response {
                 builtin: c.builtin,
             })
             .collect(),
-        limits: limits.iter().filter_map(limit_to_dto).collect(),
+        limits: limits
+            .iter()
+            .filter_map(|l| limit_to_dto(l, snapshot.as_ref(), now))
+            .collect(),
         pending_limits: pending_limits
             .iter()
             .filter_map(pending_limit_to_dto)
@@ -1408,20 +1420,28 @@ fn dto_to_target(dto: &LimitTargetDto) -> Option<LimitTarget> {
     }
 }
 
-fn limit_to_dto(row: &LimitRow) -> Option<st_ipc::LimitDto> {
+fn limit_to_dto(
+    row: &LimitRow,
+    snapshot: Option<&st_storage::DaySnapshot>,
+    now: DateTime<Utc>,
+) -> Option<st_ipc::LimitDto> {
     let limit = row.to_limit()?;
     let target = match limit.target {
         LimitTarget::App(id) => LimitTargetDto::App { id },
         LimitTarget::Category(id) => LimitTargetDto::Category { id },
         LimitTarget::Total => LimitTargetDto::Total,
     };
+    let timer_expires_utc = snapshot
+        .and_then(|s| s.active_timer_expires_utc(&limit.target))
+        .filter(|t| *t > now)
+        .map(|t| t.to_rfc3339());
     Some(st_ipc::LimitDto {
         id: limit.id,
         target,
         default_minutes: limit.default_minutes,
         weekday_minutes: limit.weekday_minutes,
         enabled: limit.enabled,
-        timer_expires_utc: None,
+        timer_expires_utc,
     })
 }
 

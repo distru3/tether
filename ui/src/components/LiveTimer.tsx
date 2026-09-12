@@ -1,10 +1,24 @@
 import React, { useEffect, useState } from "react";
+import { Timer } from "lucide-react";
+import "./LiveTimer.css";
 
 interface LiveTimerProps {
     expiresUtc: string;
+    showIcon?: boolean;
+    showPulse?: boolean;
+    showLabel?: boolean;
+    label?: string;
+    className?: string;
 }
 
-export function LiveTimer({ expiresUtc }: LiveTimerProps) {
+export function LiveTimer({
+    expiresUtc,
+    showIcon = true,
+    showPulse = true,
+    showLabel = false,
+    label = "+15m",
+    className = "",
+}: LiveTimerProps) {
     const [remaining, setRemaining] = useState<number>(0);
 
     useEffect(() => {
@@ -34,8 +48,11 @@ export function LiveTimer({ expiresUtc }: LiveTimerProps) {
         : `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
 
     return (
-        <span className="badge badge-sm badge--info" style={{ fontFamily: "var(--font-mono)", fontWeight: 600, color: "oklch(0.9 0.05 240)", background: "oklch(0.4 0.1 260)" }}>
-            ⏱ {formatted}
+        <span className={`live-timer-badge ${className}`} title={`Extended time remaining: ${formatted}`}>
+            {showPulse && <span className="live-timer-dot-pulse" />}
+            {showIcon && <Timer size={12} className="live-timer-icon" />}
+            {showLabel && <span className="live-timer-label">{label}</span>}
+            <span className="live-timer-digits font-mono">{formatted}</span>
         </span>
     );
 }
