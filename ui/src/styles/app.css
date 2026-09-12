@@ -2076,22 +2076,21 @@ body {
 }
 
 .dialog {
-  width: 420px;
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 64px);
+  width: 540px;
+  max-width: min(540px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
   overflow: visible;
-  padding: 24px;
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-xl);
-  box-shadow: var(--shadow-modal);
+  padding: 30px 34px;
+  background: #2a1442;
+  border: 1px solid rgba(220, 160, 109, 0.25);
+  border-radius: 20px;
+  box-shadow: 0 24px 64px rgba(15, 5, 25, 0.85);
+  backdrop-filter: blur(28px);
   transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .dialog > form {
-  max-height: calc(100vh - 112px);
-  overflow-y: auto;
-  overflow-x: visible;
+  overflow: visible;
 }
 
 @starting-style {
@@ -2108,20 +2107,21 @@ body {
 .dialog-eyebrow {
   font-family: var(--font-mono);
   font-size: 11px;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--color-accent, #DCA06D);
 }
 
 .dialog-title {
-  margin: 4px 0 6px;
-  font-size: 18px;
+  margin: 6px 0 8px;
+  font-size: 22px;
   font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.02em;
 }
 
 .dialog-error {
-  margin-top: 10px;
+  margin-top: 12px;
   font-size: 13px;
   color: var(--color-danger);
 }
@@ -2129,8 +2129,8 @@ body {
 .dialog-actions {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  margin-top: 16px;
+  gap: 12px;
+  margin-top: 24px;
 }
 
 
@@ -2138,8 +2138,8 @@ body {
 .field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  margin-top: 14px;
+  gap: 8px;
+  margin-top: 18px;
   position: relative;
   overflow: visible;
 }
@@ -2147,25 +2147,28 @@ body {
 .field-label {
   font-family: var(--font-mono);
   font-size: 11px;
-  letter-spacing: 0.1em;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--text-muted);
+  font-weight: 600;
 }
 
-.field input[type=\"number\"], .field input[type=\"password\"], .field input[type=\"text\"], .field select {
+.field input[type="number"], .field input[type="password"], .field input[type="text"], .field select {
   width: 100%;
-  padding: 6px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  background-color: var(--bg-card);
+  padding: 10px 14px;
+  border: 1px solid rgba(220, 160, 109, 0.2);
+  border-radius: 10px;
+  background-color: rgba(33, 15, 55, 0.7);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13.5px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.field input[type=\"number\"]:focus, .field input[type=\"password\"]:focus, .field input[type=\"text\"]:focus, .field select:focus {
+.field input[type="number"]:focus, .field input[type="password"]:focus, .field input[type="text"]:focus, .field select:focus {
   border-color: var(--color-focus);
-  outline: 1px solid var(--color-focus);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(220, 160, 109, 0.25);
 }
 
 .field--inline {
@@ -2209,21 +2212,23 @@ body {
   align-items: center;
   justify-content: space-between;
   width: 100%;
-  padding: 6px 10px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  background-color: var(--bg-card);
+  padding: 10px 14px;
+  border: 1px solid rgba(220, 160, 109, 0.2);
+  border-radius: 10px;
+  background-color: rgba(33, 15, 55, 0.7);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13.5px;
   cursor: pointer;
   text-align: left;
   gap: 8px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .app-picker__trigger:focus {
   border-color: var(--color-focus);
-  outline: 1px solid var(--color-focus);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(220, 160, 109, 0.25);
 }
 
 .app-picker__trigger:disabled {
@@ -2248,40 +2253,41 @@ body {
 
 .app-picker__dropdown {
   position: absolute;
-  top: calc(100% + 4px);
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
   z-index: 200;
-  background: var(--bg-panel, #2e1245);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-md);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  background: #240e38;
+  border: 1px solid rgba(220, 160, 109, 0.3);
+  border-radius: 12px;
+  box-shadow: 0 18px 48px rgba(15, 5, 25, 0.9);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  max-height: 280px;
+  max-height: 290px;
 }
 
 .app-picker__search-wrap {
-  padding: 8px;
-  border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(220, 160, 109, 0.12);
   flex-shrink: 0;
 }
 
 .app-picker__search {
   width: 100%;
-  padding: 5px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm, 4px);
-  background: var(--bg-input, rgba(255,255,255,0.05));
+  padding: 8px 12px;
+  border: 1px solid rgba(220, 160, 109, 0.25);
+  border-radius: 8px;
+  background: rgba(33, 15, 55, 0.8);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .app-picker__search:focus {
   border-color: var(--color-focus);
-  outline: 1px solid var(--color-focus);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(220, 160, 109, 0.25);
 }
 
 .app-picker__list {
@@ -2293,18 +2299,19 @@ body {
 }
 
 .app-picker__item {
-  padding: 6px 12px;
+  padding: 8px 14px;
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-secondary);
   cursor: pointer;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  transition: background 0.1s ease;
 }
 
 .app-picker__item--active {
-  background: rgba(255,255,255,0.07);
+  background: rgba(220, 160, 109, 0.12);
   color: var(--text-primary);
 }
 
@@ -2315,7 +2322,7 @@ body {
 .app-picker__item--special {
   color: var(--text-primary);
   font-weight: 600;
-  border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+  border-bottom: 1px solid rgba(220, 160, 109, 0.12);
   margin-bottom: 4px;
 }
 
