@@ -89,7 +89,7 @@ The dashboard overview is structured as an interactive grid:
 
 ### Component Details
 - **`LedgerRule.tsx`**: Visual 24-hour timeline bar (00 to 24 hours). Slices each usage interval, maps `appId` to `primary_category`, and colors using `categoryColors.ts`. Displays category legend at the bottom.
-- **`UsageAside.tsx`**: Compact right-side card showing top 5 ranked applications with visual progress bars and live timer countdowns.
+- **`UsageAside.tsx`**: Compact right-side card displaying strictly the top 5 ranked applications with visual progress bars, live timer countdowns, and streamlined vertical spacing (`overflow: hidden`) to eliminate scrollability completely within the card bounds.
 - **`WeeklyChart.tsx`**: 7-day bar chart showing day-by-day totals with week-over-week deltas.
 - **`CategoryMix.tsx`**: Circular conic-gradient donut chart showing time distribution by category.
 
