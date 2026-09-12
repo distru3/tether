@@ -28,11 +28,11 @@ The top chrome consists of a streamlined App Bar (TitleBar) and a horizontal Top
 
 ```
 +-----------------------------------------------------------------------------------------+
-| [TitleBar] Tether (34px, custom drag region, logo, version tag, minimize/maximize/close)|
+| [TitleBar] Tether (34px, custom drag region, minimal title, minimize/maximize/close)    |
 +-----------------------------------------------------------------------------------------+
 | [Top Nav Bar: .app-sidebar] (58px sticky smoked glass)                                  |
-|  [Tether Logo + Live Pill]  |  ( [Dashboard] [Web Filter] [App Limits] [Settings] )  |  |
-|                             |               (Segmented Capsule)       | (< Today >)   |
+|  [Tether Logo + Live Pill]  |  [Dashboard] [Web Filter] [App Limits] [Settings]  | (< Today >)  |
+|                             |               (Horizontal Capsule)                 |             |
 +-----------------------------------------------------------------------------------------+
 | [Main Content Area: .app-main-content]                                                  |
 |                                                                                         |
@@ -43,14 +43,14 @@ The top chrome consists of a streamlined App Bar (TitleBar) and a horizontal Top
 
 ### App Bar (`TitleBar.tsx` & `TitleBar.css`)
 - **Height**: 34px, `background: rgba(22, 10, 36, 0.98)` matching deep horizon obsidian purple.
-- **Left Cluster**: 16px Tether brand logo, crisp "Tether" title (`12px`, font-weight 650), and `v0.1` version badge.
+- **Left Cluster**: Clean "Tether" window title (`12px`, font-weight 650) without repeating the app logo.
 - **Window Controls**: Minimize, Maximize/Restore, Close caption buttons (46px hit width, hover states, `#e81123` close hover, with `transform: none !important` to prevent active-state distortion).
 
 ### Navigation Bar (`Sidebar.tsx` & `redesign.css`)
 - **Container**: 58px min-height, `rgba(26, 11, 42, 0.94)` smoked glass, `backdrop-filter: blur(20px) saturate(135%)`.
-- **Brand Cluster**: 34x34px rounded Tether emblem with warm shadow, "Tether" logotype (`1.02rem`, font-weight 750), and adjacent inline **Live Status Pill** (`status-pill--live` with green pulsing dot).
-- **Center Nav Segmented Capsule**: Floating pill track (`rgba(16, 7, 28, 0.68)`) hosting 4 tab buttons. Active tab highlighted with elevated warm terracotta gradient (`rgba(165, 91, 75, 0.35)` to `rgba(122, 62, 48, 0.28)`) and amber icon highlight. Old dangling underline removed.
-- **Date Stepper Capsule**: Matching floating pill track on the right with previous/next buttons and an interactive "Today" / date label with calendar icon for returning to Today when viewing past ledger records.
+- **Brand Cluster**: Renders the 30px Tether squircle logo cleanly without any outer border/background wrapper, paired with "Tether" logotype (`1.05rem`, font-weight 750) and an inline **Live Status Pill** (`status-pill--live`).
+- **Center Nav Segmented Capsule**: Horizontal row (`flex-direction: row !important`) hosting the 4 section tabs side-by-side in a sleek floating pill track. Active tab is highlighted with an elevated warm terracotta gradient (`rgba(165, 91, 75, 0.35)` to `rgba(122, 62, 48, 0.28)`) and amber icon accent.
+- **Date Stepper Capsule**: Matching floating pill track on the right with responsive `<` and `>` buttons and an interactive "Today" / date label with calendar icon for returning to Today when viewing past ledger records.
 
 ### Nav Items
 1. **Dashboard** (`overview`): Daily timeline, top applications, weekly chart, category distribution (includes blocked app count badge).
