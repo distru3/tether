@@ -123,15 +123,23 @@ import fs from "fs";
   if (await addBtn.count() > 0) {
     await addBtn.first().click();
     await page.waitForTimeout(500);
-    // Open picker
-    const pickerTrigger = page.locator('.app-picker__trigger');
-    if (await pickerTrigger.count() > 0) {
-      await pickerTrigger.first().click();
+    
+    // Toggle weekday overrides
+    const weekBtn = page.locator('.weekday-toggle');
+    if (await weekBtn.count() > 0) {
+      await weekBtn.first().click();
       await page.waitForTimeout(400);
+      
+      // Check Saturday
+      const satCheck = page.locator('input[aria-label="Override SAT"]');
+      if (await satCheck.count() > 0) {
+        await satCheck.first().click();
+        await page.waitForTimeout(300);
+      }
     }
   }
   
-  const artifactPath = "C:/Users/kacc2/.gemini/antigravity/brain/7f37d91f-66d5-41f3-b9c1-bd4d2c44b88b/scratch/ui_screenshot_limits.png";
+  const artifactPath = "C:/Users/kacc2/.gemini/antigravity/brain/7f37d91f-66d5-41f3-b9c1-bd4d2c44b88b/scratch/ui_screenshot_overrides.png";
   await page.screenshot({ path: artifactPath, fullPage: true });
   
   console.log("Screenshot saved to", artifactPath);

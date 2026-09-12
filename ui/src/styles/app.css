@@ -2342,21 +2342,25 @@ body {
 .weekday-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 14px;
-  padding: 0;
-  border: none;
-  background: none;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(220, 160, 109, 0.15);
+  background: rgba(33, 15, 55, 0.4);
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.1em;
+  font-size: 11.5px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .weekday-toggle:hover {
   color: var(--text-primary);
+  background: rgba(33, 15, 55, 0.7);
+  border-color: rgba(220, 160, 109, 0.3);
 }
 
 .weekday-toggle:disabled {
@@ -2365,67 +2369,142 @@ body {
 }
 
 .weekday-chevron {
-  width: 10px;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  color: var(--color-accent, #DCA06D);
 }
 
 .weekday-count {
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  color: var(--color-accent, #DCA06D);
+  font-weight: 600;
   text-transform: none;
-  color: var(--text-faint);
 }
 
 .weekday-grid {
-  margin-top: 4px;
-  border-bottom: 1px solid var(--border-subtle);
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  padding: 12px;
+  background: rgba(26, 11, 44, 0.5);
+  border: 1px solid rgba(220, 160, 109, 0.15);
+  border-radius: 12px;
+}
+
+.weekday-row:last-child {
+  grid-column: span 2;
 }
 
 .weekday-row {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  padding: 6px 0;
+  padding: 8px 12px;
+  background: rgba(33, 15, 55, 0.5);
+  border: 1px solid rgba(220, 160, 109, 0.1);
+  border-radius: 8px;
+  transition: all 0.15s ease;
 }
 
-.weekday-row+.weekday-row {
-  border-top: 1px solid var(--border-subtle);
+.weekday-row:hover {
+  border-color: rgba(220, 160, 109, 0.25);
+  background: rgba(33, 15, 55, 0.8);
+}
+
+.weekday-row--active {
+  background: rgba(165, 91, 75, 0.15);
+  border-color: rgba(220, 160, 109, 0.35);
+}
+
+.weekday-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.check-input {
+  appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1.5px solid rgba(220, 160, 109, 0.4);
+  background: rgba(33, 15, 55, 0.8);
+  cursor: pointer;
+  display: inline-grid;
+  place-items: center;
+  transition: all 0.15s ease;
+  margin: 0;
+  flex-shrink: 0;
+}
+
+.check-input:checked {
+  background: var(--color-primary, #A55B4B);
+  border-color: var(--color-accent, #DCA06D);
+}
+
+.check-input:checked::after {
+  content: "";
+  width: 4px;
+  height: 8px;
+  border: solid #fff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg) translate(-0.5px, -1px);
 }
 
 .weekday-name {
-  flex-shrink: 0;
-  width: 36px;
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.06em;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: var(--text-muted);
+}
+
+.weekday-row--active .weekday-name {
+  color: var(--color-accent, #DCA06D);
+}
+
+.weekday-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .weekday-input {
-  flex-shrink: 0;
-  width: 84px;
-  margin-left: auto;
-  padding: 4px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background-color: var(--bg-input);
+  width: 58px;
+  padding: 5px 8px;
+  border: 1px solid rgba(220, 160, 109, 0.2);
+  border-radius: 6px;
+  background: rgba(20, 7, 34, 0.7);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 13px;
   font-variant-numeric: tabular-nums;
+  text-align: right;
+  transition: border-color 0.15s ease;
+}
+
+.weekday-input:focus {
+  border-color: var(--color-focus, #DCA06D);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(220, 160, 109, 0.2);
 }
 
 .weekday-input:disabled {
-  border-color: var(--border-subtle);
-  background-color: transparent;
-  color: var(--text-faint);
+  opacity: 0.35;
+  border-color: transparent;
+  background: transparent;
+  color: var(--text-muted);
 }
 
-.check-group {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.weekday-unit {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-muted);
 }
 
 .check-input {

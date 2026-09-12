@@ -306,35 +306,45 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                 >
                     <span className="weekday-chevron">{weekOpen ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}</span>
                     {t("limitEditor.perDayOverrides")}
-                    {overrideCount > 0 && <span className="weekday-count">Â· {overrideCount}</span>}
+                    {overrideCount > 0 && <span className="weekday-count">({overrideCount} active)</span>}
                 </button>
                 {weekOpen && (
                     <div className="weekday-grid">
                         {dayOverrides.map((day, index) => (
-                            <div key={WEEKDAY_SHORT[index]} className="weekday-row">
-                                <input
-                                    type="checkbox"
-                                    className="check-input"
-                                    checked={day.override}
-                                    disabled={busy}
-                                    aria-label={`Override ${WEEKDAY_SHORT[index]}`}
-                                    onChange={(event) =>
-                                        updateDay(index, { override: event.target.checked })
-                                    }
-                                />
-                                <span className="weekday-name">{t(`weeklyChart.${WEEKDAY_SHORT[index]!.toLowerCase()}`)}</span>
-                                <input
-                                    type="number"
-                                    className="weekday-input"
-                                    min={0}
-                                    max={1440}
-                                    step={1}
-                                    placeholder="â€”"
-                                    value={day.minutes}
-                                    disabled={busy || !day.override}
-                                    aria-label={`${WEEKDAY_SHORT[index]} minutes`}
-                                    onChange={(event) => updateDay(index, { minutes: event.target.value })}
-                                />
+                            <div
+                                key={WEEKDAY_SHORT[index]}
+                                className={`weekday-row ${day.override ? "weekday-row--active" : ""}`}
+                            >
+                                <label className="weekday-label">
+                                    <input
+                                        type="checkbox"
+                                        className="check-input"
+                                        checked={day.override}
+                                        disabled={busy}
+                                        aria-label={`Override ${WEEKDAY_SHORT[index]}`}
+                                        onChange={(event) =>
+                                            updateDay(index, { override: event.target.checked })
+                                        }
+                                    />
+                                    <span className="weekday-name">
+                                        {t(`weeklyChart.${WEEKDAY_SHORT[index]!.toLowerCase()}`)}
+                                    </span>
+                                </label>
+                                <div className="weekday-input-wrap">
+                                    <input
+                                        type="number"
+                                        className="weekday-input"
+                                        min={0}
+                                        max={1440}
+                                        step={1}
+                                        placeholder={minutes ? `${minutes}` : "60"}
+                                        value={day.minutes}
+                                        disabled={busy || !day.override}
+                                        aria-label={`${WEEKDAY_SHORT[index]} minutes`}
+                                        onChange={(event) => updateDay(index, { minutes: event.target.value })}
+                                    />
+                                    <span className="weekday-unit">min</span>
+                                </div>
                             </div>
                         ))}
                     </div>
