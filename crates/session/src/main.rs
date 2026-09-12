@@ -209,7 +209,7 @@ fn main() -> anyhow::Result<()> {
     };
     // App id paired with its live overlay thread handle.
     let mut active: Option<(i64, overlay::OverlayRun)> = None;
-    let mut active_hud: Option<((i32, i32, i32, i32), hud::HudOverlayRun)> = None;
+    let mut active_hud: Option<(isize, hud::HudOverlayRun)> = None;
 
     // Proactive app discovery runs once per process lifetime, on first successful
     // agent connection. It must run in the session helper (not the agent) because
@@ -361,18 +361,18 @@ fn main() -> anyhow::Result<()> {
             if let Some(hud_state) = &sess.hud {
                 if let Some(snap) = snapshot::focused_snapshot() {
                     if snap.rect.2 > 0 && snap.rect.3 > 0 {
-                        // Check if we need to respawn because window moved or changed
-
+                        // Check if we need to respawn because target window handle changed
                         let should_respawn = active_hud
                             .as_ref()
-                            .map(|(rect, _)| *rect != snap.rect)
+                            .map(|(hwnd, _)| *hwnd != snap.hwnd)
                             .unwrap_or(true);
 
                         if should_respawn {
                             if let Some((_, run)) = active_hud.take() {
                                 run.dismiss();
                             }
-                            active_hud = Some((snap.rect, hud::spawn_hud_overlay(snap.rect)));
+                            active_hud =
+                                Some((snap.hwnd, hud::spawn_hud_overlay(snap.hwnd, snap.rect)));
                         }
 
                         if let Some((_, ref run)) = active_hud {
@@ -555,6 +555,7 @@ fn show_overlay(
     let target_hwnd = snap.hwnd;
     tracing::info!(app = app_id, pid, ?mode, "showing block overlay");
     Some(overlay::spawn_overlay(
+        target_hwnd,
         snap.rect,
         overlay::OverlayCallbacks::new(
             move || close_app_direct(app_id, pid, target_hwnd),

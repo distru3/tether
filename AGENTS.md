@@ -94,3 +94,11 @@ CLI extras: `screentime-agent --service|--install|--uninstall` (SCM mode; instal
 - **The block overlay is hand-painted GDI in the session crate**: Topmost, borderless window (`WS_EX_TOPMOST | WS_EX_NOACTIVATE`) with a low-level keyboard hook (`WH_KEYBOARD_LL`).
 - **Session 1 Hz log quietness**: The session sampling front runs on a 1 Hz cycle. It must **never emit `INFO`-level logs for steady-state periodic flushes** (such as routine usage reports, keepalive ticks, or regular window focus changes). Routine per-second operations belong in `DEBUG`/`TRACE`, reserving `INFO` exclusively for process startup, link disconnects/reconnects, and explicit errors.
 - **DNS proxy upstream forwarding requires an ephemeral socket**: In `st-dns`, forwarding non-blocked queries to an upstream resolver must bind an ephemeral client socket (`0.0.0.0:0`), never reuse the `127.0.0.1:53` listener socket.
+
+---
+
+## 7. Mandatory Documentation Updates (Context Preservation)
+
+- **Continuous Documentation**: Each new feature, architectural adjustment, styling overhaul, or bugfix **must be recorded in the relevant document in `docs/`** (e.g. `docs/UI_SPECIFICATION.md`, `docs/SYSTEM_MAP.md`, `docs/ARCHITECTURE.md`, or dedicated architecture decision records in `docs/adr/`).
+- **Context Preservation**: Agents must never leave the repository's documentation stale after modifying code or UI structures. Every session must leave behind an updated, truthful record of changes made, ensuring zero loss of operational context across agent turns.
+

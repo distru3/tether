@@ -43,9 +43,11 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetClientRect, GetMessageW,
-    GetWindowLongPtrW, KillTimer, LoadCursorW, PostMessageW, PostQuitMessage, RegisterClassExW,
-    SetLayeredWindowAttributes, SetTimer, SetWindowLongPtrW, SetWindowsHookExW, TranslateMessage,
-    UnhookWindowsHookEx, GWLP_USERDATA, IDC_ARROW, LAYERED_WINDOW_ATTRIBUTES_FLAGS, MSG,
+    GetWindowLongPtrW, GetWindowRect, IsIconic, IsWindow, IsWindowVisible, KillTimer, LoadCursorW,
+    PostMessageW, PostQuitMessage, RegisterClassExW, SetLayeredWindowAttributes, SetTimer,
+    SetWindowLongPtrW, SetWindowPos, SetWindowsHookExW, ShowWindow, TranslateMessage,
+    UnhookWindowsHookEx, GWLP_USERDATA, HWND_TOPMOST, IDC_ARROW, LAYERED_WINDOW_ATTRIBUTES_FLAGS,
+    MSG, SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNOACTIVATE,
     WINDOWS_HOOK_ID, WM_CLOSE, WM_DESTROY, WM_LBUTTONUP, WM_NCCREATE, WM_PAINT, WM_TIMER,
     WNDCLASSEXW, WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_POPUP, WS_VISIBLE,
 };
@@ -139,6 +141,7 @@ const CORNER_RADIUS: i32 = 16;
 /// The window covers the entire app rectangle `(app_x, app_y, app_w, app_h)` so
 /// mouse input is fully intercepted, with a centered floating obsidian card.
 pub fn spawn_overlay(
+    target_hwnd: isize,
     rect: (i32, i32, i32, i32),
     callbacks: OverlayCallbacks,
     mode: OverlayMode,
@@ -167,7 +170,16 @@ pub fn spawn_overlay(
     let thread_control = control.clone();
     let thread = std::thread::Builder::new()
         .name("screentime-overlay".into())
-        .spawn(move || run_overlay((x, y, w, h), callbacks, mode, label, thread_control))
+        .spawn(move || {
+            run_overlay(
+                target_hwnd,
+                (x, y, w, h),
+                callbacks,
+                mode,
+                label,
+                thread_control,
+            )
+        })
         .expect("spawning overlay thread");
     OverlayRun {
         control,
@@ -177,6 +189,7 @@ pub fn spawn_overlay(
 
 /// Per-window state living behind `GWLP_USERDATA`; owned by the window itself.
 struct OverlayState {
+    target_hwnd: isize,
     callbacks: OverlayCallbacks,
     mode: OverlayMode,
     label: String,
@@ -332,6 +345,62 @@ unsafe extern "system" fn wnd_proc(
                         let _ = KillTimer(hwnd, FADE_TIMER_ID);
                     }
                 }
+            } else if wparam.0 == TRACK_TIMER_ID {
+                let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut OverlayState;
+                if !state.is_null() {
+                    let st = &mut *state;
+                    let target = HWND(st.target_hwnd as *mut c_void);
+                    if !target.0.is_null() && IsWindow(target).as_bool() {
+                        if IsIconic(target).as_bool() {
+                            let _ = ShowWindow(hwnd, SW_HIDE);
+                        } else if IsWindowVisible(target).as_bool() {
+                            let mut wr = RECT::default();
+                            if GetWindowRect(target, &mut wr).is_ok() {
+                                let app_w = wr.right - wr.left;
+                                let app_h = wr.bottom - wr.top;
+                                if app_w > 0 && app_h > 0 {
+                                    let ideal_card_h = match st.mode {
+                                        OverlayMode::Buttons => CARD_H_BUTTONS,
+                                        OverlayMode::PinExtend => CARD_H_PIN,
+                                    };
+                                    let w = app_w.max(CARD_W + 32);
+                                    let h = app_h.max(ideal_card_h + 32);
+                                    let x = if app_w < CARD_W + 32 {
+                                        wr.left - (CARD_W + 32 - app_w) / 2
+                                    } else {
+                                        wr.left
+                                    };
+                                    let y = if app_h < ideal_card_h + 32 {
+                                        wr.top - (ideal_card_h + 32 - app_h) / 2
+                                    } else {
+                                        wr.top
+                                    };
+
+                                    let mut cur = RECT::default();
+                                    let _ = GetWindowRect(hwnd, &mut cur);
+                                    let cur_w = cur.right - cur.left;
+                                    let cur_h = cur.bottom - cur.top;
+                                    if cur.left != x || cur.top != y || cur_w != w || cur_h != h {
+                                        let _ = SetWindowPos(
+                                            hwnd,
+                                            HWND_TOPMOST,
+                                            x,
+                                            y,
+                                            w,
+                                            h,
+                                            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_SHOWWINDOW,
+                                        );
+                                        let _ = InvalidateRect(hwnd, None, false);
+                                    }
+                                }
+                            }
+                            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                        }
+                    } else {
+                        // Target window closed or invalid
+                        let _ = DestroyWindow(hwnd);
+                    }
+                }
             }
             LRESULT(0)
         }
@@ -421,20 +490,23 @@ unsafe fn handle_click(hwnd: HWND, state: &mut OverlayState, px: i32, py: i32) {
     }
 }
 
-/// Modern Obsidian & Glass theme palette. COLORREF packs as `0x00bbggrr`.
+/// Modern Color Hunt theme palette. COLORREF packs as `0x00bbggrr`.
 const fn rgb(r: u8, g: u8, b: u8) -> u32 {
     r as u32 | (g as u32) << 8 | (b as u32) << 16
 }
-const BG_BACKDROP: u32 = rgb(249, 250, 251); // gray-50
-const BG_OBSIDIAN: u32 = rgb(255, 255, 255); // white
-const BG_CARD_ELEVATED: u32 = rgb(243, 244, 246); // gray-100
-const BG_ROSE_BADGE: u32 = rgb(254, 226, 226); // red-100
-const BORDER_ELEVATED: u32 = rgb(229, 231, 235); // gray-200
-const TEXT_WHITE: u32 = rgb(17, 24, 39); // gray-900
-const TEXT_MUTED: u32 = rgb(107, 114, 128); // gray-500
-const ACCENT_INDIGO: u32 = rgb(99, 102, 241); // indigo-500
-const ACCENT_INDIGO_BRIGHT: u32 = rgb(79, 70, 229); // indigo-600
-const ACCENT_ROSE: u32 = rgb(239, 68, 68); // red-500
+const BG_BACKDROP: u32 = rgb(0x13, 0x09, 0x22); // Deep obsidian purple veil
+const BG_OBSIDIAN: u32 = rgb(0x28, 0x11, 0x33); // Floating rich purple card
+const BORDER_CARD: u32 = rgb(0x56, 0x22, 0x5C); // Card boundary
+const BG_CARD_ELEVATED: u32 = rgb(0x3B, 0x18, 0x42); // Elevated keypad button / surface
+const BORDER_ELEVATED: u32 = rgb(0x56, 0x22, 0x5C); // Elevated border
+const BG_ROSE_BADGE: u32 = rgb(0x4A, 0x18, 0x22); // Dark burgundy badge
+const BORDER_ROSE_BADGE: u32 = rgb(0xA5, 0x5B, 0x4B); // Terracotta badge border
+const TEXT_ROSE_BADGE: u32 = rgb(0xDC, 0xA0, 0x6D); // Amber gold badge text
+const TEXT_WHITE: u32 = rgb(0xF5, 0xEE, 0xF8); // Crisp ivory white text
+const TEXT_MUTED: u32 = rgb(0xC5, 0xAD, 0xC8); // Soft lavender muted text
+const ACCENT_AMBER: u32 = rgb(0xDC, 0xA0, 0x6D); // Amber gold highlight & lit PIN core
+const ACCENT_TERRACOTTA: u32 = rgb(0xA5, 0x5B, 0x4B); // Warm terracotta primary action
+const ACCENT_ROSE: u32 = rgb(0xDF, 0x5E, 0x4E); // Coral/rose error
 
 /// Font suite for the modern overlay interface.
 struct Fonts {
@@ -672,7 +744,7 @@ unsafe fn draw_button(
 ) {
     match style {
         BtnStyle::Primary => {
-            draw_round_rect(hdc, r, 10, ACCENT_INDIGO, Some(ACCENT_INDIGO));
+            draw_round_rect(hdc, r, 10, ACCENT_TERRACOTTA, Some(ACCENT_TERRACOTTA));
             draw_text_centered(
                 hdc,
                 r.x + r.w / 2,
@@ -707,14 +779,14 @@ unsafe fn draw_block_badge(hdc: HDC, right: i32, y: i32, text: &str, fonts: &Fon
         w,
         h,
     };
-    draw_round_rect(hdc, &r, 10, BG_ROSE_BADGE, Some(ACCENT_ROSE));
+    draw_round_rect(hdc, &r, 10, BG_ROSE_BADGE, Some(BORDER_ROSE_BADGE));
     draw_text_centered(
         hdc,
         r.x + w / 2,
         y + (h - th) / 2,
         text,
         &fonts.badge,
-        ACCENT_ROSE,
+        TEXT_ROSE_BADGE,
     );
 }
 
@@ -743,13 +815,7 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
 
         // 2. Centered floating Obsidian card.
         let card = card_geometry(cw, ch, state.mode);
-        draw_round_rect(
-            hdc,
-            &card,
-            CORNER_RADIUS,
-            BG_OBSIDIAN,
-            Some(BORDER_ELEVATED),
-        );
+        draw_round_rect(hdc, &card, CORNER_RADIUS, BG_OBSIDIAN, Some(BORDER_CARD));
 
         // 3. Header brand voice: uppercase SCREENTIME.
         draw_tracked_caps(
@@ -780,7 +846,7 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
                 right: card.x + card.w - PAD,
                 bottom: card.y + 49,
             },
-            BORDER_ELEVATED,
+            BORDER_CARD,
         );
 
         // 6. Headline: "Time's up for today"
@@ -793,7 +859,7 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
             TEXT_WHITE,
         );
 
-        // 7. Prominent blocked app label in vibrant indigo.
+        // 7. Prominent blocked app label in vibrant amber gold.
         let label = ellipsize(hdc, &state.label, &fonts.app_label, card.w - PAD * 2);
         draw_text(
             hdc,
@@ -801,7 +867,7 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
             card.y + 92,
             &label,
             &fonts.app_label,
-            ACCENT_INDIGO_BRIGHT,
+            ACCENT_AMBER,
         );
 
         // 8. Clean sub-caption explaining the reason.
@@ -855,7 +921,7 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
                     2,
                 );
 
-                // Masked entry: glowing dots (● ● ● ●) that light up indigo for each digit entered.
+                // Masked entry: glowing dots (● ● ● ●) that light up amber gold for each digit entered.
                 let num_dots = state.pin.chars().count().clamp(4, PIN_MAX_DIGITS);
                 let dot_spacing = 20;
                 let dots_total_w = (num_dots as i32) * dot_spacing;
@@ -865,26 +931,19 @@ unsafe fn paint(hwnd: HWND, state: &OverlayState) {
                 for i in 0..num_dots {
                     let dot_cx = dots_start_x + (i as i32) * dot_spacing;
                     if i < state.pin.chars().count() {
-                        // Lit dot: glow outer ring + solid indigo core.
+                        // Lit dot: warm terracotta glow outer ring + solid amber gold core.
                         draw_circle(
                             hdc,
                             dot_cx,
                             dots_y,
                             6,
-                            rgb(0x28, 0x2D, 0x54),
-                            Some(ACCENT_INDIGO_BRIGHT),
+                            rgb(0x4A, 0x26, 0x30),
+                            Some(ACCENT_TERRACOTTA),
                         );
-                        draw_circle(hdc, dot_cx, dots_y, 3, ACCENT_INDIGO, Some(ACCENT_INDIGO));
+                        draw_circle(hdc, dot_cx, dots_y, 3, ACCENT_AMBER, Some(ACCENT_AMBER));
                     } else {
-                        // Unlit slot: dark background + subtle border.
-                        draw_circle(
-                            hdc,
-                            dot_cx,
-                            dots_y,
-                            5,
-                            BG_CARD_ELEVATED,
-                            Some(BORDER_ELEVATED),
-                        );
+                        // Unlit slot: dark purple recessed well + subtle border.
+                        draw_circle(hdc, dot_cx, dots_y, 5, BG_OBSIDIAN, Some(BORDER_ELEVATED));
                         draw_circle(hdc, dot_cx, dots_y, 2, BORDER_ELEVATED, None);
                     }
                 }
@@ -960,11 +1019,16 @@ const FADE_TIMER_ID: usize = 1;
 const FADE_STEP_MS: u32 = 20;
 const FADE_ALPHA_STEP: u8 = 25;
 /// Target layered window alpha for glass-like backdrop translucency.
-const TARGET_ALPHA: u8 = 240;
+const TARGET_ALPHA: u8 = 245;
+
+/// Timer id for 60 FPS window tracking.
+const TRACK_TIMER_ID: usize = 2;
+const TRACK_STEP_MS: u32 = 16; // ~60 FPS
 
 /// Run one overlay to completion. Blocks the calling thread in a message pump
 /// until the window is destroyed; call via [`spawn_overlay`] only.
 fn run_overlay(
+    target_hwnd: isize,
     rect: (i32, i32, i32, i32),
     callbacks: OverlayCallbacks,
     mode: OverlayMode,
@@ -987,6 +1051,7 @@ fn run_overlay(
 
         let (x, y, w, h) = rect;
         let state = Box::into_raw(Box::new(OverlayState {
+            target_hwnd,
             callbacks,
             mode,
             label,
@@ -1029,7 +1094,8 @@ fn run_overlay(
             tracing::warn!("keyboard hook unavailable; overlay shows without input blocking");
         }
 
-        SetTimer(hwnd, FADE_TIMER_ID, FADE_STEP_MS, None);
+        let _ = SetTimer(hwnd, FADE_TIMER_ID, FADE_STEP_MS, None);
+        let _ = SetTimer(hwnd, TRACK_TIMER_ID, TRACK_STEP_MS, None);
 
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
@@ -1037,6 +1103,7 @@ fn run_overlay(
             DispatchMessageW(&msg);
         }
 
+        let _ = KillTimer(hwnd, TRACK_TIMER_ID);
         let _ = KillTimer(hwnd, FADE_TIMER_ID);
         if let Some(hook) = hook {
             let _ = UnhookWindowsHookEx(hook);

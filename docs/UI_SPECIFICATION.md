@@ -4,21 +4,20 @@ This document defines the frontend layout, design system tokens, and component a
 
 ---
 
-## 1. Design System: Smoked-Glass Analytics Workspace
+## 1. Design System: Color Hunt Smoked-Glass Workspace
 
-The UI uses a dark, smoked-glass telemetry aesthetic defined primarily in `ui/src/styles/redesign.css` with fallback tokens in `tokens.css`.
+The UI uses a dark obsidian purple and warm amber smoked-glass aesthetic defined in `ui/src/styles/tokens.css`, `ui/src/styles/redesign.css`, and `ui/src/styles/app.css`:
 
-### Core Palette
-- **Backgrounds**: Deep indigo canvas (`--redesign-bg: #091540`, `--redesign-bg-soft: #101e50`).
-- **Glass Surfaces**: Translucent white panels (`--redesign-panel: rgba(243, 244, 244, 0.075)`, `--redesign-panel-strong: rgba(243, 244, 244, 0.12)`).
-- **Borders**: Translucent white 1px rules (`--redesign-line: rgba(243, 244, 244, 0.18)`).
-- **Typography**: System sans-serif for headings/copy (`--redesign-ink: #f3f4f4`, `--redesign-ink-soft: #d6def1`, `--redesign-muted: #9daaca`), monospace for time/data metrics.
-- **Accents**:
-  - Warm Action Blue/Indigo: `#1b2cc1` / `#7692ff`
-  - Neon Green (Success / Live): `#e4ff30` / `#72c879`
-  - Amber / Warning: `#f59e0b`
-  - Rose / Blocked Danger: `#ff6b8a`
-- **Elevation & Blur**: `backdrop-filter: blur(22px); box-shadow: 0 22px 52px rgba(0, 0, 0, 0.28); border-radius: 16px;`.
+### Core Palette (Color Hunt #210F374F1C51A55B4BDCA06D)
+- **Obsidian Purple Base**: `#210F37` (`--bg-canvas`, `--bg-app`, `--redesign-bg`) — Deep background canvas.
+- **Rich Purple Glass Surfaces**: `#4F1C51` (`--bg-card`, `--bg-surface`, `--redesign-panel`) — Floating glass cards with subtle border illumination.
+- **Warm Terracotta Accents**: `#A55B4B` (`--accent-indigo`, `--color-primary`) — Primary action buttons, progress bars, category highlights.
+- **Amber Gold Highlights**: `#DCA06D` (`--color-accent`, `--accent-amber`, `--redesign-orange`) — Eye-catching badges, timer readouts, glowing PIN dots, active states.
+- **Danger / Urgent Warning**: `#DF5E4E` (`--color-danger`, `--accent-rose`) — Limit reached, destructive actions, error prompts.
+- **Borders**: Translucent amber/terracotta rules (`rgba(220, 160, 109, 0.18)`).
+- **Typography**: System sans-serif for headings/copy, monospace for tabular numbers and time codes.
+- **Elevation & Blur**: `backdrop-filter: blur(24px); box-shadow: 0 16px 40px rgba(15, 5, 25, 0.45); border-radius: 14px;`.
+
 
 ---
 
@@ -103,3 +102,39 @@ The dashboard overview is structured as an interactive grid:
 - Shell class: `.settings-page`.
 - Cards: `.settings-card--language`, `.settings-card--appearance`, `.settings-card--advanced`, `.settings-card--security`, `.settings-card--tutorial`, `.settings-card--about`.
 - Direct controls for idle threshold, day reset offset, strict mode, and anti-impulse cooldown.
+
+---
+
+## 5. Native Win32 GDI Overlays (`crates/session`)
+
+The system renders two native Win32 GDI topmost overlays running in dedicated message loop threads inside `screentime-session`:
+
+### A. Timer HUD Overlay (`hud.rs`)
+- **Visual Design**: High-contrast 92x28 pill (14px corner radius) with smoked-glass translucency (alpha 235/255).
+  - Background: Obsidian purple `#210F37` (`rgb(0x21, 0x0F, 0x37)`).
+  - Border: Amber gold `#DCA06D` (`rgb(0xDC, 0xA0, 0x6D)`) when active timer, or warm terracotta `#A55B4B` (`rgb(0xA5, 0x5B, 0x4B)`) in normal budget tracking.
+  - Indicator: 4px glowing indicator dot on the left.
+  - Digits: Bold monospace ClearType `Consolas` tabular time readout in amber gold or ivory white.
+- **60 Hz Real-Time Window Clamping**:
+  - Attached via `SetTimer(hwnd, TRACK_TIMER_ID, 16, None)` (~60 FPS).
+  - Follows `target_hwnd` position in real-time, clamping to the top-center of the application frame: `wr.top + 10`.
+  - Auto-hides on app minimize (`IsIconic`) and restores smoothly when reopened.
+  - Session loop no longer destroys/recreates the HUD every second; it preserves the window and only calls `run.update(...)`, respawning only when application focus changes.
+
+### B. Limit Block Overlay (`overlay.rs`)
+- **Visual Design**: Topmost, borderless window covering the target window with a centered floating obsidian card (alpha 245/255).
+  - Full-window Backdrop: Deep obsidian purple veil `#130922` (`rgb(0x13, 0x09, 0x22)`).
+  - Centered Card: Floating rich purple card `#281133` (`rgb(0x28, 0x11, 0x33)`) with subtle border `#56225C`.
+  - Header Badge: "LIMIT REACHED" in burgundy well (`rgb(0x4A, 0x18, 0x22)`) with warm terracotta border and amber gold text.
+  - App Label: Vibrant amber gold `#DCA06D`.
+  - Actions:
+    - Primary: "+15 MIN EXTEND" and "OK" in warm terracotta `#A55B4B` with white text.
+    - Secondary: "QUIT APP" and "CLEAR" in elevated dark purple `#3B1842` with white text.
+  - PIN Pad:
+    - Glowing amber gold dots (`rgb(0xDC, 0xA0, 0x6D)`) with warm terracotta glow rings for entered digits; recessed dark purple wells for unlit slots.
+    - 3x4 grid of rounded tactile buttons (1–9, C, 0, +15 MIN).
+- **60 Hz Clamping & Dynamic Coverage**:
+  - 16 ms Win32 tracking timer (`TRACK_TIMER_ID`) queries `GetWindowRect(target_hwnd)`.
+  - When the user drags or resizes the blocked application, the overlay adjusts its bounds via `SetWindowPos` at 60 FPS, ensuring seamless clipping and complete mouse interception.
+  - Minimization handling: Hides on `IsIconic(target_hwnd)` and restores on `IsWindowVisible(target_hwnd)`.
+
