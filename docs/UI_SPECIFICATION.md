@@ -93,10 +93,22 @@ The dashboard overview is structured as an interactive grid:
 
 ### Web Filtering (`WebFilteringPanel.tsx`)
 - Shell class: `.web-filter-page-shell`.
-- Manual domain entry input.
-- Bulk import via text file or AI prompt generator with 100-domain safety guard.
-- NSFW adult content filter toggle with PIN protection.
-- Active domain rules table with delete actions.
+- Command Panel (`.web-filter-command-panel`):
+  - Manual domain entry form input with real-time validation.
+  - Bulk import via text/CSV file with 100-domain safety limit.
+  - AI Prompt generator card with one-click clipboard copy.
+- Domain Rules Table Panel (`.web-filter-domain-panel`):
+  - Edge-to-edge full width table card (`padding: 0; overflow: hidden;`).
+  - Table Header Bar (`.web-filter-table-header`): Title "Active Domain Rules", amber counter pill badge (`{count} rules`), and real-time search input with clear trigger.
+  - Column Distribution:
+    - Domain (45%): Rounded amber icon box with globe icon, ellipsis-clipped monospace domain text.
+    - Category (23%): Pill badges distinguishing "Custom Block" from "Adult Content".
+    - Status (16%): Monospace "BLOCKED" pill badge with glowing red status indicator.
+    - Action (16%): Right-aligned "Remove" action button with danger-glow hover transition.
+  - Table Footer (`.web-filter-table-footer`):
+    - Left: Hidden NSFW domains unlock button (`EyeOff`).
+    - Right: Pagination controls (`PAGE_SIZE = 10`) with count indicator ("1–10 of 14") and chevron stepper buttons.
+  - Empty & Filter states: Dedicated empty views for zero domains and no search matches with a "Clear search" action.
 
 ### Settings (`App.tsx` Settings Tab)
 - Shell class: `.settings-page`.

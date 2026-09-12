@@ -1,9 +1,25 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useTranslation } from "react-i18next";
-import { ShieldAlert, EyeOff, Globe, Sparkles, Upload, Plus, Trash2, Check, AlertCircle } from "lucide-react";
+import {
+    ShieldAlert,
+    EyeOff,
+    Globe,
+    Sparkles,
+    Upload,
+    Plus,
+    Trash2,
+    Check,
+    AlertCircle,
+    Search,
+    X,
+    ChevronLeft,
+    ChevronRight,
+} from "lucide-react";
 import { addManualBlock, listManualBlocks, removeManualBlock } from "../api";
 import { MetricCards } from "./MetricCards";
 import "./WebFilteringPanel.css";
+
+const PAGE_SIZE = 10;
 
 export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, run: (pin: string) => Promise<void>) => void }) {
     const { t } = useTranslation();
@@ -15,6 +31,8 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
     const [promptCopied, setPromptCopied] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
     const [showAdult, setShowAdult] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+    const [currentPage, setCurrentPage] = useState(1);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const refresh = () => {
@@ -49,10 +67,8 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
         }
     };
 
-
-
     const handleShowAdult = () => {
-        onAttempt(t("pinGate.viewHidden"), async (pin: string) => {
+        onAttempt(t("pinGate.viewHidden"), async (_pin: string) => {
             setShowAdult(true);
         });
     };
@@ -102,7 +118,6 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
 
             // Simple batch processing
             for (const domain of uniqueNew) {
-                // Quick validation to ensure it looks somewhat like a domain
                 if (domain.includes(".") && !domain.includes(" ")) {
                     await addManualBlock(domain);
                 }
@@ -119,7 +134,22 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
     };
 
     const nsfwCount = domains.filter(isNsfw).length;
-    const visibleDomains = domains.filter(d => showAdult || !isNsfw(d));
+    const visibleDomains = useMemo(() => {
+        return domains.filter(d => showAdult || !isNsfw(d));
+    }, [domains, showAdult]);
+
+    const filteredDomains = useMemo(() => {
+        const q = searchQuery.trim().toLowerCase();
+        if (!q) return visibleDomains;
+        return visibleDomains.filter(d => d.toLowerCase().includes(q));
+    }, [visibleDomains, searchQuery]);
+
+    const totalPages = Math.ceil(filteredDomains.length / PAGE_SIZE) || 1;
+    const safePage = Math.min(currentPage, totalPages);
+    const startIndex = (safePage - 1) * PAGE_SIZE;
+    const pageDomains = useMemo(() => {
+        return filteredDomains.slice(startIndex, startIndex + PAGE_SIZE);
+    }, [filteredDomains, startIndex]);
 
     const metrics = [
         { label: t("webFilter.totalBlocked", "Total Blocked"), value: domains.length, icon: <ShieldAlert size={16} /> },
@@ -165,7 +195,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                             <input 
                                 type="file" 
                                 accept=".txt,.csv" 
-                                ref={fileInputRef}
+                                ref={fileInputRef} 
                                 style={{ display: 'none' }}
                                 onChange={handleFileUpload}
                             />
@@ -212,79 +242,173 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
 
             <section className="card limits-panel web-filter-domain-panel">
                 <div className="card-body">
-                    <div className="ledger-table-wrapper">
-                        <table className="ledger-table">
+                    <div className="web-filter-table-header">
+                        <div className="web-filter-table-title-group">
+                            <h3 className="web-filter-table-title">
+                                {t("webFilter.activeRules", "Active Domain Rules")}
+                            </h3>
+                            <span className="web-filter-count-badge">
+                                {filteredDomains.length} {filteredDomains.length === 1 ? "rule" : "rules"}
+                            </span>
+                        </div>
+                        <div className="web-filter-search-wrapper">
+                            <Search size={14} className="web-filter-search-icon" />
+                            <input
+                                type="text"
+                                value={searchQuery}
+                                onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                                placeholder={t("webFilter.searchPlaceholder", "Search blocked domains...")}
+                                className="web-filter-search-input"
+                            />
+                            {searchQuery && (
+                                <button
+                                    type="button"
+                                    className="web-filter-search-clear"
+                                    onClick={() => { setSearchQuery(""); setCurrentPage(1); }}
+                                    title={t("webFilter.clearSearch", "Clear search")}
+                                >
+                                    <X size={12} />
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="web-filter-table-wrapper">
+                        <table className="web-filter-table">
+                            <colgroup>
+                                <col style={{ width: "45%" }} />
+                                <col style={{ width: "23%" }} />
+                                <col style={{ width: "16%" }} />
+                                <col style={{ width: "16%" }} />
+                            </colgroup>
                             <thead>
                                 <tr>
-                                    <th>{t("webFilter.domain", "Domain")}</th>
-                                    <th>{t("webFilter.category", "Category")}</th>
-                                    <th>{t("webFilter.status", "Status")}</th>
-                                    <th style={{ textAlign: "right" }}>{t("webFilter.action", "Action")}</th>
+                                    <th className="th-domain">{t("webFilter.domain", "Domain")}</th>
+                                    <th className="th-category">{t("webFilter.category", "Category")}</th>
+                                    <th className="th-status">{t("webFilter.status", "Status")}</th>
+                                    <th className="th-action">{t("webFilter.action", "Action")}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {loading && !isUploading ? (
                                     <tr>
-                                        <td colSpan={4} className="text-center" style={{ color: 'var(--text-muted)' }}>{t("common.loading", "Loading...")}</td>
+                                        <td colSpan={4} className="table-loading-cell">
+                                            {t("common.loading", "Loading...")}
+                                        </td>
                                     </tr>
-                                ) : visibleDomains.length === 0 ? (
+                                ) : filteredDomains.length === 0 ? (
                                     <tr>
-                                        <td colSpan={4} className="text-center" style={{ color: 'var(--text-muted)', padding: '32px 0' }}>
-                                            <Globe size={28} style={{ opacity: 0.35, marginBottom: 8, display: 'block', margin: '0 auto 8px' }} />
-                                            {t("webFilter.noCustomDomains", "No custom domains blocked.")}
+                                        <td colSpan={4} className="table-empty-cell">
+                                            {searchQuery ? (
+                                                <div className="search-empty-content">
+                                                    <Search size={24} style={{ opacity: 0.35 }} />
+                                                    <p>{t("webFilter.noMatches", "No domains match your search.")}</p>
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-secondary btn-sm"
+                                                        onClick={() => { setSearchQuery(""); setCurrentPage(1); }}
+                                                    >
+                                                        {t("webFilter.clearSearch", "Clear search")}
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <div className="empty-content">
+                                                    <Globe size={32} style={{ opacity: 0.35 }} />
+                                                    <p>{t("webFilter.noCustomDomains", "No custom domains blocked.")}</p>
+                                                    <span className="empty-hint">{t("webFilter.addAbove", "Use the form above to add domains to your blocklist.")}</span>
+                                                </div>
+                                            )}
                                         </td>
                                     </tr>
                                 ) : (
-                                    visibleDomains.map(d => {
+                                    pageDomains.map(d => {
                                         const isAdult = isNsfw(d);
                                         return (
-                                            <tr key={d}>
-                                                <td>
-                                                    <div className="ledger-app-cell">
-                                                        <div className="ledger-icon-box" style={{ backgroundColor: 'rgba(220, 160, 109, 0.15)', color: 'var(--color-accent)' }}>
-                                                            <Globe size={15} />
+                                            <tr key={d} className="domain-row">
+                                                <td className="td-domain">
+                                                    <div className="domain-name-cell">
+                                                        <div className="domain-icon-box">
+                                                            <Globe size={14} />
                                                         </div>
-                                                        <span className="ledger-app-name font-mono">{d}</span>
+                                                        <span className="domain-name-text font-mono" title={d}>{d}</span>
                                                     </div>
                                                 </td>
-                                                <td>
-                                                    <span className="ledger-category-pill">{isAdult ? "Adult Content" : "Custom Block"}</span>
+                                                <td className="td-category">
+                                                    <span className={`domain-category-pill ${isAdult ? 'pill--adult' : 'pill--custom'}`}>
+                                                        {isAdult ? "Adult Content" : "Custom Block"}
+                                                    </span>
                                                 </td>
-                                                <td>
-                                                    <span className="badge badge-sm badge--danger">{t("webFilter.blocked", "Blocked")}</span>
+                                                <td className="td-status">
+                                                    <span className="domain-status-badge">
+                                                        <span className="status-dot-pulse" />
+                                                        {t("webFilter.blocked", "Blocked")}
+                                                    </span>
                                                 </td>
-                                                <td style={{ textAlign: "right" }}>
+                                                <td className="td-action">
                                                     <button 
-                                                        className="btn btn-ghost btn-sm text-danger" 
+                                                        className="domain-remove-action-btn" 
                                                         onClick={() => handleRemove(d)}
-                                                        style={{ display: "inline-flex", alignItems: "center", gap: 4 }}
+                                                        title={t("webFilter.removeDomain", { domain: d })}
                                                     >
                                                         <Trash2 size={13} />
-                                                        {t("webFilter.remove", "Remove")}
+                                                        <span>{t("webFilter.remove", "Remove")}</span>
                                                     </button>
                                                 </td>
                                             </tr>
                                         );
                                     })
                                 )}
-                                {!showAdult && nsfwCount > 0 && (
-                                    <tr>
-                                        <td colSpan={4} style={{ textAlign: "center", padding: '12px 0' }}>
-                                            <button 
-                                                type="button" 
-                                                className="btn btn-ghost btn-sm" 
-                                                onClick={handleShowAdult}
-                                                style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
-                                            >
-                                                <EyeOff size={14} />
-                                                {t("webFilter.hidden", { count: nsfwCount })}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                )}
                             </tbody>
                         </table>
                     </div>
+
+                    {(totalPages > 1 || (!showAdult && nsfwCount > 0)) && (
+                        <div className="web-filter-table-footer">
+                            <div className="footer-left">
+                                {!showAdult && nsfwCount > 0 && (
+                                    <button 
+                                        type="button" 
+                                        className="adult-toggle-btn" 
+                                        onClick={handleShowAdult}
+                                    >
+                                        <EyeOff size={13} />
+                                        <span>{t("webFilter.hidden", { count: nsfwCount })}</span>
+                                    </button>
+                                )}
+                            </div>
+
+                            {totalPages > 1 && (
+                                <div className="pagination-controls">
+                                    <span className="pagination-info">
+                                        {startIndex + 1}–{Math.min(startIndex + PAGE_SIZE, filteredDomains.length)} of {filteredDomains.length}
+                                    </span>
+                                    <div className="pagination-buttons">
+                                        <button
+                                            type="button"
+                                            className="pagination-btn"
+                                            disabled={safePage <= 1}
+                                            onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                                            title="Previous page"
+                                        >
+                                            <ChevronLeft size={14} />
+                                        </button>
+                                        <span className="pagination-page-indicator">
+                                            {safePage} / {totalPages}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            className="pagination-btn"
+                                            disabled={safePage >= totalPages}
+                                            onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                                            title="Next page"
+                                        >
+                                            <ChevronRight size={14} />
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
                 </div>
             </section>
         </div>
