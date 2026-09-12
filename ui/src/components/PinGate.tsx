@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { describeError, recoverPin } from "../api";
 import { Dialog } from "./Dialog";
+import { LoadingSpinner } from "./LoadingSpinner";
 
 interface PinGateProps {
     label: string;
@@ -89,6 +90,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             className="btn btn--primary"
                             disabled={busy || pin.trim().length === 0}
                         >
+                            {busy && <LoadingSpinner size="xs" />}
                             {busy ? t("pinGate.checking") : t("pinGate.confirm")}
                         </button>
                         <button
@@ -175,6 +177,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             className="btn btn--primary"
                             disabled={recovering}
                         >
+                            {recovering && <LoadingSpinner size="xs" />}
                             {recovering ? t("pinGate.replacing") : t("pinGate.replacePin")}
                         </button>
                         <button

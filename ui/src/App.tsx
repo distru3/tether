@@ -20,6 +20,7 @@ import { Toasts } from "./components/Toasts";
 import { TutorialContent } from "./components/TutorialContent";
 import { WeeklyChart } from "./components/WeeklyChart";
 import { WebFilteringPanel } from "./components/WebFilteringPanel";
+import { LoadingSpinner } from "./components/LoadingSpinner";
 import { Sidebar, type TabKey } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
 import { useDashboard } from "./hooks/useDashboard";
@@ -58,6 +59,7 @@ export function App() {
   });
 
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
+  const [dnsSaving, setDnsSaving] = useState(false);
 
   // First-run onboarding state
   const [showOnboarding, setShowOnboarding] = useState(() => {
@@ -380,6 +382,58 @@ export function App() {
                           actions.setSetting("show_hud_overlay", e.target.checked.toString());
                         }}
                       />
+                    </div>
+                  </div>
+                </section>
+
+                {/* Network & Family DNS */}
+                <section className="card settings-card settings-card--network" style={{ marginTop: 16 }}>
+                  <header className="card-header">
+                    <h2>{t("settings.networkTitle", "Network & Family DNS")}</h2>
+                    <div className="card-subtitle">{t("settings.networkDesc", "System-wide domain filtering and upstream DNS configuration.")}</div>
+                  </header>
+                  <div className="card-body">
+                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div style={{ flex: 1, paddingRight: '16px' }}>
+                        <div className="form-label">{t("settings.familyDns", "Family DNS Protection")}</div>
+                        <div className="form-hint" style={{ marginTop: 0 }}>
+                          {t("settings.familyDnsDesc", "Filter adult and malicious domains system-wide using Cloudflare Family DNS. Your original network DNS settings are automatically preserved and restored when disabled.")}
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', fontSize: '12px' }}>
+                          <span
+                            style={{
+                              width: 8,
+                              height: 8,
+                              borderRadius: '50%',
+                              backgroundColor: statusInfo?.family_dns_enabled ? '#10b981' : 'var(--text-muted)',
+                              boxShadow: statusInfo?.family_dns_enabled ? '0 0 6px rgba(16, 185, 129, 0.6)' : 'none',
+                              display: 'inline-block',
+                            }}
+                          />
+                          <span style={{ color: 'var(--text-secondary)' }}>
+                            {statusInfo?.family_dns_enabled
+                              ? t("settings.familyDnsActive", "Protected (Cloudflare Family)")
+                              : t("settings.familyDnsInactive", "Disabled (Original DNS)")}
+                          </span>
+                        </div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        {dnsSaving && <LoadingSpinner size="sm" />}
+                        <input
+                          type="checkbox"
+                          className="toggle-switch"
+                          checked={statusInfo?.family_dns_enabled ?? false}
+                          disabled={dnsSaving}
+                          onChange={async (e) => {
+                            setDnsSaving(true);
+                            try {
+                              await actions.setSetting("family_dns", e.target.checked.toString());
+                            } finally {
+                              setDnsSaving(false);
+                            }
+                          }}
+                        />
+                      </div>
                     </div>
                   </div>
                 </section>

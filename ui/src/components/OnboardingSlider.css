@@ -184,3 +184,78 @@
 [dir="rtl"] .onboarding-actions {
     flex-direction: row-reverse;
 }
+
+/* Family DNS Card in Onboarding */
+.onboarding-dns-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-top: 16px;
+    padding: 16px 20px;
+    border-radius: 14px;
+    border: 1px solid rgba(220, 160, 109, 0.22);
+    background: rgba(33, 15, 55, 0.65);
+    box-shadow: 0 8px 24px rgba(15, 5, 25, 0.35);
+    width: 100%;
+    max-width: 440px;
+}
+
+.onboarding-dns-info {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    text-align: left;
+    gap: 4px;
+    flex: 1;
+}
+
+[dir="rtl"] .onboarding-dns-info {
+    align-items: flex-end;
+    text-align: right;
+}
+
+.onboarding-dns-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.onboarding-dns-hint {
+    font-size: 12.5px;
+    color: var(--text-muted);
+    line-height: 1.4;
+}
+
+.onboarding-dns-status {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-top: 4px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.onboarding-dns-switch-wrap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+}
+
+.status-dot-active {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #10b981;
+    box-shadow: 0 0 6px rgba(16, 185, 129, 0.6);
+}
+
+.status-dot-inactive {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-muted);
+}
+

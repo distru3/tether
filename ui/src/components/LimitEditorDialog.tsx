@@ -7,6 +7,7 @@ import type { LimitDto } from "../types/generated/LimitDto";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
 import { Dialog } from "./Dialog";
 import { ChevronDownIcon, ChevronRightIcon } from "./icons/Icons";
+import { LoadingSpinner } from "./LoadingSpinner";
 
 interface LimitEditorDialogProps {
     catalog: CatalogDto | null;
@@ -361,6 +362,7 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                 {error !== null && <p className="dialog-error">{error}</p>}
                 <div className="dialog-actions">
                     <button type="submit" className="btn btn--primary" disabled={busy}>
+                        {busy && <LoadingSpinner size="xs" />}
                         {busy ? t("limitEditor.setting") : t("limitEditor.saveOrder")}
                     </button>
                     <button

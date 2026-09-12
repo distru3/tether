@@ -457,7 +457,57 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
         Request::RemovePin { credential } => remove_pin(ctx, &credential),
         Request::SetSetting { ref key, ref value } => {
             let db_guard = lock_db(&ctx.db);
-            if let Err(e) = db_guard.conn().execute("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value)) {
+            if key == "family_dns" {
+                let enable = value == "true";
+                if enable {
+                    let already = db_guard.setting("family_dns_enabled").ok().flatten().as_deref() == Some("true");
+                    if !already {
+                        if let Ok(ifaces) = st_dns::dns_config::capture() {
+                            if let Ok(json) = serde_json::to_string(&ifaces) {
+                                let _ = db_guard.set_setting("original_dns_config", &json);
+                                if let Ok(dir) = crate::data_dir() {
+                                    let _ = std::fs::create_dir_all(&dir);
+                                    let _ = std::fs::write(dir.join("original_dns_backup.json"), &json);
+                                }
+                            }
+                            st_dns::dns_config::set_family_dns(&ifaces);
+                        }
+                        let _ = db_guard.set_setting("family_dns_enabled", "true");
+                        st_dns::dns_config::set_registry_family_dns(true);
+                    }
+                } else {
+                    let mut restored = false;
+                    let backup = db_guard.setting("original_dns_config").ok().flatten();
+                    if let Some(json) = backup {
+                        if let Ok(ifaces) = serde_json::from_str::<Vec<st_dns::dns_config::IfaceDns>>(&json) {
+                            st_dns::dns_config::restore_all(&ifaces);
+                            restored = true;
+                        }
+                    }
+                    if !restored {
+                        if let Ok(dir) = crate::data_dir() {
+                            let backup_file = dir.join("original_dns_backup.json");
+                            if let Ok(content) = std::fs::read_to_string(&backup_file) {
+                                if let Ok(ifaces) = serde_json::from_str::<Vec<st_dns::dns_config::IfaceDns>>(&content) {
+                                    st_dns::dns_config::restore_all(&ifaces);
+                                    restored = true;
+                                }
+                            }
+                        }
+                    }
+                    if !restored {
+                        if let Ok(current) = st_dns::dns_config::capture() {
+                            st_dns::dns_config::restore_all(&current);
+                        }
+                    }
+                    if let Ok(dir) = crate::data_dir() {
+                        let _ = std::fs::remove_file(dir.join("original_dns_backup.json"));
+                    }
+                    let _ = db_guard.set_setting("family_dns_enabled", "false");
+                    let _ = db_guard.conn().execute("DELETE FROM settings WHERE key = 'original_dns_config'", []);
+                    st_dns::dns_config::set_registry_family_dns(false);
+                }
+            } else if let Err(e) = db_guard.conn().execute("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value)) {
                 tracing::error!(error = %e, "setting save failed");
             } else {
                 let mut p = ctx.policy.write().unwrap();
@@ -517,9 +567,11 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
 }
 
 fn status_response(ctx: &Ctx) -> Response {
-    let pin_configured = {
+    let (pin_configured, family_dns_enabled) = {
         let db = lock_db(&ctx.db);
-        db.pin_hash().ok().flatten().is_some()
+        let pin = db.pin_hash().ok().flatten().is_some();
+        let family_dns = db.setting("family_dns_enabled").ok().flatten().as_deref() == Some("true");
+        (pin, family_dns)
     };
     // Truthful tracking: reports arriving recently mean the session helper is
     // alive; otherwise only the legacy self-sampling fallback counts.
@@ -544,6 +596,7 @@ fn status_response(ctx: &Ctx) -> Response {
         idle_threshold_secs: policy.idle_threshold_secs,
         path_level: false,
         wildcard_domains: false,
+        family_dns_enabled,
     })
 }
 

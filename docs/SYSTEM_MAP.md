@@ -115,3 +115,10 @@ SQLite database managed via append-only migrations tracked by `PRAGMA user_versi
 2. Incoming UDP queries are matched against `block_rules` and `sites`.
 3. Blocked domains return `0.0.0.0`.
 4. Non-blocked queries are forwarded to upstream resolvers via **ephemeral client sockets (`0.0.0.0:0`)**, NEVER reusing the `127.0.0.1:53` listener socket.
+
+### D. Family DNS Protection & Automatic Original DNS Restoration
+1. **Preservation on Enable**: When Family DNS is enabled (via UI Settings, Onboarding, or CLI `--enable-family-dns`), `st_dns::dns_config::capture()` reads all active network interfaces (`IfaceDns`), captures their exact DNS server IP lists (or DHCP state), and serializes them to both SQLite `settings` (`original_dns_config`) and `{data_dir}/original_dns_backup.json`.
+2. **Registry Tracking**: `HKLM\Software\Screentime\FamilyDnsApplied` DWORD is set to `1`. Active interfaces are configured to use Cloudflare Family DNS (`1.1.1.3`, `1.0.0.3`, `2606:4700:4700::1113`, `2606:4700:4700::1003`).
+3. **Restoration on Disable**: When Family DNS is disabled (via UI Settings or CLI `--disable-family-dns`), the agent reads the serialized backup from SQLite or the JSON backup file, restores each interface back to its exact prior configuration (static IPs or DHCP), flushes the Windows DNS resolver cache (`ipconfig /flushdns`), removes the backup records, and clears the registry flag.
+4. **Silent Uninstaller Restoration**: The NSIS uninstaller (`installer_hooks.nsh`) inspects `FamilyDnsApplied`. If set to `1`, it silently executes `screentime-agent.exe --disable-family-dns` without interactive popup prompts, ensuring the user's internet is cleanly restored before service removal.
+

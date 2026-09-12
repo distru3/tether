@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { describeError, removePin, type PinVaultReply } from "../api";
 import { Dialog } from "./Dialog";
+import { LoadingSpinner } from "./LoadingSpinner";
 
 interface PinSetupDialogProps {
     pinConfigured: boolean;
@@ -125,6 +126,7 @@ export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSe
                 {error !== null && <p className="dialog-error">{error}</p>}
                 <div className="dialog-actions">
                     <button type="submit" className="btn btn--primary" disabled={busy}>
+                        {busy && <LoadingSpinner size="xs" />}
                         {busy ? t("pinSetup.setting") : t("pinSetup.savePin")}
                     </button>
                     <button
@@ -159,6 +161,7 @@ export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSe
                             disabled={removing || busy || removeCredential.trim().length === 0}
                             onClick={() => void submitRemove()}
                         >
+                            {removing && <LoadingSpinner size="xs" />}
                             {removing ? t("pinSetup.removing") : t("pinSetup.removePin")}
                         </button>
                     </div>

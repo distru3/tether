@@ -443,6 +443,7 @@ pub struct StatusDto {
     /// The active filter can block individual URL paths. Always false, since
     /// neither `hosts` nor DNS can see a path; only a browser extension can.
     pub path_level: bool,
+    pub family_dns_enabled: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

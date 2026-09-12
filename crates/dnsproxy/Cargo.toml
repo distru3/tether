@@ -8,6 +8,8 @@ license.workspace = true
 [dependencies]
 st-core.workspace = true
 tracing.workspace = true
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 # GetAdaptersAddresses/GetAdaptersInfo (iphlpapi) for per-interface DNS capture,

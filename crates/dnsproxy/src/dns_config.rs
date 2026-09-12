@@ -46,7 +46,7 @@ use windows::Win32::NetworkManagement::Ndis::IfOperStatusUp;
 use windows::Win32::Networking::WinSock::{AF_INET, IN_ADDR, SOCKADDR_IN};
 
 /// One interface's IPv4 DNS configuration, as it was before we touched it.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct IfaceDns {
     /// The interface's friendly name (what `netsh` wants in `name="..."`).
     pub name: String,
@@ -294,6 +294,55 @@ pub fn restore_all(ifaces: &[IfaceDns]) {
                 "source=dhcp",
             ],
         );
+    }
+    let _ = command("ipconfig", &["/flushdns"]);
+}
+
+/// Write or remove FamilyDnsApplied DWORD in HKLM\Software\Screentime for the NSIS uninstaller.
+pub fn set_registry_family_dns(enabled: bool) {
+    #[cfg(windows)]
+    {
+        use windows::core::w;
+        use windows::Win32::System::Registry::{
+            RegCloseKey, RegCreateKeyExW, RegDeleteValueW, RegSetValueExW, HKEY_LOCAL_MACHINE,
+            KEY_WRITE, REG_DWORD, REG_OPTION_NON_VOLATILE,
+        };
+
+        unsafe {
+            let mut key = windows::Win32::System::Registry::HKEY::default();
+            let subkey = w!("Software\\Screentime");
+            let val_name = w!("FamilyDnsApplied");
+            if RegCreateKeyExW(
+                HKEY_LOCAL_MACHINE,
+                subkey,
+                0,
+                None,
+                REG_OPTION_NON_VOLATILE,
+                KEY_WRITE,
+                None,
+                &mut key,
+                None,
+            )
+            .is_ok()
+            {
+                if enabled {
+                    let val: u32 = 1;
+                    let _ = RegSetValueExW(
+                        key,
+                        val_name,
+                        0,
+                        REG_DWORD,
+                        Some(std::slice::from_raw_parts(
+                            &val as *const u32 as *const u8,
+                            std::mem::size_of::<u32>(),
+                        )),
+                    );
+                } else {
+                    let _ = RegDeleteValueW(key, val_name);
+                }
+                let _ = RegCloseKey(key);
+            }
+        }
     }
 }
 

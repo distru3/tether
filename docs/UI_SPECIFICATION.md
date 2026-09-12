@@ -117,8 +117,26 @@ The dashboard overview is structured as an interactive grid:
 
 ### Settings (`App.tsx` Settings Tab)
 - Shell class: `.settings-page`.
-- Cards: `.settings-card--language`, `.settings-card--appearance`, `.settings-card--advanced`, `.settings-card--security`, `.settings-card--tutorial`, `.settings-card--about`.
+- Cards: `.settings-card--language`, `.settings-card--appearance`, `.settings-card--network`, `.settings-card--advanced`, `.settings-card--security`, `.settings-card--tutorial`, `.settings-card--about`.
+- **Network & Family DNS Card** (`.settings-card--network`):
+  - Dedicated toggle for Cloudflare Family DNS with live status indicator dot (Emerald green when protected, muted gray when disabled).
+  - Shows `<LoadingSpinner size="sm" />` while toggling.
+  - Explanatory copy clarifying that original DNS configurations are preserved and will be restored on disable.
 - Direct controls for idle threshold, day reset offset, strict mode, and anti-impulse cooldown.
+
+### Onboarding Flow (`OnboardingSlider.tsx`)
+- Multi-step first-run wizard:
+  1. Welcome to Tether
+  2. Language Selection (English / العربية)
+  3. Track Your Time
+  4. Set Limits
+  5. **Family DNS Protection**: Interactive card allowing the user to opt-in to system-wide adult content filtering with automatic preservation of existing DNS, backed by `<ToggleSwitch />` and `<LoadingSpinner />`.
+  6. Stay Focused
+
+### App-Wide Loading Animations & Shimmer Skeletons
+- **`LoadingSpinner.tsx`**: Reusable SVG vector spinner with animated dashed stroke and smooth rotation in sizes `xs`, `sm`, `md`, and `lg`. Integrated into form submissions, PIN verification buttons (`PinGate`, `PinSetupDialog`), and order updates (`LimitEditorDialog`).
+- **Web Filtering Shimmer Skeleton**: When querying domain rules, the table renders animated multi-column skeleton rows (`.skeleton-shimmer`) with staggered widths in Color Hunt obsidian/terracotta gradients instead of static loading text.
+- **Async Action Buttons**: Bulk upload in `WebFilteringPanel` displays `<LoadingSpinner size="xs" />` during multi-domain parsing and importation.
 
 ---
 

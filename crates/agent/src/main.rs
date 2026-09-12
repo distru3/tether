@@ -115,36 +115,17 @@ fn main() -> Result<()> {
                 1, 1, 1, 3,
             ))));
             if let Ok(ifaces) = st_dns::dns_config::capture() {
-                for iface in ifaces {
-                    let _ = st_dns::dns_config::command(
-                        "netsh",
-                        &[
-                            "interface",
-                            "ipv4",
-                            "set",
-                            "dnsservers",
-                            &format!("name={}", iface.name),
-                            "source=static",
-                            "address=1.1.1.3", // Cloudflare Family Primary
-                            "validate=no",
-                        ],
-                    );
-                    // Add secondary DNS to prevent timeouts
-                    let _ = st_dns::dns_config::command(
-                        "netsh",
-                        &[
-                            "interface",
-                            "ipv4",
-                            "add",
-                            "dnsservers",
-                            &format!("name={}", iface.name),
-                            "address=1.0.0.3", // Cloudflare Family Secondary
-                            "index=2",
-                            "validate=no",
-                        ],
-                    );
+                if let Ok(dir) = data_dir() {
+                    let _ = std::fs::create_dir_all(&dir);
+                    let backup_file = dir.join("original_dns_backup.json");
+                    if !backup_file.exists() {
+                        if let Ok(json) = serde_json::to_string(&ifaces) {
+                            let _ = std::fs::write(&backup_file, json);
+                        }
+                    }
                 }
-                let _ = st_dns::dns_config::command("ipconfig", &["/flushdns"]);
+                st_dns::dns_config::set_family_dns(&ifaces);
+                st_dns::dns_config::set_registry_family_dns(true);
                 println!("Enabled Family DNS successfully.");
             }
             Ok(())
@@ -152,23 +133,28 @@ fn main() -> Result<()> {
         Ok(cli::Action::DisableFamilyDns) => {
             println!("Disabling Family DNS...");
             st_dns::lockdown::clear_lockdown();
-            if let Ok(ifaces) = st_dns::dns_config::capture() {
-                for iface in ifaces {
-                    let _ = st_dns::dns_config::command(
-                        "netsh",
-                        &[
-                            "interface",
-                            "ipv4",
-                            "set",
-                            "dnsservers",
-                            &format!("name={}", iface.name),
-                            "source=dhcp",
-                        ],
-                    );
+            let mut restored = false;
+            if let Ok(dir) = data_dir() {
+                let backup_file = dir.join("original_dns_backup.json");
+                if backup_file.exists() {
+                    if let Ok(content) = std::fs::read_to_string(&backup_file) {
+                        if let Ok(ifaces) =
+                            serde_json::from_str::<Vec<st_dns::dns_config::IfaceDns>>(&content)
+                        {
+                            st_dns::dns_config::restore_all(&ifaces);
+                            restored = true;
+                        }
+                    }
+                    let _ = std::fs::remove_file(backup_file);
                 }
-                let _ = st_dns::dns_config::command("ipconfig", &["/flushdns"]);
-                println!("Disabled Family DNS successfully.");
             }
+            if !restored {
+                if let Ok(ifaces) = st_dns::dns_config::capture() {
+                    st_dns::dns_config::restore_all(&ifaces);
+                }
+            }
+            st_dns::dns_config::set_registry_family_dns(false);
+            println!("Disabled Family DNS successfully.");
             Ok(())
         }
         Err(message) => {
@@ -641,7 +627,7 @@ fn install_shutdown_handler() {
     }
 }
 
-fn data_dir() -> Result<PathBuf> {
+pub(crate) fn data_dir() -> Result<PathBuf> {
     if let Ok(dir) = std::env::var("SCREENTIME_DATA_DIR") {
         return Ok(PathBuf::from(dir));
     }

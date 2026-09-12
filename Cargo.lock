@@ -3446,6 +3446,7 @@ dependencies = [
  "chrono",
  "nix",
  "rusqlite",
+ "serde_json",
  "st-core",
  "st-dns",
  "st-enforce-linux",
@@ -3479,6 +3480,8 @@ dependencies = [
 name = "st-dns"
 version = "0.1.0"
 dependencies = [
+ "serde",
+ "serde_json",
  "st-core",
  "tracing",
  "windows 0.58.0",

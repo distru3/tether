@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { addManualBlock, listManualBlocks, removeManualBlock } from "../api";
 import { MetricCards } from "./MetricCards";
+import { LoadingSpinner } from "./LoadingSpinner";
 import "./WebFilteringPanel.css";
 
 const PAGE_SIZE = 10;
@@ -205,7 +206,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                                 onClick={() => fileInputRef.current?.click()}
                                 disabled={isUploading}
                             >
-                                <Upload size={15} />
+                                {isUploading ? <LoadingSpinner size="xs" /> : <Upload size={15} />}
                                 {isUploading ? t("webFilter.importing", "Importing...") : t("webFilter.bulkUpload", "Bulk Upload")}
                             </button>
                         </div>
@@ -291,11 +292,27 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                             </thead>
                             <tbody>
                                 {loading && !isUploading ? (
-                                    <tr>
-                                        <td colSpan={4} className="table-loading-cell">
-                                            {t("common.loading", "Loading...")}
-                                        </td>
-                                    </tr>
+                                    <>
+                                        {[1, 2, 3, 4, 5].map((i) => (
+                                            <tr key={`skeleton-${i}`} className="domain-row domain-row--skeleton">
+                                                <td className="td-domain">
+                                                    <div className="domain-name-cell">
+                                                        <div className="domain-icon-box skeleton-shimmer" style={{ width: 24, height: 24, borderRadius: 6 }} />
+                                                        <div className="skeleton-shimmer" style={{ width: `${110 + (i % 3) * 45}px`, height: 16, borderRadius: 4 }} />
+                                                    </div>
+                                                </td>
+                                                <td className="td-category">
+                                                    <div className="skeleton-shimmer" style={{ width: 80, height: 22, borderRadius: 12 }} />
+                                                </td>
+                                                <td className="td-status">
+                                                    <div className="skeleton-shimmer" style={{ width: 64, height: 18, borderRadius: 4 }} />
+                                                </td>
+                                                <td className="td-action">
+                                                    <div className="skeleton-shimmer" style={{ width: 56, height: 24, borderRadius: 4, marginLeft: 'auto' }} />
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </>
                                 ) : filteredDomains.length === 0 ? (
                                     <tr>
                                         <td colSpan={4} className="table-empty-cell">

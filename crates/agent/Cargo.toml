@@ -16,6 +16,7 @@ st-ipc.workspace = true
 anyhow.workspace = true
 chrono.workspace = true
 rusqlite.workspace = true
+serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber.workspace = true
 # Daily-rolling file logs: when the agent runs hidden or as a service, stdout

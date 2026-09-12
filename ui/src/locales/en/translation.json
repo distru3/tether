@@ -96,7 +96,13 @@
     "idleThreshold": "Idle Threshold",
     "idleThresholdDesc": "How quickly does time stop tracking when you step away?",
     "strictMode": "Strict Mode",
-    "strictModeDesc": "Disables the emergency +15 minutes override entirely."
+    "strictModeDesc": "Disables the emergency +15 minutes override entirely.",
+    "networkTitle": "Network & Family DNS",
+    "networkDesc": "System-wide domain filtering and upstream DNS configuration.",
+    "familyDns": "Family DNS Protection",
+    "familyDnsDesc": "Filter adult and malicious domains system-wide using Cloudflare Family DNS. Your original network DNS settings are automatically preserved and restored when disabled.",
+    "familyDnsActive": "Protected (Cloudflare Family)",
+    "familyDnsInactive": "Disabled (Original DNS)"
   },
   "tutorial": {
     "title": "How to Use",
@@ -216,6 +222,10 @@
     "setLimitsDesc": "Create daily time limits for apps or categories. When the limit is reached, the app is blocked until the next day.",
     "stayFocused": "Stay Focused",
     "stayFocusedDesc": "Block distracting websites and use the HUD overlay to always know how much time you have left.",
+    "familyDnsTitle": "Family DNS Protection",
+    "familyDnsDesc": "Block adult and malicious content device-wide with Cloudflare Family DNS. Your original network DNS settings are safely preserved and restored if turned off.",
+    "familyDnsEnable": "Enable Family DNS Protection",
+    "familyDnsEnabledDesc": "Adult content blocked across all browsers and apps.",
     "getStarted": "Get Started",
     "next": "Next",
     "skip": "Skip"
