@@ -211,25 +211,31 @@ mod tests {
         let t3 = t2 + chrono::Duration::seconds(1);
         let t4 = t3 + chrono::Duration::seconds(1);
 
-        db.record_interval(&interval_at(app, 1, day, t1)).expect("i1");
+        db.record_interval(&interval_at(app, 1, day, t1))
+            .expect("i1");
         db.record_interval(&UsageInterval {
             subject: SubjectRef::App(app),
             session_id: "s1".into(),
             start: t2,
             end: t3,
             day_key: day,
-        }).expect("i2");
+        })
+        .expect("i2");
         db.record_interval(&UsageInterval {
             subject: SubjectRef::App(app),
             session_id: "s1".into(),
             start: t3,
             end: t4,
             day_key: day,
-        }).expect("i3");
+        })
+        .expect("i3");
 
         let summary = db.day_summary(day).expect("summary");
-        assert_eq!(summary.intervals.len(), 1, "should be merged into 1 interval");
+        assert_eq!(
+            summary.intervals.len(),
+            1,
+            "should be merged into 1 interval"
+        );
         assert_eq!(summary.intervals[0].duration_seconds, 3);
     }
 }
-

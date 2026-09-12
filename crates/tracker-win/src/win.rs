@@ -227,10 +227,10 @@ fn is_media_playing() -> bool {
             Some(&mut state as *mut u32 as *mut std::ffi::c_void),
             4,
         );
-        if res == windows::Win32::Foundation::STATUS_SUCCESS {
-            if (state & windows::Win32::System::Power::ES_DISPLAY_REQUIRED.0) != 0 {
-                return true;
-            }
+        if res == windows::Win32::Foundation::STATUS_SUCCESS
+            && (state & windows::Win32::System::Power::ES_DISPLAY_REQUIRED.0) != 0
+        {
+            return true;
         }
 
         // Check if audio is playing

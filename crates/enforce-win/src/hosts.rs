@@ -280,5 +280,4 @@ mod tests {
 
         assert_eq!(hosts.contents(), "127.0.0.1 localhost\n");
     }
-
 }

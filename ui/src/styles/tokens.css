@@ -4,48 +4,48 @@
    ========================================================================== */
 
 :root {
-    color-scheme: light;
+    color-scheme: dark;
 
-    /* ---- Primitives: Hex Colors from DESIGN.md ---- */
+    /* ---- Primitives: Hex Colors from Color Hunt #210F37, #4F1C51, #A55B4B, #DCA06D ---- */
     
     /* Surfaces */
-    --bg-app: #F8FAFC;           /* Base Floor */
-    --bg-card: #FFFFFF;          /* Surface Level 1 */
-    --bg-card-elevated: #FFFFFF;
-    --bg-modal-backdrop: rgba(15, 23, 42, 0.4);
-    --bg-recessed: #F1F5F9;      /* Surface Recessed */
+    --bg-app: #210F37;           /* Deep Base Floor */
+    --bg-card: rgba(79, 28, 81, 0.50);          /* Surface Level 1 */
+    --bg-card-elevated: rgba(79, 28, 81, 0.80);
+    --bg-modal-backdrop: rgba(15, 5, 25, 0.75);
+    --bg-recessed: rgba(33, 15, 55, 0.55);      /* Surface Recessed */
     
     /* Borders */
-    --border-subtle: #E2E8F0;
-    --border-strong: #CBD5E1;
+    --border-subtle: rgba(220, 160, 109, 0.10);
+    --border-strong: rgba(220, 160, 109, 0.22);
     
     /* Ink (Text) */
-    --text-primary: #0F172A;     /* Primary Ink */
-    --text-secondary: #475569;   /* Supporting metadata */
-    --text-muted: #64748B;       /* Column headers, units */
+    --text-primary: #f5ede8;     /* Warm Off-White */
+    --text-secondary: #d4b8af;   /* Warm Secondary */
+    --text-muted: #9b7e7a;       /* Column headers, units */
 
     /* Semantic / Telemetry Colors */
-    --color-primary: #0F172A;
-    --color-primary-hover: #1E293B;
-    --color-primary-active: #020617;
+    --color-primary: #A55B4B;
+    --color-primary-hover: #c07060;
+    --color-primary-active: #7a3e30;
     
     /* Success / Live */
-    --color-success: #059669;
-    --bg-success: #ECFDF5;
-    --border-success: #A7F3D0;
+    --color-success: #c8e66e;
+    --bg-success: rgba(200, 230, 110, 0.12);
+    --border-success: rgba(200, 230, 110, 0.28);
 
     /* Warning / Cooldown */
-    --color-warning: #D97706;
-    --bg-warning: #FFFBEB;
-    --border-warning: #FDE68A;
+    --color-warning: #DCA06D;
+    --bg-warning: rgba(220, 160, 109, 0.12);
+    --border-warning: rgba(220, 160, 109, 0.28);
 
     /* Danger / Blocked */
-    --color-danger: #E11D48;
-    --bg-danger: #FFF1F2;
-    --border-danger: #FECDD3;
+    --color-danger: #e07070;
+    --bg-danger: rgba(224, 112, 112, 0.12);
+    --border-danger: rgba(224, 112, 112, 0.28);
     
     /* Info / Focus */
-    --color-focus: #2563EB;
+    --color-focus: #DCA06D;
 
     /* ---- Fonts ---- */
     --font-sans: 'Hanken Grotesk', sans-serif;

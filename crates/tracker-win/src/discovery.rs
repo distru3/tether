@@ -16,8 +16,8 @@ use tracing::debug;
 use windows::core::{w, Interface, PCWSTR, PWSTR};
 use windows::Win32::Foundation::{ERROR_SUCCESS, MAX_PATH};
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoUninitialize, CLSCTX_INPROC_SERVER,
-    COINIT_APARTMENTTHREADED, IPersistFile, STGM,
+    CoCreateInstance, CoInitializeEx, CoUninitialize, IPersistFile, CLSCTX_INPROC_SERVER,
+    COINIT_APARTMENTTHREADED, STGM,
 };
 use windows::Win32::System::Registry::{
     RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_CURRENT_USER,
@@ -141,11 +141,13 @@ fn collect_lnk_recursive(dir: &Path, discovered: &mut HashMap<AppKey, Discovered
                 }
 
                 let key = AppKey::windows_exe(&target_lower);
-                discovered.entry(key.clone()).or_insert_with(|| DiscoveredAppDto {
-                    key,
-                    display_name,
-                    publisher: None,
-                });
+                discovered
+                    .entry(key.clone())
+                    .or_insert_with(|| DiscoveredAppDto {
+                        key,
+                        display_name,
+                        publisher: None,
+                    });
             }
         }
     }
@@ -161,11 +163,11 @@ fn resolve_lnk(lnk_path: &Path) -> Option<(String, String)> {
         .to_string();
 
     unsafe {
-        let shell_link: IShellLinkW =
-            match CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) {
-                Ok(sl) => sl,
-                Err(_) => return None,
-            };
+        let shell_link: IShellLinkW = match CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)
+        {
+            Ok(sl) => sl,
+            Err(_) => return None,
+        };
 
         let persist_file: IPersistFile = match shell_link.cast() {
             Ok(pf) => pf,
@@ -173,7 +175,10 @@ fn resolve_lnk(lnk_path: &Path) -> Option<(String, String)> {
         };
 
         // STGM_READ = 0
-        if persist_file.Load(PCWSTR(wide_path.as_ptr()), STGM(0)).is_err() {
+        if persist_file
+            .Load(PCWSTR(wide_path.as_ptr()), STGM(0))
+            .is_err()
+        {
             return None;
         }
 
@@ -185,7 +190,10 @@ fn resolve_lnk(lnk_path: &Path) -> Option<(String, String)> {
             return None;
         }
 
-        let len = path_buf.iter().position(|&c| c == 0).unwrap_or(path_buf.len());
+        let len = path_buf
+            .iter()
+            .position(|&c| c == 0)
+            .unwrap_or(path_buf.len());
         if len == 0 {
             return None;
         }
@@ -195,12 +203,19 @@ fn resolve_lnk(lnk_path: &Path) -> Option<(String, String)> {
         // Handle Squirrel installer shortcuts (e.g. Update.exe --processStart Discord.exe)
         let mut args_buf = [0u16; MAX_PATH as usize];
         if shell_link.GetArguments(&mut args_buf).is_ok() {
-            let args_len = args_buf.iter().position(|&c| c == 0).unwrap_or(args_buf.len());
+            let args_len = args_buf
+                .iter()
+                .position(|&c| c == 0)
+                .unwrap_or(args_buf.len());
             let args_str = String::from_utf16_lossy(&args_buf[..args_len]);
             if target_str.to_ascii_lowercase().ends_with("update.exe") {
                 if let Some(pos) = args_str.find("--processStart") {
                     let rest = args_str[pos + "--processStart".len()..].trim();
-                    let target_exe = rest.split_whitespace().next().unwrap_or("").trim_matches('"');
+                    let target_exe = rest
+                        .split_whitespace()
+                        .next()
+                        .unwrap_or("")
+                        .trim_matches('"');
                     if !target_exe.is_empty() {
                         let base_dir = Path::new(&target_str).parent();
                         if let Some(dir) = base_dir {
@@ -256,9 +271,19 @@ fn scan_uninstall_registry(discovered: &mut HashMap<AppKey, DiscoveredAppDto>) {
     let subkey = w!("Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall");
 
     // HKLM 64-bit
-    scan_reg_hive(HKEY_LOCAL_MACHINE, subkey, KEY_READ | KEY_WOW64_64KEY, discovered);
+    scan_reg_hive(
+        HKEY_LOCAL_MACHINE,
+        subkey,
+        KEY_READ | KEY_WOW64_64KEY,
+        discovered,
+    );
     // HKLM 32-bit (Wow6432Node)
-    scan_reg_hive(HKEY_LOCAL_MACHINE, subkey, KEY_READ | KEY_WOW64_32KEY, discovered);
+    scan_reg_hive(
+        HKEY_LOCAL_MACHINE,
+        subkey,
+        KEY_READ | KEY_WOW64_32KEY,
+        discovered,
+    );
     // HKCU
     scan_reg_hive(HKEY_CURRENT_USER, subkey, KEY_READ, discovered);
 }
@@ -315,34 +340,32 @@ fn inspect_app_key(
 ) {
     let sub_wide = to_wide(sub_name);
     let mut app_key = HKEY::default();
-    let res = unsafe {
-        RegOpenKeyExW(
-            parent,
-            PCWSTR(sub_wide.as_ptr()),
-            0,
-            flags,
-            &mut app_key,
-        )
-    };
+    let res = unsafe { RegOpenKeyExW(parent, PCWSTR(sub_wide.as_ptr()), 0, flags, &mut app_key) };
     if res != ERROR_SUCCESS {
         return;
     }
 
     // Skip system components or updates
     if query_reg_dword(app_key, "SystemComponent").unwrap_or(0) == 1 {
-        unsafe { let _ = RegCloseKey(app_key); }
+        unsafe {
+            let _ = RegCloseKey(app_key);
+        }
         return;
     }
 
     if query_reg_string(app_key, "ParentKeyName").is_some() {
-        unsafe { let _ = RegCloseKey(app_key); }
+        unsafe {
+            let _ = RegCloseKey(app_key);
+        }
         return;
     }
 
     let display_name = match query_reg_string(app_key, "DisplayName") {
         Some(name) if !name.trim().is_empty() => name.trim().to_string(),
         _ => {
-            unsafe { let _ = RegCloseKey(app_key); }
+            unsafe {
+                let _ = RegCloseKey(app_key);
+            }
             return;
         }
     };
@@ -375,7 +398,9 @@ fn inspect_app_key(
             .unwrap_or("");
 
         if !file_name.ends_with(".exe") || is_noise_executable(file_name) {
-            unsafe { let _ = RegCloseKey(app_key); }
+            unsafe {
+                let _ = RegCloseKey(app_key);
+            }
             return;
         }
 
@@ -456,7 +481,11 @@ fn find_main_exe_in_dir(dir: &Path, display_name: &str) -> Option<String> {
     // Exact match with display name (e.g. "Discord" -> "Discord.exe")
     let display_lower = display_name.to_ascii_lowercase();
     for cand in &candidates {
-        let stem = cand.file_stem().and_then(|s| s.to_str()).unwrap_or("").to_ascii_lowercase();
+        let stem = cand
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase();
         if stem == display_lower || display_lower.contains(&stem) {
             return cand.to_str().map(|s| s.to_string());
         }

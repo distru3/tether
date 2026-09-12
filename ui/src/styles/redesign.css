@@ -1,63 +1,69 @@
-/* Horizon-inspired analytics workspace: smoked glass, warm action orange, and real data density. */
+/* Horizon-inspired analytics workspace: deep purple, warm terracotta, and amber gold. */
 
 :root {
-  --redesign-bg: #091540;
-  --redesign-bg-soft: #101e50;
-  --redesign-panel: rgba(243, 244, 244, 0.075);
-  --redesign-panel-strong: rgba(243, 244, 244, 0.12);
-  --redesign-panel-muted: rgba(243, 244, 244, 0.045);
-  --redesign-line: rgba(243, 244, 244, 0.18);
-  --redesign-line-soft: rgba(243, 244, 244, 0.1);
-  --redesign-ink: #f3f4f4;
-  --redesign-ink-soft: #d6def1;
-  --redesign-muted: #9daaca;
-  --redesign-orange: #1b2cc1;
-  --redesign-orange-deep: #091540;
-  --redesign-green: #e4ff30;
-  --redesign-violet: #008bff;
-  --redesign-red: #ff6b8a;
-  --redesign-shadow: 0 22px 52px rgba(0, 0, 0, 0.28);
-  --redesign-radius: 16px;
+  /* ---- Palette primitives ---- */
+  --redesign-bg:           #210F37;   /* deepest bg */
+  --redesign-bg-soft:      #2a1442;   /* slightly lifted bg */
+  --redesign-panel:        rgba(79, 28, 81, 0.55);   /* card surface */
+  --redesign-panel-strong: rgba(79, 28, 81, 0.85);   /* elevated card */
+  --redesign-panel-muted:  rgba(79, 28, 81, 0.30);   /* recessed / input */
+  --redesign-line:         rgba(220, 160, 109, 0.22); /* border strong */
+  --redesign-line-soft:    rgba(220, 160, 109, 0.10); /* border subtle */
+  --redesign-ink:          #f5ede8;   /* primary text — warm off-white */
+  --redesign-ink-soft:     #d4b8af;   /* secondary text */
+  --redesign-muted:        #9b7e7a;   /* muted / placeholder */
+  --redesign-orange:       #A55B4B;   /* accent / interactive (terracotta) */
+  --redesign-orange-deep:  #7a3e30;   /* pressed accent */
+  --redesign-green:        #c8e66e;   /* success / live */
+  --redesign-violet:       #DCA06D;   /* focus / highlight (amber gold) */
+  --redesign-red:          #e07070;   /* danger */
+  --redesign-shadow:       0 22px 52px rgba(33, 15, 55, 0.55);
+  --redesign-radius:       16px;
 }
 
 /* Rebind the existing component tokens so inline component styles participate in the new surface system. */
 :root {
   color-scheme: dark;
-  --bg-app: #091540;
-  --bg-card: rgba(243, 244, 244, 0.075);
-  --bg-card-elevated: rgba(243, 244, 244, 0.12);
-  --bg-modal-backdrop: rgba(7, 8, 8, 0.68);
-  --bg-recessed: rgba(243, 244, 244, 0.08);
-  --border-subtle: rgba(243, 244, 244, 0.14);
-  --border-strong: rgba(243, 244, 244, 0.24);
-  --text-primary: var(--redesign-ink);
-  --text-secondary: var(--redesign-ink-soft);
-  --text-muted: var(--redesign-muted);
-  --color-primary: var(--redesign-orange);
-  --color-primary-hover: #7692ff;
+  --bg-app:              #210F37;
+  --bg-panel:            #2e1245;
+  --bg-card:             rgba(79, 28, 81, 0.50);
+  --bg-card-elevated:    rgba(79, 28, 81, 0.80);
+  --bg-input:            rgba(33, 15, 55, 0.60);
+  --bg-modal-backdrop:   rgba(15, 5, 25, 0.75);
+  --bg-recessed:         rgba(33, 15, 55, 0.55);
+  --border-subtle:       rgba(220, 160, 109, 0.10);
+  --border-strong:       rgba(220, 160, 109, 0.22);
+  --text-primary:        var(--redesign-ink);
+  --text-secondary:      var(--redesign-ink-soft);
+  --text-muted:          var(--redesign-muted);
+  --text-faint:          rgba(155, 126, 122, 0.6);
+  --color-primary:       var(--redesign-orange);
+  --color-accent:        var(--redesign-violet);
+  --color-primary-hover: #c07060;
   --color-primary-active: var(--redesign-orange-deep);
-  --color-success: var(--redesign-green);
-  --bg-success: rgba(114, 200, 121, 0.12);
-  --border-success: rgba(114, 200, 121, 0.28);
-  --color-warning: var(--redesign-orange);
-  --bg-warning: rgba(27, 44, 193, 0.16);
-  --border-warning: rgba(27, 44, 193, 0.32);
-  --color-danger: var(--redesign-red);
-  --bg-danger: rgba(238, 113, 104, 0.12);
-  --border-danger: rgba(238, 113, 104, 0.3);
-  --color-focus: var(--redesign-violet);
-  --color-primary-subtle: rgba(27, 44, 193, 0.16);
-  --color-success-subtle: rgba(114, 200, 121, 0.12);
-  --color-warning-subtle: rgba(27, 44, 193, 0.16);
-  --color-danger-subtle: rgba(238, 113, 104, 0.12);
-  --shadow-sm: 0 14px 34px rgba(0, 0, 0, 0.16);
-  --shadow-card: 0 20px 46px rgba(0, 0, 0, 0.2);
-  --shadow-modal: 0 28px 72px rgba(0, 0, 0, 0.46);
+  --color-success:       var(--redesign-green);
+  --bg-success:          rgba(165, 91, 75, 0.12);
+  --border-success:      rgba(200, 230, 110, 0.28);
+  --color-warning:       #DCA06D;
+  --bg-warning:          rgba(220, 160, 109, 0.12);
+  --border-warning:      rgba(220, 160, 109, 0.28);
+  --color-danger:        var(--redesign-red);
+  --bg-danger:           rgba(224, 112, 112, 0.12);
+  --border-danger:       rgba(224, 112, 112, 0.28);
+  --color-focus:         var(--redesign-violet);
+  --color-primary-subtle:  rgba(165, 91, 75, 0.16);
+  --color-success-subtle:  rgba(200, 230, 110, 0.12);
+  --color-warning-subtle:  rgba(220, 160, 109, 0.14);
+  --color-danger-subtle:   rgba(224, 112, 112, 0.12);
+  --shadow-sm:    0 4px 16px rgba(33, 15, 55, 0.35);
+  --shadow-card:  0 12px 36px rgba(33, 15, 55, 0.45);
+  --shadow-modal: 0 28px 72px rgba(15, 5, 25, 0.65);
   --radius-sm: 8px;
   --radius-md: 11px;
   --radius-lg: 16px;
   --radius-xl: 20px;
 }
+
 
 html,
 body,
@@ -105,7 +111,7 @@ textarea {
 .titlebar {
   height: 36px;
   border-bottom-color: var(--redesign-line-soft);
-  background: rgba(14, 17, 18, 0.62);
+  background: rgba(33, 15, 55, 0.75);
   backdrop-filter: blur(18px) saturate(120%);
 }
 
@@ -133,8 +139,8 @@ textarea {
   padding: 13px 28px;
   border-right: 0;
   border-bottom: 1px solid var(--redesign-line);
-  background: rgba(17, 20, 21, 0.66);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.16);
+  background: rgba(46, 18, 69, 0.75);
+  box-shadow: 0 8px 28px rgba(15, 5, 25, 0.35);
   backdrop-filter: blur(24px);
 }
 
@@ -152,9 +158,9 @@ textarea {
   width: 34px;
   height: 34px;
   border-radius: 11px;
-  color: #1c1712;
+  color: #f5ede8;
   background: var(--redesign-orange);
-  box-shadow: 0 8px 18px rgba(27, 44, 193, 0.25);
+  box-shadow: 0 8px 18px rgba(165, 91, 75, 0.25);
 }
 
 .brand-logo {
@@ -215,7 +221,7 @@ textarea {
 
 .status-dot--live {
   background: var(--redesign-green);
-  box-shadow: 0 0 0 4px rgba(114, 200, 121, 0.12), 0 0 12px rgba(114, 200, 121, 0.42);
+  box-shadow: 0 0 0 4px rgba(200, 230, 110, 0.12), 0 0 12px rgba(200, 230, 110, 0.42);
 }
 
 .status-dot--off,
@@ -258,8 +264,8 @@ textarea {
 
 .nav-item--active {
   color: var(--redesign-ink);
-  border-color: rgba(27, 44, 193, 0.34);
-  background: rgba(27, 44, 193, 0.14);
+  border-color: rgba(165, 91, 75, 0.34);
+  background: rgba(165, 91, 75, 0.14);
 }
 
 .nav-item svg {
@@ -458,7 +464,7 @@ textarea {
   border: 1px solid var(--redesign-line);
   border-radius: 8px;
   color: var(--redesign-orange);
-  background: rgba(27, 44, 193, 0.14);
+  background: rgba(165, 91, 75, 0.14);
 }
 
 .metric-icon svg {
@@ -478,7 +484,7 @@ textarea {
   padding: 4px 7px;
   border-radius: 999px;
   color: var(--redesign-green);
-  background: rgba(114, 200, 121, 0.11);
+  background: rgba(200, 230, 110, 0.11);
   font-size: 0.62rem;
   font-weight: 720;
 }
@@ -543,8 +549,8 @@ textarea {
 }
 
 .timeline-panel .date-picker-placeholder:hover {
-  border-color: rgba(27, 44, 193, 0.5);
-  background: rgba(27, 44, 193, 0.14);
+  border-color: rgba(165, 91, 75, 0.5);
+  background: rgba(165, 91, 75, 0.14);
 }
 
 .timeline-grid {
@@ -579,7 +585,7 @@ textarea {
 .chart-bar--active,
 .bar-fill--selected {
   background: var(--redesign-orange);
-  box-shadow: 0 8px 20px rgba(27, 44, 193, 0.22);
+  box-shadow: 0 8px 20px rgba(165, 91, 75, 0.22);
 }
 
 .timeline-label,
@@ -839,9 +845,9 @@ textarea {
 .notice-stack,
 .alert,
 .notice {
-  border-color: rgba(27, 44, 193, 0.34);
+  border-color: rgba(165, 91, 75, 0.34);
   color: var(--redesign-ink-soft);
-  background: rgba(27, 44, 193, 0.12);
+  background: rgba(165, 91, 75, 0.12);
 }
 
 .button-primary,
@@ -849,16 +855,16 @@ textarea {
 button[data-variant="primary"] {
   border-color: transparent;
   border-radius: 8px;
-  color: #2b1712;
+  color: #f5ede8;
   background: var(--redesign-orange);
-  box-shadow: 0 8px 18px rgba(27, 44, 193, 0.22);
+  box-shadow: 0 8px 18px rgba(165, 91, 75, 0.22);
   font-weight: 720;
 }
 
 .button-primary:hover,
 .primary-button:hover,
 button[data-variant="primary"]:hover {
-  background: #7692ff;
+  background: #c07060;
 }
 
 input,
@@ -1032,11 +1038,11 @@ dialog::backdrop,
   place-items: center;
   width: 29px;
   height: 29px;
-  border: 1px solid rgba(27, 44, 193, 0.62);
+  border: 1px solid rgba(165, 91, 75, 0.62);
   border-radius: 9px;
   color: var(--redesign-orange);
-  background: rgba(27, 44, 193, 0.16);
-  box-shadow: 0 6px 18px rgba(27, 44, 193, 0.18);
+  background: rgba(165, 91, 75, 0.16);
+  box-shadow: 0 6px 18px rgba(165, 91, 75, 0.18);
 }
 
 .logo-title {
@@ -1085,7 +1091,7 @@ dialog::backdrop,
   height: 2px;
   border-radius: 999px;
   background: var(--redesign-orange);
-  box-shadow: 0 0 14px rgba(27, 44, 193, 0.5);
+  box-shadow: 0 0 14px rgba(165, 91, 75, 0.5);
   content: "";
   transform: translateX(-50%);
 }

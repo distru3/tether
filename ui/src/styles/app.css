@@ -2079,13 +2079,19 @@ body {
   width: 420px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 64px);
-  overflow-y: auto;
+  overflow: visible;
   padding: 24px;
   background-color: var(--bg-card);
   border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
   box-shadow: var(--shadow-modal);
   transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dialog > form {
+  max-height: calc(100vh - 112px);
+  overflow-y: auto;
+  overflow-x: visible;
 }
 
 @starting-style {
@@ -2134,6 +2140,8 @@ body {
   flex-direction: column;
   gap: 6px;
   margin-top: 14px;
+  position: relative;
+  overflow: visible;
 }
 
 .field-label {
@@ -2190,6 +2198,138 @@ body {
   letter-spacing: 0.3em;
 }
 
+
+/* ---- Custom app picker (replaces native <select> whose OS popup ignores dark theme) ---- */
+.app-picker {
+  width: 100%;
+}
+
+.app-picker__trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  background-color: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  cursor: pointer;
+  text-align: left;
+  gap: 8px;
+}
+
+.app-picker__trigger:focus {
+  border-color: var(--color-focus);
+  outline: 1px solid var(--color-focus);
+}
+
+.app-picker__trigger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.app-picker__placeholder {
+  color: var(--text-faint);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-picker__label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-picker__dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 200;
+  background: var(--bg-panel, #2e1245);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  max-height: 280px;
+}
+
+.app-picker__search-wrap {
+  padding: 8px;
+  border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+  flex-shrink: 0;
+}
+
+.app-picker__search {
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm, 4px);
+  background: var(--bg-input, rgba(255,255,255,0.05));
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.app-picker__search:focus {
+  border-color: var(--color-focus);
+  outline: 1px solid var(--color-focus);
+}
+
+.app-picker__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.app-picker__item {
+  padding: 6px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.app-picker__item--active {
+  background: rgba(255,255,255,0.07);
+  color: var(--text-primary);
+}
+
+.app-picker__item--selected {
+  color: var(--color-focus);
+}
+
+.app-picker__item--special {
+  color: var(--text-primary);
+  font-weight: 600;
+  border-bottom: 1px solid var(--border-subtle, rgba(255,255,255,0.06));
+  margin-bottom: 4px;
+}
+
+.app-picker__item--category {
+  color: var(--color-accent, #DCA06D);
+}
+
+.app-picker__empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--text-faint);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
 
 /* ---- Weekday overrides ---- */
 .weekday-toggle {

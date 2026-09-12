@@ -1091,7 +1091,10 @@ fn register_discovered_apps(
         }
     }
 
-    tracing::debug!(count = registered_count, "proactively registered discovered apps in catalog");
+    tracing::debug!(
+        count = registered_count,
+        "proactively registered discovered apps in catalog"
+    );
     accepted(now)
 }
 

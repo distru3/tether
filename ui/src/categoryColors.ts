@@ -1,32 +1,33 @@
 const FALLBACK_PALETTE = [
-  "#5b23ff",
-  "#008bff",
-  "#e4ff30",
-  "#8d6bff",
-  "#4db8ff",
-  "#b6c6ff",
-  "#858196",
-  "#e4e5eb",
+  "#DCA06D",
+  "#A55B4B",
+  "#C27D60",
+  "#E8B88A",
+  "#9D4F6A",
+  "#B56B55",
+  "#C8E66E",
+  "#8E3E63",
+  "#d4b8af",
 ];
 
 const LABEL_COLORS: Record<string, string> = {
-  "ai assistants": "#5b23ff",
-  "social media": "#008bff",
-  "short-form video": "#e4ff30",
-  "video & streaming": "#8d6bff",
-  "music & audio": "#4db8ff",
-  news: "#b6c6ff",
-  shopping: "#7f9dff",
-  communication: "#52c3ff",
-  "productivity & office": "#e4e5eb",
-  "creativity & design": "#9d7dff",
-  "education & reading": "#91baff",
-  finance: "#858196",
-  uncategorized: "#a8a7b5",
-  "development & tools": "#858196",
-  "utilities & system": "#615d76",
-  "adult content": "#ff6b8a",
-  "gambling & betting": "#d94f7c",
+  "ai assistants": "#DCA06D",
+  "social media": "#A55B4B",
+  "short-form video": "#E8B88A",
+  "video & streaming": "#9D4F6A",
+  "music & audio": "#C27D60",
+  news: "#d4b8af",
+  shopping: "#B56B55",
+  communication: "#DCA06D",
+  "productivity & office": "#f5ede8",
+  "creativity & design": "#C8E66E",
+  "education & reading": "#E8B88A",
+  finance: "#9b7e7a",
+  uncategorized: "#703B52",
+  "development & tools": "#9b7e7a",
+  "utilities & system": "#5a4350",
+  "adult content": "#e07070",
+  "gambling & betting": "#cf5353",
 };
 
 function normalize(value: string): string {
@@ -47,5 +48,5 @@ export function colorForCategory(
   if (explicitColor && explicitColor.trim()) return explicitColor;
 
   const normalized = normalize(value ?? "");
-  return LABEL_COLORS[normalized] ?? FALLBACK_PALETTE[normalized ? stableIndex(normalized) : fallbackIndex % FALLBACK_PALETTE.length] ?? "#5b23ff";
+  return LABEL_COLORS[normalized] ?? FALLBACK_PALETTE[normalized ? stableIndex(normalized) : fallbackIndex % FALLBACK_PALETTE.length] ?? "#A55B4B";
 }
