@@ -177,7 +177,7 @@ pub fn stop_all_services(app: &AppHandle) {
 
 /// Initialize the system tray icon with menu actions and click handlers.
 pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    let open_item = MenuItem::with_id(app, "open", "Open Screentime", true, None::<&str>)?;
+    let open_item = MenuItem::with_id(app, "open", "Open Tether", true, None::<&str>)?;
     let reset_item = MenuItem::with_id(
         app,
         "reset_net",
@@ -192,7 +192,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         true,
         None::<&str>,
     )?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit Screentime UI", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Quit Tether", true, None::<&str>)?;
 
     let menu = Menu::with_items(app, &[&open_item, &reset_item, &stop_item, &quit_item])?;
 
