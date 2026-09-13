@@ -471,4 +471,88 @@
 }
 
 
+/* ─── Light theme overrides ───────────────────────────────────────────────── */
+
+[data-theme="light"] .web-filter-command-panel {
+    background: rgba(255, 250, 247, 0.95);
+    border-color: rgba(165, 91, 75, 0.18);
+    box-shadow: 0 4px 16px rgba(100, 50, 30, 0.08);
+}
+
+[data-theme="light"] .web-filter-domain-panel {
+    background: rgba(255, 250, 247, 0.95) !important;
+    border-color: rgba(165, 91, 75, 0.18) !important;
+    box-shadow: 0 4px 16px rgba(100, 50, 30, 0.08) !important;
+}
+
+[data-theme="light"] .add-domain-form-wrapper .form-input {
+    background: rgba(255, 248, 244, 0.90);
+    border-color: rgba(165, 91, 75, 0.28);
+}
+
+[data-theme="light"] .ai-prompt-card {
+    background: rgba(255, 248, 244, 0.85);
+    border-color: rgba(165, 91, 75, 0.18);
+}
+
+[data-theme="light"] .ai-prompt-row .form-input {
+    background: rgba(255, 248, 244, 0.90);
+    border-color: rgba(165, 91, 75, 0.20);
+}
+
+[data-theme="light"] .web-filter-table-header {
+    background: rgba(165, 91, 75, 0.06);
+    border-bottom-color: rgba(165, 91, 75, 0.14);
+}
+
+[data-theme="light"] .web-filter-search-input {
+    background: rgba(255, 248, 244, 0.90);
+    border-color: rgba(165, 91, 75, 0.22);
+}
+
+[data-theme="light"] .web-filter-search-input:focus {
+    background: rgba(255, 250, 247, 0.98);
+}
+
+[data-theme="light"] .web-filter-table th {
+    background: rgba(165, 91, 75, 0.07);
+    border-bottom-color: rgba(165, 91, 75, 0.14);
+}
+
+[data-theme="light"] .web-filter-table td {
+    border-bottom-color: rgba(165, 91, 75, 0.08);
+}
+
+[data-theme="light"] .domain-row:hover td {
+    background: rgba(165, 91, 75, 0.05);
+}
+
+[data-theme="light"] .pill--custom {
+    background: rgba(165, 91, 75, 0.12);
+    border-color: rgba(165, 91, 75, 0.25);
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .web-filter-table-footer {
+    background: rgba(165, 91, 75, 0.05);
+    border-top-color: rgba(165, 91, 75, 0.12);
+}
+
+[data-theme="light"] .adult-toggle-btn {
+    background: rgba(165, 91, 75, 0.07);
+    border-color: rgba(165, 91, 75, 0.25);
+}
+
+[data-theme="light"] .adult-toggle-btn:hover {
+    background: rgba(165, 91, 75, 0.12);
+}
+
+[data-theme="light"] .pagination-btn {
+    background: rgba(255, 248, 244, 0.90);
+    border-color: rgba(165, 91, 75, 0.20);
+}
+
+[data-theme="light"] .web-filter-search-clear:hover {
+    background: rgba(165, 91, 75, 0.10);
+}
 
