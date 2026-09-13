@@ -188,3 +188,24 @@ The system renders two native Win32 GDI topmost overlays running in dedicated me
   - When the user drags or resizes the blocked application, the overlay adjusts its bounds via `SetWindowPos` at 60 FPS, ensuring seamless clipping and complete mouse interception.
   - Minimization handling: Hides on `IsIconic(target_hwnd)` and restores on `IsWindowVisible(target_hwnd)`.
 
+---
+
+## 6. Theme System & Component Standardization (Dark, Light, System)
+
+### A. Tri-Mode Theme Switcher
+- **Hook (`useTheme.ts`)**: Manages theme state (`dark`, `light`, `system`), persists choice in `localStorage` under `tether_theme`, and sets `<html data-theme="dark|light">`.
+- **System Following**: In `system` mode, listens to `window.matchMedia('(prefers-color-scheme: dark)')` to reactively switch themes without page reload.
+- **Warm Parchment Light Palette**:
+  - Base canvas: `#F5EDE8` (`--redesign-bg`).
+  - Panel & Card surfaces: `rgba(255, 250, 247, 0.95)` (`--bg-card`, `--redesign-panel`).
+  - Typography: `#1E0A05` primary text, `#5C3020` secondary, `#8B6555` muted.
+  - Border and Dividers: Translucent terracotta rules (`rgba(165, 91, 75, 0.20)`).
+  - Preserved Branding: Terracotta `#A55B4B` and amber `#DCA06D` accents are preserved for consistent brand recognition across both modes.
+
+### B. Standardized Switch Toggles
+- **Implementation**: Standardized across Settings, App Limits, and Onboarding via semantic `<input type="checkbox" className="toggle-switch" role="switch">`.
+- **Geometry**: Precision 40x22px capsule with 16px thumb, 2px padding, and smooth cubic-bezier transitions (`translateX(18px)`).
+- **Light Theme Cohesion**: Soft terracotta track when unchecked (`rgba(165, 91, 75, 0.18)`), vibrant terracotta when checked (`#A55B4B`), and clean white thumb (`#FFFFFF`) with zero overflow or double-rendering artifacts.
+
+### C. Stabilized Top Date Stepper
+- Fixed `196px` width with `justify-content: space-between` and flex `min-width: 0` ensures the date pill and central navigation tabs never shift or resize when toggling between "Today" and past date ranges.
