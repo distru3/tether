@@ -122,3 +122,16 @@ SQLite database managed via append-only migrations tracked by `PRAGMA user_versi
 3. **Restoration on Disable**: When Family DNS is disabled (via UI Settings or CLI `--disable-family-dns`), the agent reads the serialized backup from SQLite or the JSON backup file, restores each interface back to its exact prior configuration (static IPs or DHCP), flushes the Windows DNS resolver cache (`ipconfig /flushdns`), removes the backup records, and clears the registry flag.
 4. **Silent Uninstaller Restoration**: The NSIS uninstaller (`installer_hooks.nsh`) inspects `FamilyDnsApplied`. If set to `1`, it silently executes `screentime-agent.exe --disable-family-dns` without interactive popup prompts, ensuring the user's internet is cleanly restored before service removal.
 
+### E. Application Discovery & Auto-Classification
+1. **Multi-Source Discovery (`st-tracker-win::discovery`)**:
+   - **Start Menu**: Recursively inspects `.lnk` shortcuts in All Users and Current User directories, extracting target executables and localized shortcut display names.
+   - **Uninstall Registry**: Scans 64-bit and 32-bit Windows uninstall registries (`HKLM` & `HKCU`) to extract application names, installation directories, display icons, and publishers.
+   - **GameConfigStore Registry**: Scans `HKCU\System\GameConfigStore\Children` where Windows DirectX and Game Bar register games (`Type: 1`), automatically detecting standalone, packaged, and non-Steam games.
+2. **Multi-Signal Classification (`st-agent::classify`)**:
+   - **Layer 1 (Exact Signatures)**: High-confidence overrides for known standard binaries.
+   - **Layer 2 (Expanded Paths)**: Matches paths against game launchers, `\Games\`, `\Game\`, `\SteamLibrary\`, `\Riot Games\`, `\Ubisoft\`, and `\Electronic Arts\`.
+   - **Layer 3 (Publisher Heuristics)**: Matches developer and publisher strings (e.g., *Studios*, *Entertainment*, *Ubisoft*, *Bethesda*, *Adobe*, *JetBrains*) to corresponding categories.
+   - **Layer 4 (Display Name Keywords)**: Evaluates application display names against targeted domain keywords (development, creativity, communication, music).
+   - **Layer 5 (Name Patterns)**: Evaluates engine and shipping suffixes (`_win64-shipping.exe`, etc.).
+   - **Human Decision Immutability**: Auto-classification runs strictly when `!user_classified && primary == default_category`. User manual categorizations are never overwritten.
+
