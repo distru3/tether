@@ -1870,3 +1870,125 @@ dialog::backdrop,
 .ledger-legend-swatch--blocked {
   background: var(--redesign-red);
 }
+
+/* ─── Light theme component-level overrides ─────────────────────────────────
+   These selectors contain hardcoded dark rgba values that don't go through
+   CSS custom properties. Override them all here under [data-theme="light"].  */
+
+/* ── Dialogs & modals ── */
+[data-theme="light"] dialog,
+[data-theme="light"] .dialog,
+[data-theme="light"] .modal {
+  background: #FFFFFF;
+  border-color: rgba(165, 91, 75, 0.22);
+  box-shadow: 0 28px 72px rgba(80, 30, 10, 0.18);
+}
+
+[data-theme="light"] dialog::backdrop,
+[data-theme="light"] .modal-backdrop {
+  background: rgba(50, 20, 10, 0.45);
+  backdrop-filter: blur(5px);
+}
+
+/* ── Inputs / textareas / selects ── */
+[data-theme="light"] input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+[data-theme="light"] select,
+[data-theme="light"] textarea {
+  background: rgba(255, 248, 244, 0.90);
+  border-color: rgba(165, 91, 75, 0.28);
+  color: var(--text-primary);
+}
+
+/* ── Settings page cards ── */
+[data-theme="light"] .settings-page .settings-card {
+  background: rgba(255, 250, 247, 0.95);
+  border-color: rgba(165, 91, 75, 0.18);
+  box-shadow: 0 4px 16px rgba(100, 50, 30, 0.08);
+}
+
+[data-theme="light"] .settings-page .settings-card:hover {
+  border-color: rgba(165, 91, 75, 0.32);
+}
+
+[data-theme="light"] .settings-page .card-header {
+  border-bottom-color: rgba(165, 91, 75, 0.14);
+}
+
+/* ── Toggle switch (settings) ── */
+[data-theme="light"] .settings-page .toggle-switch {
+  background: rgba(165, 91, 75, 0.18);
+  border-color: rgba(165, 91, 75, 0.30);
+}
+
+[data-theme="light"] .settings-page .toggle-switch:checked::after {
+  background-color: #FFFFFF;
+}
+
+/* ── Settings inputs & selects ── */
+[data-theme="light"] .settings-page .select-input,
+[data-theme="light"] .settings-page .input,
+[data-theme="light"] .tab-page .form-input {
+  background: rgba(255, 248, 244, 0.90);
+  border-color: rgba(165, 91, 75, 0.28);
+}
+
+/* ── Language / theme segment control ── */
+[data-theme="light"] .language-selector-group {
+  background: rgba(165, 91, 75, 0.08);
+  border-color: rgba(165, 91, 75, 0.20);
+}
+
+[data-theme="light"] .lang-btn--active {
+  background: rgba(165, 91, 75, 0.15);
+  color: var(--color-primary);
+}
+
+/* ── Input-with-suffix wrapper ── */
+[data-theme="light"] .input-with-suffix {
+  background: rgba(255, 248, 244, 0.90);
+  border-color: rgba(165, 91, 75, 0.28);
+}
+
+/* ── Tab-page progress tracks ── */
+[data-theme="light"] .tab-page .rich-limit-progress-track,
+[data-theme="light"] .limits-page-shell .rich-limit-progress-track {
+  background: rgba(165, 91, 75, 0.14);
+}
+
+/* ── Tab bar / filter tabs ── */
+[data-theme="light"] .tab-page .filter-tabs,
+[data-theme="light"] .tab-page .tabs {
+  background: rgba(165, 91, 75, 0.10);
+}
+
+/* ── Limits page — metric cards ── */
+[data-theme="light"] .limits-page-shell .metric-card,
+[data-theme="light"] .limits-page-shell .metric-card:nth-child(2),
+[data-theme="light"] .limits-page-shell .metric-card:nth-child(3) {
+  background: rgba(255, 250, 247, 0.95);
+  border-color: rgba(165, 91, 75, 0.20);
+}
+
+/* ── Limits page — limit cards ── */
+[data-theme="light"] .limits-page-shell .rich-limit-card {
+  background: rgba(255, 250, 247, 0.95);
+  border-color: rgba(165, 91, 75, 0.18);
+  box-shadow: 0 4px 16px rgba(100, 50, 30, 0.08);
+}
+
+[data-theme="light"] .limits-page-shell .rich-limit-card.limit-card--pending {
+  background: rgba(255, 248, 244, 0.98);
+  border-color: rgba(165, 91, 75, 0.35);
+}
+
+/* ── Date-picker / timeline picker ── */
+[data-theme="light"] .timeline-panel .date-picker-placeholder {
+  background: rgba(165, 91, 75, 0.07);
+  border-color: rgba(165, 91, 75, 0.20);
+}
+
+/* ── App.css .dialog override (hardcoded #2a1442) ── */
+[data-theme="light"] .dialog {
+  background: #FFFFFF;
+  box-shadow: 0 24px 64px rgba(80, 30, 10, 0.18);
+}
