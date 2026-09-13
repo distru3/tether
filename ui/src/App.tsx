@@ -26,6 +26,7 @@ import { TitleBar } from "./components/TitleBar";
 import { useDashboard } from "./hooks/useDashboard";
 import { useLedgerActions } from "./hooks/useLedgerActions";
 import { useNowMinute } from "./hooks/useNowMinute";
+import { useTheme } from "./hooks/useTheme";
 import { useToasts } from "./hooks/useToasts";
 import type { LimitDto } from "./types/generated/LimitDto";
 
@@ -51,6 +52,7 @@ export function App() {
     goToday,
   } = useDashboard();
   const now = useNowMinute();
+  const { theme, setTheme } = useTheme();
   const { toasts, push, dismiss } = useToasts();
   const actions = useLedgerActions({
     catalog,
@@ -389,6 +391,40 @@ export function App() {
                     <div className="card-subtitle">{t("settings.appearanceDesc")}</div>
                   </header>
                   <div className="card-body">
+                    {/* Theme selector */}
+                    <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                      <div>
+                        <div className="form-label">Color Theme</div>
+                        <div className="form-hint" style={{ marginTop: 0 }}>
+                          Choose dark, light, or follow your OS setting.
+                        </div>
+                      </div>
+                      <div className="language-selector-group">
+                        <button
+                          type="button"
+                          className={`lang-btn ${theme === "dark" ? "lang-btn--active" : ""}`}
+                          onClick={() => setTheme("dark")}
+                        >
+                          🌙 Dark
+                        </button>
+                        <button
+                          type="button"
+                          className={`lang-btn ${theme === "light" ? "lang-btn--active" : ""}`}
+                          onClick={() => setTheme("light")}
+                        >
+                          ☀️ Light
+                        </button>
+                        <button
+                          type="button"
+                          className={`lang-btn ${theme === "system" ? "lang-btn--active" : ""}`}
+                          onClick={() => setTheme("system")}
+                        >
+                          ⊙ System
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* HUD overlay */}
                     <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                       <div>
                         <div className="form-label">{t("settings.showHud")}</div>

@@ -64,6 +64,67 @@
   --radius-xl: 20px;
 }
 
+/* ─── Light theme overrides ────────────────────────────────────────────────── */
+/* Applied when <html data-theme="light"> is set by the useTheme hook.        */
+[data-theme="light"] {
+  color-scheme: light;
+
+  /* Palette primitives */
+  --redesign-bg:           #F5EDE8;
+  --redesign-bg-soft:      #EDE0D8;
+  --redesign-panel:        rgba(255, 248, 244, 0.90);
+  --redesign-panel-strong: rgba(255, 250, 247, 0.97);
+  --redesign-panel-muted:  rgba(240, 228, 220, 0.80);
+  --redesign-line:         rgba(165, 91, 75, 0.28);
+  --redesign-line-soft:    rgba(165, 91, 75, 0.12);
+  --redesign-ink:          #1E0A05;
+  --redesign-ink-soft:     #5C3020;
+  --redesign-muted:        #8B6555;
+  /* Accents stay the same — terracotta & amber work equally on light backgrounds */
+  --redesign-orange:       #A55B4B;
+  --redesign-orange-deep:  #7a3e30;
+  --redesign-green:        #3A7A20;
+  --redesign-violet:       #8B6B1A;
+  --redesign-red:          #C04040;
+  --redesign-shadow:       0 22px 52px rgba(100, 50, 30, 0.12);
+
+  /* Semantic tokens */
+  --bg-app:              #F5EDE8;
+  --bg-panel:            #EDE0D8;
+  --bg-card:             rgba(255, 250, 247, 0.92);
+  --bg-card-elevated:    rgba(255, 253, 251, 0.98);
+  --bg-input:            rgba(255, 248, 244, 0.80);
+  --bg-modal-backdrop:   rgba(50, 20, 10, 0.50);
+  --bg-recessed:         rgba(220, 200, 190, 0.55);
+  --border-subtle:       rgba(165, 91, 75, 0.12);
+  --border-strong:       rgba(165, 91, 75, 0.28);
+  --text-primary:        #1E0A05;
+  --text-secondary:      #5C3020;
+  --text-muted:          #8B6555;
+  --text-faint:          rgba(139, 101, 85, 0.6);
+  --color-primary:       #A55B4B;
+  --color-accent:        #8B6B1A;
+  --color-primary-hover: #C07060;
+  --color-primary-active: #7a3e30;
+  --color-success:       #3A7A20;
+  --bg-success:          rgba(58, 122, 32, 0.10);
+  --border-success:      rgba(58, 122, 32, 0.30);
+  --color-warning:       #8B6B1A;
+  --bg-warning:          rgba(139, 107, 26, 0.10);
+  --border-warning:      rgba(139, 107, 26, 0.28);
+  --color-danger:        #C04040;
+  --bg-danger:           rgba(192, 64, 64, 0.10);
+  --border-danger:       rgba(192, 64, 64, 0.28);
+  --color-focus:         #8B6B1A;
+  --color-primary-subtle:  rgba(165, 91, 75, 0.14);
+  --color-success-subtle:  rgba(58, 122, 32, 0.10);
+  --color-warning-subtle:  rgba(139, 107, 26, 0.12);
+  --color-danger-subtle:   rgba(192, 64, 64, 0.10);
+  --shadow-sm:    0 4px 16px rgba(100, 50, 30, 0.10);
+  --shadow-card:  0 12px 36px rgba(100, 50, 30, 0.10);
+  --shadow-modal: 0 28px 72px rgba(80, 30, 10, 0.18);
+}
+
 
 html,
 body,
