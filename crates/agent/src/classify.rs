@@ -206,14 +206,20 @@ const SIGNATURES: &[(&str, &str, &[&str])] = &[
     ("screentime-agent.exe", "utilities-system", &[]),
 ];
 
-/// Classify an app by its key. Tries in order:
+/// Classify an app by its key and optional metadata. Tries in order:
 /// 1. Exact basename match against the signature table
-/// 2. Path-based detection (Steam/Epic/GOG/Xbox directories)
-/// 3. Name pattern matching (Unreal Engine, common game patterns)
+/// 2. Path-based detection (Steam/Epic/GOG/Xbox/Games directories)
+/// 3. Publisher name heuristics (gaming studios, dev tooling, creativity, etc.)
+/// 4. Display name keyword matching
+/// 5. Name pattern matching (Unreal Engine, common game executable patterns)
 ///
 /// Returns `None` if nothing matches, in which case the caller keeps the
 /// `uncategorized` default.
-pub fn classify(key: &AppKey) -> Option<Classification> {
+pub fn classify(
+    key: &AppKey,
+    display_name: Option<&str>,
+    publisher: Option<&str>,
+) -> Option<Classification> {
     let basename = key.basename().to_lowercase();
 
     // Layer 1: Exact signature match
@@ -225,12 +231,19 @@ pub fn classify(key: &AppKey) -> Option<Classification> {
     if let AppKey::WindowsExe(path) = key {
         let path_lower = path.to_lowercase();
 
-        // Game launcher directories
+        // Game launcher & generic game directories
         if path_lower.contains("steam\\steamapps\\common\\")
             || path_lower.contains("epic games\\")
             || path_lower.contains("gog galaxy\\games\\")
             || path_lower.contains("xboxgames\\")
             || path_lower.contains("battle.net\\")
+            || path_lower.contains("\\games\\")
+            || path_lower.contains("\\game\\")
+            || path_lower.contains("\\steamlibrary\\")
+            || path_lower.contains("\\riot games\\")
+            || path_lower.contains("\\ubisoft\\")
+            || path_lower.contains("\\electronic arts\\")
+            || path_lower.contains("\\ea games\\")
         {
             return Some(Classification {
                 primary: "games",
@@ -239,7 +252,130 @@ pub fn classify(key: &AppKey) -> Option<Classification> {
         }
     }
 
-    // Layer 3: Name pattern matching
+    // Layer 3: Publisher heuristics
+    if let Some(pub_name) = publisher {
+        let p = pub_name.to_lowercase();
+        // Gaming publishers & studio indicators
+        if p.contains("studios")
+            || p.contains("entertainment")
+            || p.contains("interactive")
+            || p.contains("games")
+            || p.contains("gaming")
+            || p.contains("electronic arts")
+            || p.contains("ubisoft")
+            || p.contains("bethesda")
+            || p.contains("rockstar")
+            || p.contains("capcom")
+            || p.contains("square enix")
+            || p.contains("bandai")
+            || p.contains("fromsoftware")
+            || p.contains("cd projekt")
+            || p.contains("sega")
+            || p.contains("blizzard")
+            || p.contains("valve")
+            || p.contains("remedy")
+            || p.contains("riot")
+            || p.contains("activision")
+            || p == "game"
+        {
+            return Some(Classification {
+                primary: "games",
+                tags: &[],
+            });
+        }
+
+        // Development tools publishers
+        if p.contains("jetbrains") || p.contains("github") || p.contains("canonical") {
+            return Some(Classification {
+                primary: "development",
+                tags: &[],
+            });
+        }
+
+        // Creativity software publishers
+        if p.contains("adobe")
+            || p.contains("autodesk")
+            || p.contains("blackmagic")
+            || p.contains("affinity")
+            || p.contains("serif")
+            || p.contains("ableton")
+            || p.contains("maxon")
+        {
+            return Some(Classification {
+                primary: "creativity",
+                tags: &[],
+            });
+        }
+
+        // Communication
+        if p.contains("discord")
+            || p.contains("telegram")
+            || p.contains("slack")
+            || p.contains("zoom")
+            || p.contains("signal")
+        {
+            return Some(Classification {
+                primary: "communication",
+                tags: &[],
+            });
+        }
+
+        // Music & Audio
+        if p.contains("spotify") || p.contains("tidal") || p.contains("deezer") {
+            return Some(Classification {
+                primary: "music-audio",
+                tags: &[],
+            });
+        }
+    }
+
+    // Layer 4: Display name keywords
+    if let Some(name) = display_name {
+        let n = name.to_lowercase();
+        // Development keywords
+        if n.contains("visual studio")
+            || n.contains("compiler")
+            || n.contains("debugger")
+            || n.contains("terminal")
+            || n.contains("sdk")
+        {
+            return Some(Classification {
+                primary: "development",
+                tags: &[],
+            });
+        }
+
+        // Creativity keywords
+        if n.contains("photo editor")
+            || n.contains("video editor")
+            || n.contains("blender")
+            || n.contains("cad")
+            || n.contains("daw")
+        {
+            return Some(Classification {
+                primary: "creativity",
+                tags: &[],
+            });
+        }
+
+        // Music keywords
+        if n.contains("music player") || n.contains("audio player") {
+            return Some(Classification {
+                primary: "music-audio",
+                tags: &[],
+            });
+        }
+
+        // Communication keywords
+        if n.contains("messenger") || n.contains("chat") {
+            return Some(Classification {
+                primary: "communication",
+                tags: &[],
+            });
+        }
+    }
+
+    // Layer 5: Name pattern matching
     if basename.ends_with("_win64-shipping.exe")
         || basename.ends_with("_shipping.exe")
         || basename.ends_with("_launcher.exe")
@@ -264,37 +400,73 @@ mod tests {
 
     #[test]
     fn matches_windows_exe_by_basename() {
-        let c = classify(&exe("C:\\Program Files\\Steam\\steam.exe")).expect("steam");
+        let c = classify(&exe("C:\\Program Files\\Steam\\steam.exe"), None, None).expect("steam");
         assert_eq!(c.primary, "games");
         assert!(c.tags.is_empty());
     }
 
     #[test]
     fn matching_is_case_insensitive() {
-        let c =
-            classify(&exe("C:\\Users\\me\\AppData\\Local\\Discord\\Discord.EXE")).expect("discord");
+        let c = classify(
+            &exe("C:\\Users\\me\\AppData\\Local\\Discord\\Discord.EXE"),
+            None,
+            None,
+        )
+        .expect("discord");
         assert_eq!(c.primary, "communication");
     }
 
     #[test]
     fn short_form_video_also_carries_social_media_tag() {
-        let c = classify(&exe("C:\\tiktok.exe")).expect("tiktok");
+        let c = classify(&exe("C:\\tiktok.exe"), None, None).expect("tiktok");
         assert_eq!(c.primary, "short-form-video");
         assert_eq!(c.tags, &["social-media"]);
     }
 
     #[test]
     fn development_tools_classify_but_are_never_blockable() {
-        let c = classify(&exe(
-            "C:\\Users\\me\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
-        ))
+        let c = classify(
+            &exe("C:\\Users\\me\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe"),
+            None,
+            None,
+        )
         .expect("code");
         assert_eq!(c.primary, "development");
     }
 
     #[test]
     fn unknown_apps_return_none() {
-        assert!(classify(&exe("C:\\random\\someapp.exe")).is_none());
+        assert!(classify(&exe("C:\\random\\someapp.exe"), None, None).is_none());
+    }
+
+    #[test]
+    fn matches_game_by_generic_games_path() {
+        let c = classify(&exe("C:\\Games\\CustomFolder\\game_binary.exe"), None, None)
+            .expect("game by path");
+        assert_eq!(c.primary, "games");
+    }
+
+    #[test]
+    fn matches_by_publisher_name() {
+        let c = classify(
+            &exe("C:\\Forza\\forzahorizon5.exe"),
+            Some("Forza Horizon 5"),
+            Some("Microsoft Studios"),
+        )
+        .expect("forza");
+        assert_eq!(c.primary, "games");
+
+        let ide = classify(
+            &exe("C:\\some\\tool.exe"),
+            Some("Rust IDE"),
+            Some("JetBrains s.r.o."),
+        )
+        .expect("jetbrains");
+        assert_eq!(ide.primary, "development");
+
+        let creative =
+            classify(&exe("C:\\some\\app.exe"), None, Some("Adobe Inc.")).expect("adobe");
+        assert_eq!(creative.primary, "creativity");
     }
 
     #[test]
@@ -302,7 +474,7 @@ mod tests {
         // `basename()` on an AUMID returns the whole id; anything not in the
         // table stays uncategorized until packaged-app ids are curated.
         let key = AppKey::WindowsAumid("Microsoft.WindowsTerminal_8wekyb3d8bbwe".into());
-        assert!(classify(&key).is_none());
+        assert!(classify(&key, None, None).is_none());
     }
 
     #[test]

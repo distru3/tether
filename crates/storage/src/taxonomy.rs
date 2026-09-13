@@ -135,6 +135,18 @@ impl Db {
             .ok_or_else(|| StorageError::AppNotFound(app_id))
     }
 
+    /// Retrieve an app's category state together with its display name and publisher.
+    pub fn app_metadata(&self, app_id: i64) -> Result<(CategoryId, bool, String, Option<String>)> {
+        self.conn
+            .query_row(
+                "SELECT primary_category_id, user_classified, display_name, publisher FROM apps WHERE id = ?1",
+                params![app_id],
+                |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0, row.get(2)?, row.get(3)?)),
+            )
+            .optional()?
+            .ok_or_else(|| StorageError::AppNotFound(app_id))
+    }
+
     pub fn set_app_categories(
         &mut self,
         app_id: i64,

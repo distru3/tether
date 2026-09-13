@@ -511,9 +511,11 @@ fn persist(
     // Auto-classify an app the first time it is seen: only when it still sits in
     // the default (uncategorized) bucket and no human has overridden it. The
     // check is cheap and idempotent, so already-classified apps are untouched.
-    let (primary, user_classified) = db.app_category_state(app_id)?;
+    let (primary, user_classified, display_name, publisher) = db.app_metadata(app_id)?;
     if !user_classified && primary == default_category {
-        if let Some(classification) = classify::classify(&pending.key) {
+        if let Some(classification) =
+            classify::classify(&pending.key, Some(&display_name), publisher.as_deref())
+        {
             let primary_id = db.category_id(classification.primary)?;
             let mut tags = Vec::with_capacity(classification.tags.len());
             for tag in classification.tags {

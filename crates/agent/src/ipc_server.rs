@@ -1141,7 +1141,11 @@ fn register_discovered_apps(
         // Auto-classify if not user classified and currently uncategorized
         if let Ok((primary, user_classified)) = db.app_category_state(app_id) {
             if !user_classified && primary == default_category {
-                if let Some(classification) = crate::classify::classify(&app.key) {
+                if let Some(classification) = crate::classify::classify(
+                    &app.key,
+                    Some(&app.display_name),
+                    app.publisher.as_deref(),
+                ) {
                     if let Ok(primary_id) = db.category_id(classification.primary) {
                         let mut tags = Vec::with_capacity(classification.tags.len());
                         for tag in classification.tags {

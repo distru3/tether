@@ -40,6 +40,9 @@ pub fn scan_installed_apps() -> Vec<DiscoveredAppDto> {
     // 2. Scan Registry Uninstall keys
     scan_uninstall_registry(&mut discovered);
 
+    // 3. Scan Windows GameConfigStore (games registered by DirectX / Game Bar)
+    scan_game_config_store(&mut discovered);
+
     debug!(
         total = discovered.len(),
         "proactive app discovery completed"
@@ -560,5 +563,105 @@ fn query_reg_dword(key: HKEY, value_name: &str) -> Option<u32> {
             return None;
         }
         Some(val)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Windows GameConfigStore Scanner
+// ---------------------------------------------------------------------------
+
+fn scan_game_config_store(discovered: &mut HashMap<AppKey, DiscoveredAppDto>) {
+    let subkey = w!("System\\GameConfigStore\\Children");
+    let mut hkey = HKEY::default();
+    let res = unsafe { RegOpenKeyExW(HKEY_CURRENT_USER, subkey, 0, KEY_READ, &mut hkey) };
+    if res != ERROR_SUCCESS {
+        return;
+    }
+
+    let mut index = 0u32;
+    let mut name_buf = [0u16; 256];
+    loop {
+        let mut name_len = name_buf.len() as u32;
+        let enum_res = unsafe {
+            RegEnumKeyExW(
+                hkey,
+                index,
+                PWSTR(name_buf.as_mut_ptr()),
+                &mut name_len,
+                None,
+                PWSTR::null(),
+                None,
+                None,
+            )
+        };
+        if enum_res != ERROR_SUCCESS {
+            break;
+        }
+
+        let sub_name = String::from_utf16_lossy(&name_buf[..name_len as usize]);
+        inspect_game_config_key(hkey, &sub_name, discovered);
+        index += 1;
+    }
+
+    unsafe {
+        let _ = RegCloseKey(hkey);
+    }
+}
+
+fn inspect_game_config_key(
+    parent: HKEY,
+    sub_name: &str,
+    discovered: &mut HashMap<AppKey, DiscoveredAppDto>,
+) {
+    let wide_sub = to_wide(sub_name);
+    let mut child = HKEY::default();
+    let res = unsafe { RegOpenKeyExW(parent, PCWSTR(wide_sub.as_ptr()), 0, KEY_READ, &mut child) };
+    if res != ERROR_SUCCESS {
+        return;
+    }
+
+    let game_type = query_reg_dword(child, "Type");
+    let exe_path = query_reg_string(child, "MatchedExeFullPath");
+    let title = query_reg_string(child, "Title");
+
+    unsafe {
+        let _ = RegCloseKey(child);
+    }
+
+    // Type 1 indicates an application recognized as a game by Windows DirectX / Game Bar
+    if game_type == Some(1) {
+        if let Some(path) = exe_path {
+            let path_trimmed = path.trim().trim_matches('"');
+            if path_trimmed.ends_with(".exe") && Path::new(path_trimmed).is_file() {
+                let target_lower = path_trimmed.to_lowercase();
+                let file_name = Path::new(&target_lower)
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .unwrap_or("");
+                if !file_name.is_empty() && !is_noise_executable(file_name) {
+                    let display_name =
+                        title.filter(|t| !t.trim().is_empty()).unwrap_or_else(|| {
+                            Path::new(path_trimmed)
+                                .file_stem()
+                                .and_then(|s| s.to_str())
+                                .unwrap_or("Game")
+                                .to_string()
+                        });
+                    let key = AppKey::windows_exe(&target_lower);
+                    discovered
+                        .entry(key.clone())
+                        .and_modify(|d| {
+                            if d.publisher.is_none() {
+                                d.publisher = Some("Game".to_string());
+                            }
+                        })
+                        .or_insert_with(|| DiscoveredAppDto {
+                            key,
+                            display_name,
+                            publisher: Some("Game".to_string()),
+                        });
+                }
+            }
+        }
     }
 }
