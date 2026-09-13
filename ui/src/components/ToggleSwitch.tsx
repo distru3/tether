@@ -1,5 +1,4 @@
 import React from 'react';
-import './ToggleSwitch.css';
 
 interface ToggleSwitchProps {
     checked: boolean;
@@ -10,16 +9,15 @@ interface ToggleSwitchProps {
 
 export function ToggleSwitch({ checked, onChange, disabled, id }: ToggleSwitchProps) {
     return (
-        <button
-            type="button"
+        <input
+            type="checkbox"
             id={id}
             role="switch"
             aria-checked={checked}
+            checked={checked}
             disabled={disabled}
-            className={`toggle-switch ${checked ? 'toggle-active' : ''}`}
-            onClick={() => onChange(!checked)}
-        >
-            <span className="toggle-thumb" />
-        </button>
+            className="toggle-switch"
+            onChange={(e) => onChange(e.target.checked)}
+        />
     );
 }

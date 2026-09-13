@@ -1490,30 +1490,52 @@ dialog::backdrop,
   background: rgba(255, 255, 255, 0.055);
 }
 
-.settings-page .toggle-switch {
-  width: 40px;
-  height: 22px;
-  border-radius: 11px;
-  background: rgba(33, 15, 55, 0.85);
-  border: 1px solid rgba(220, 160, 109, 0.25);
+.toggle-switch {
+  width: 40px !important;
+  height: 22px !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  border-radius: 11px !important;
+  background: rgba(33, 15, 55, 0.85) !important;
+  border: 1px solid rgba(220, 160, 109, 0.25) !important;
+  position: relative !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  flex-shrink: 0 !important;
+  outline: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  box-sizing: border-box !important;
+  display: inline-block !important;
+  vertical-align: middle !important;
 }
 
-.settings-page .toggle-switch::after {
-  width: 16px;
-  height: 16px;
-  top: 2px;
-  left: 2px;
-  background-color: var(--text-secondary);
+.toggle-switch::after {
+  content: '' !important;
+  position: absolute !important;
+  width: 16px !important;
+  height: 16px !important;
+  top: 2px !important;
+  left: 2px !important;
+  border-radius: 50% !important;
+  background-color: var(--text-secondary) !important;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease !important;
+  box-sizing: border-box !important;
 }
 
-.settings-page .toggle-switch:checked {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
+.toggle-switch:checked {
+  background: var(--color-accent) !important;
+  border-color: var(--color-accent) !important;
 }
 
-.settings-page .toggle-switch:checked::after {
-  transform: translateX(18px);
-  background-color: #210F37;
+.toggle-switch:checked::after {
+  transform: translateX(18px) !important;
+  background-color: #210F37 !important;
+}
+
+.toggle-switch:disabled {
+  opacity: 0.45 !important;
+  cursor: not-allowed !important;
 }
 
 /* Cross-page structure refinements. */
@@ -1927,14 +1949,23 @@ dialog::backdrop,
   border-bottom-color: rgba(165, 91, 75, 0.14);
 }
 
-/* ── Toggle switch (settings) ── */
-[data-theme="light"] .settings-page .toggle-switch {
-  background: rgba(165, 91, 75, 0.18);
-  border-color: rgba(165, 91, 75, 0.30);
+/* ── Toggle switch ── */
+[data-theme="light"] .toggle-switch {
+  background: rgba(165, 91, 75, 0.18) !important;
+  border-color: rgba(165, 91, 75, 0.30) !important;
 }
 
-[data-theme="light"] .settings-page .toggle-switch:checked::after {
-  background-color: #FFFFFF;
+[data-theme="light"] .toggle-switch::after {
+  background-color: var(--redesign-muted) !important;
+}
+
+[data-theme="light"] .toggle-switch:checked {
+  background: var(--color-primary) !important;
+  border-color: var(--color-primary) !important;
+}
+
+[data-theme="light"] .toggle-switch:checked::after {
+  background-color: #FFFFFF !important;
 }
 
 /* ── Settings inputs & selects ── */
