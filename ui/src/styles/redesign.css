@@ -216,6 +216,7 @@ textarea {
   padding: 0 !important;
   height: 36px !important;
   flex: 1 1 0 !important;
+  min-width: 0 !important;
   justify-content: flex-start !important;
 }
 
@@ -367,16 +368,19 @@ textarea {
   padding: 0 !important;
   height: 36px !important;
   flex: 1 1 0 !important;
+  min-width: 0 !important;
 }
 
 .day-stepper {
   display: inline-flex !important;
   flex-direction: row !important;
   align-items: center !important;
+  justify-content: space-between !important;
   gap: 2px !important;
   margin: 0 !important;
   padding: 3px 4px !important;
   height: 36px !important;
+  width: 196px !important;
   box-sizing: border-box !important;
   border-radius: 11px !important;
   background: rgba(16, 7, 28, 0.68) !important;
@@ -392,6 +396,7 @@ textarea {
   justify-content: center !important;
   width: 26px !important;
   height: 28px !important;
+  flex-shrink: 0 !important;
   margin: 0 !important;
   padding: 0 !important;
   border-radius: 6px !important;
@@ -420,8 +425,10 @@ textarea {
   justify-content: center !important;
   gap: 5px !important;
   height: 28px !important;
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
   margin: 0 !important;
-  padding: 0 10px !important;
+  padding: 0 4px !important;
   border-radius: 6px !important;
   border: 1px solid transparent !important;
   background: transparent !important;
@@ -432,6 +439,12 @@ textarea {
   user-select: none !important;
   transition: all 120ms ease !important;
   box-sizing: border-box !important;
+}
+
+.stepper-label-btn span {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .stepper-label-btn:hover {
@@ -2039,3 +2052,40 @@ dialog::backdrop,
 [data-theme="light"] .nav-item--active .nav-icon {
   color: var(--color-primary) !important;
 }
+
+/* ── Day stepper ── */
+[data-theme="light"] .day-stepper {
+  background: rgba(165, 91, 75, 0.10) !important;
+  border-color: rgba(165, 91, 75, 0.20) !important;
+  box-shadow: inset 0 1px 2px rgba(165, 91, 75, 0.08), 0 2px 8px rgba(100, 50, 30, 0.08) !important;
+}
+
+[data-theme="light"] .stepper-btn {
+  color: rgba(90, 48, 32, 0.75) !important;
+}
+
+[data-theme="light"] .stepper-btn:hover:not(:disabled) {
+  background: rgba(165, 91, 75, 0.12) !important;
+  color: var(--text-primary) !important;
+  border-color: rgba(165, 91, 75, 0.18) !important;
+}
+
+[data-theme="light"] .stepper-btn:disabled {
+  opacity: 0.3 !important;
+  color: rgba(90, 48, 32, 0.4) !important;
+}
+
+[data-theme="light"] .stepper-label-btn {
+  color: var(--text-primary) !important;
+}
+
+[data-theme="light"] .stepper-label-btn:hover {
+  background: rgba(165, 91, 75, 0.12) !important;
+  color: var(--text-primary) !important;
+  border-color: rgba(165, 91, 75, 0.18) !important;
+}
+
+[data-theme="light"] .stepper-label-btn--past {
+  color: var(--color-primary) !important;
+}
+
