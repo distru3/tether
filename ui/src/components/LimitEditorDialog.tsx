@@ -2,6 +2,7 @@ import { useMemo, useState, useRef, useEffect, type FormEvent, type KeyboardEven
 import { useTranslation } from "react-i18next";
 import type { WeekdayMinutes } from "../api";
 import { targetLabel, WEEKDAY_SHORT } from "../format";
+import { colorForCategory } from "../categoryColors";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
@@ -16,6 +17,7 @@ interface LimitEditorDialogProps {
     busy: boolean;
     onSubmit: (target: LimitTargetDto, minutes: number, weekdayMinutes: WeekdayMinutes, enabled: boolean) => void;
     onClose: () => void;
+    onCategorize?: (appId: number, appName: string, primaryId: number | null, tagIds: number[]) => void;
 }
 
 interface DayOverrideState {
@@ -191,7 +193,7 @@ function AppPicker({ options, value, disabled, placeholder, onChange }: AppPicke
     );
 }
 
-export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onClose }: LimitEditorDialogProps) {
+export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onClose, onCategorize }: LimitEditorDialogProps) {
     const { t } = useTranslation();
     const limitableCategories = useMemo(
         () => (catalog?.categories ?? []).filter((category) => category.kind === "limitable"),
@@ -228,6 +230,12 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
 
     const locked = target !== null;
     const overrideCount = dayOverrides.filter((day) => day.override).length;
+
+    const currentTarget = locked ? target : decodeTarget(chosen);
+    const currentApp = currentTarget?.kind === "app" ? catalog?.apps.find((a) => a.id === currentTarget.id) : null;
+    const currentCat = currentApp ? catalog?.categories.find((c) => c.id === currentApp.primary_category) : null;
+    const currentCatName = currentCat?.name ?? "Uncategorized";
+    const currentCatColor = colorForCategory(currentCatName, currentCat?.color);
 
     const updateDay = (day: number, patch: Partial<DayOverrideState>) => {
         setDayOverrides((prev) => prev.map((entry, i) => (i === day ? { ...entry, ...patch } : entry)));
@@ -285,6 +293,33 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                             onChange={(v) => { setChosen(v); setError(null); }}
                         />
                     </label>
+                )}
+                {currentApp && (
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, padding: "8px 12px", background: "var(--bg-surface)", borderRadius: "6px", border: "1px solid var(--border-subtle)" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{t("categorize.primary", "Category")}:</span>
+                            <span
+                                className="target-badge target-badge--category-tag"
+                                style={{
+                                    backgroundColor: `${currentCatColor}22`,
+                                    color: currentCatColor,
+                                    borderColor: `${currentCatColor}44`,
+                                }}
+                            >
+                                {currentCatName}
+                            </span>
+                        </div>
+                        {onCategorize && (
+                            <button
+                                type="button"
+                                className="btn btn-ghost btn-sm"
+                                style={{ fontSize: "11px", padding: "2px 8px", height: "auto" }}
+                                onClick={() => onCategorize(currentApp.id, currentApp.display_name, currentApp.primary_category, currentApp.tags)}
+                            >
+                                {t("categorize.changeCategory", "Change")}
+                            </button>
+                        )}
+                    </div>
                 )}
                 <label className="field">
                     <span className="field-label">{t("limitEditor.minutesPerDay")}</span>

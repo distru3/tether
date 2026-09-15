@@ -134,4 +134,35 @@ SQLite database managed via append-only migrations tracked by `PRAGMA user_versi
    - **Layer 4 (Display Name Keywords)**: Evaluates application display names against targeted domain keywords (development, creativity, communication, music).
    - **Layer 5 (Name Patterns)**: Evaluates engine and shipping suffixes (`_win64-shipping.exe`, etc.).
    - **Human Decision Immutability**: Auto-classification runs strictly when `!user_classified && primary == default_category`. User manual categorizations are never overwritten.
-
+### F. Game & Fullscreen Overlay Suppression (FPS & DWM Flip Preservation)
+1. **The DWM Flip Degradation Problem**:
+   - DirectX 11/12 and Vulkan 3D swapchains rely on **Hardware Independent Flip (iFlip)** for direct display scanout, enabling low-latency frame pacing, Variable Refresh Rate (FreeSync/G-Sync), and frame rate capping.
+   - When an external Win32 layered topmost window (`WS_EX_LAYERED | WS_EX_TOPMOST`) intersects any pixel of a 3D swapchain, Windows DWM degrades presentation from Independent Flip to **Composed Flip**.
+   - Under Composed Flip, DWM decouples `IDXGISwapChain::Present` from physical VBlank into a multi-buffered queue. As a result, `Present(1, 0)` does not block, in-game frame rate caps and DXGI waitable latency objects are bypassed, and GPU driver limiters (e.g. AMD Radeon Chill / FRTC, Nvidia Max Frame Rate) disengage, causing the game to render at uncapped FPS.
+2. **Two-Tier Fail-Safe Suppression**:
+   - **Tier 1 (Agent Policy Filter - `st-agent::ipc_server`)**: In `report_usage`, when evaluating whether to return `HudStateDto`, the agent checks the database category of the focused app. If categorized under `"games"` and `!policy.show_hud_in_fullscreen`, the HUD payload is suppressed (`hud = None`).
+   - **Tier 2 (Session Front Guard - `st-session::main::is_game_or_fullscreen`)**: Even before a newly discovered app is classified by the agent, the session front inspects the focused window snapshot (`FocusedSnapshot`) every 1 Hz tick:
+     - **Launcher & Library Paths**: Checks for path signatures like `\steamapps\common\`, `\epic games\`, `\riot games\`, `\xboxgames\`, `\battle.net\`, `\gog galaxy\games\`, `\games\`, etc.
+     - **Executable Signatures**: Checks known game binaries (`cs2.exe`, `valorant.exe`, `gta5.exe`, etc.) and engine shipping suffixes (`-shipping.exe`, `*game*.exe`).
+     - **Window Class Names**: Queries `GetClassNameW` for engine window classes (`UnrealWindow`, `UnityWndClass`, `Valve001`, `GLFW30`, `SDL_app`, `Godot_Engine`, `Direct3D`, `RenderWindow`).
+     - **Shell Notification State**: Queries `SHQueryUserNotificationState` for `QUNS_RUNNING_D3D_FULL_SCREEN` and `QUNS_PRESENTATION_MODE`.
+     - **Tolerant Geometry Coverage**: Compares window `RECT` against `MONITORINFO` with a 48px tolerance margin to reliably detect borderless windowed mode across multi-monitor and DPI-scaled configurations.
+   - **User Toggle**: Configured under Settings -> Timer HUD & Overlay (`show_hud_in_fullscreen`, defaults to `false`), with localized warnings in English and Arabic detailing the DWM composition impact.
+3. **Transient Peek Mode & Remapable Hotkey**:
+   - **Universal On-Demand Peek**: Even when continuous HUD overlay is toggled off (`!show_hud_overlay`) or when in full-screen 3D games (`!show_hud_in_fullscreen`), pressing the peek shortcut (`Ctrl+Alt+T`) or crossing a milestone alert immediately reveals the HUD for 4 seconds over the active application or game before automatically dismissing.
+   - **Remapable Hotkey Peek (`Ctrl + Alt + T` default)**:
+     - Configured interactively in **Settings → Timer HUD & Overlay** with an interactive keyboard recorder.
+     - Persisted in SQLite `settings` (`hud_peek_hotkey`) and transmitted over `StatusDto`.
+     - `st-session` runs a dedicated background hotkey thread that dynamically registers/unregisters hotkeys via `RegisterHotKey` / `UnregisterHotKey`.
+     - When pressed, the HUD surfaces for 4 seconds over the active app/game and automatically vanishes.
+   - **Milestone Alert System (15m, 10m, 5m, 1m)**:
+     - `st-session` monitors budget transitions across 900s, 600s, 300s, and 60s.
+     - On crossing or when the block overlay spawns, plays a custom high-fidelity, non-intrusive harmonic chime (`PlaySoundW` with `SND_MEMORY | SND_ASYNC`, embedded in `st-session` binary) and surfaces the HUD for 4 seconds before auto-dismissing.
+4. **Hardware Multiplane Overlay (MPO) DirectComposition Architecture (`crates/session/src/mpo.rs` & `hud.rs`)**:
+   - **DirectComposition & Hardware Overlay Pipeline**:
+     - The HUD window is created with `WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW` and `WS_EX_NOREDIRECTIONBITMAP` (`0x00200000`), ensuring it floats topmost over applications without allocating a GDI CPU redirection buffer.
+     - A DirectComposition visual target (`CreateTargetForHwnd`) hosts an independent DirectX 11 DXGI flip-discard swapchain (`DXGI_SWAP_EFFECT_FLIP_DISCARD`) with `DXGI_SCALING_NONE` (1:1 pixel mapping) and `DXGI_ALPHA_MODE_PREMULTIPLIED`, rendered with Direct2D/DirectWrite.
+     - Position tracking operates at 10 Hz (100ms), invoking `SetWindowPos(HWND_TOPMOST)` strictly when window bounds actually change to eliminate unnecessary DWM compositor wakeups during static gameplay.
+     - Note on Fullscreen 3D Games: Any external topmost window presented over a fullscreen 3D application requires DWM to composite the topmost layer over the game. For users requiring absolute zero DWM composition overhead (pure Hardware Independent Flip), the continuous overlay in games can be kept disabled via the `show_hud_in_fullscreen` setting while retaining on-demand 4-second peek via hotkey.
+   - **Graceful GDI Layered Fallback**:
+     - If DirectX 11, DirectComposition, or DXGI swapchain initialization fails (e.g. basic display adapter, remote desktop session, or legacy VM), Tether automatically demotes the HWND to a layered window (`WS_EX_LAYERED`) and routes drawing through GDI ClearType rendering, guaranteeing zero crashes.

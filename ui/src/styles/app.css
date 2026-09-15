@@ -1354,11 +1354,11 @@ body {
 }
 
 .form-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
+  font-size: 13.5px;
+  font-weight: 550;
+  color: var(--text-primary);
+  text-transform: none;
+  letter-spacing: -0.01em;
 }
 
 .preset-buttons {
@@ -2084,10 +2084,10 @@ body {
   max-height: calc(100vh - 48px);
   overflow: visible;
   padding: 30px 34px;
-  background: #2a1442;
-  border: 1px solid rgba(220, 160, 109, 0.25);
+  background: var(--bg-card-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: 20px;
-  box-shadow: 0 24px 64px rgba(15, 5, 25, 0.85);
+  box-shadow: var(--shadow-modal);
   backdrop-filter: blur(28px);
   transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
@@ -2149,9 +2149,9 @@ body {
 
 .field-label {
   font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  text-transform: none;
   color: var(--text-muted);
   font-weight: 600;
 }
@@ -2159,9 +2159,9 @@ body {
 .field input[type="number"], .field input[type="password"], .field input[type="text"], .field select {
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid rgba(220, 160, 109, 0.2);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
-  background-color: rgba(33, 15, 55, 0.7);
+  background-color: var(--bg-input);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 13.5px;
@@ -2171,7 +2171,7 @@ body {
 .field input[type="number"]:focus, .field input[type="password"]:focus, .field input[type="text"]:focus, .field select:focus {
   border-color: var(--color-focus);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(220, 160, 109, 0.25);
+  box-shadow: 0 0 0 2px var(--accent-indigo-subtle, rgba(220, 160, 109, 0.25));
 }
 
 .field--inline {
@@ -2184,9 +2184,9 @@ body {
   width: 100%;
   margin-top: 16px;
   padding: 14px 16px;
-  border: 1px solid rgba(220, 160, 109, 0.25);
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
-  background-color: rgba(33, 15, 55, 0.85);
+  background-color: var(--bg-input);
   color: var(--color-accent, #DCA06D);
   font-family: var(--font-mono);
   font-size: 24px;
@@ -2198,11 +2198,11 @@ body {
 .pin-input:focus {
   border-color: var(--color-accent, #DCA06D);
   outline: none;
-  box-shadow: 0 0 0 3px rgba(220, 160, 109, 0.25);
+  box-shadow: 0 0 0 3px var(--accent-indigo-subtle, rgba(220, 160, 109, 0.25));
 }
 
 .pin-input::placeholder {
-  color: rgba(220, 160, 109, 0.25);
+  color: var(--text-faint);
   letter-spacing: 0.45em;
 }
 
@@ -2218,9 +2218,9 @@ body {
   justify-content: space-between;
   width: 100%;
   padding: 10px 14px;
-  border: 1px solid rgba(220, 160, 109, 0.2);
+  border: 1px solid var(--border-strong);
   border-radius: 10px;
-  background-color: rgba(33, 15, 55, 0.7);
+  background-color: var(--bg-input);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 13.5px;
@@ -2233,7 +2233,7 @@ body {
 .app-picker__trigger:focus {
   border-color: var(--color-focus);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(220, 160, 109, 0.25);
+  box-shadow: 0 0 0 2px var(--accent-indigo-subtle, rgba(220, 160, 109, 0.25));
 }
 
 .app-picker__trigger:disabled {
@@ -2262,10 +2262,10 @@ body {
   left: 0;
   right: 0;
   z-index: 200;
-  background: #240e38;
-  border: 1px solid rgba(220, 160, 109, 0.3);
+  background: var(--bg-card-elevated);
+  border: 1px solid var(--border-strong);
   border-radius: 12px;
-  box-shadow: 0 18px 48px rgba(15, 5, 25, 0.9);
+  box-shadow: var(--shadow-modal);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -2274,16 +2274,16 @@ body {
 
 .app-picker__search-wrap {
   padding: 10px 12px;
-  border-bottom: 1px solid rgba(220, 160, 109, 0.12);
+  border-bottom: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
 
 .app-picker__search {
   width: 100%;
   padding: 8px 12px;
-  border: 1px solid rgba(220, 160, 109, 0.25);
+  border: 1px solid var(--border-strong);
   border-radius: 8px;
-  background: rgba(33, 15, 55, 0.8);
+  background: var(--bg-input);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 13px;
@@ -2292,7 +2292,7 @@ body {
 .app-picker__search:focus {
   border-color: var(--color-focus);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(220, 160, 109, 0.25);
+  box-shadow: 0 0 0 2px var(--accent-indigo-subtle, rgba(220, 160, 109, 0.25));
 }
 
 .app-picker__list {
@@ -2316,7 +2316,7 @@ body {
 }
 
 .app-picker__item--active {
-  background: rgba(220, 160, 109, 0.12);
+  background: var(--bg-surface-hover);
   color: var(--text-primary);
 }
 
@@ -2327,7 +2327,7 @@ body {
 .app-picker__item--special {
   color: var(--text-primary);
   font-weight: 600;
-  border-bottom: 1px solid rgba(220, 160, 109, 0.12);
+  border-bottom: 1px solid var(--border-subtle);
   margin-bottom: 4px;
 }
 
@@ -2351,8 +2351,8 @@ body {
   margin-top: 18px;
   padding: 6px 12px;
   border-radius: 8px;
-  border: 1px solid rgba(220, 160, 109, 0.15);
-  background: rgba(33, 15, 55, 0.4);
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
   font-family: var(--font-mono);
   font-size: 11.5px;
   letter-spacing: 0.08em;
@@ -2364,8 +2364,8 @@ body {
 
 .weekday-toggle:hover {
   color: var(--text-primary);
-  background: rgba(33, 15, 55, 0.7);
-  border-color: rgba(220, 160, 109, 0.3);
+  background: var(--bg-surface-hover);
+  border-color: var(--border-hover);
 }
 
 .weekday-toggle:disabled {
@@ -2392,8 +2392,8 @@ body {
   grid-template-columns: repeat(2, 1fr);
   gap: 8px;
   padding: 12px;
-  background: rgba(26, 11, 44, 0.5);
-  border: 1px solid rgba(220, 160, 109, 0.15);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
 }
 
@@ -2407,20 +2407,20 @@ body {
   justify-content: space-between;
   gap: 10px;
   padding: 8px 12px;
-  background: rgba(33, 15, 55, 0.5);
-  border: 1px solid rgba(220, 160, 109, 0.1);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   transition: all 0.15s ease;
 }
 
 .weekday-row:hover {
-  border-color: rgba(220, 160, 109, 0.25);
-  background: rgba(33, 15, 55, 0.8);
+  border-color: var(--border-hover);
+  background: var(--bg-card-hover);
 }
 
 .weekday-row--active {
-  background: rgba(165, 91, 75, 0.15);
-  border-color: rgba(220, 160, 109, 0.35);
+  background: var(--color-primary-subtle);
+  border-color: var(--color-accent);
 }
 
 .weekday-label {
@@ -2436,8 +2436,8 @@ body {
   width: 16px;
   height: 16px;
   border-radius: 4px;
-  border: 1.5px solid rgba(220, 160, 109, 0.4);
-  background: rgba(33, 15, 55, 0.8);
+  border: 1.5px solid var(--border-strong);
+  background: var(--bg-input);
   cursor: pointer;
   display: inline-grid;
   place-items: center;
@@ -2482,9 +2482,9 @@ body {
 .weekday-input {
   width: 58px;
   padding: 5px 8px;
-  border: 1px solid rgba(220, 160, 109, 0.2);
+  border: 1px solid var(--border-strong);
   border-radius: 6px;
-  background: rgba(20, 7, 34, 0.7);
+  background: var(--bg-input);
   color: var(--text-primary);
   font-family: var(--font-mono);
   font-size: 13px;
@@ -2496,7 +2496,7 @@ body {
 .weekday-input:focus {
   border-color: var(--color-focus, #DCA06D);
   outline: none;
-  box-shadow: 0 0 0 2px rgba(220, 160, 109, 0.2);
+  box-shadow: 0 0 0 2px var(--accent-indigo-subtle, rgba(220, 160, 109, 0.2));
 }
 
 .weekday-input:disabled {
@@ -2510,13 +2510,6 @@ body {
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text-muted);
-}
-
-.check-input {
-  accent-color: var(--color-primary);
-  width: 15px;
-  height: 15px;
-  margin: 0;
 }
 
 .check-label {
@@ -2542,16 +2535,16 @@ body {
   gap: 10px;
   font-size: 13px;
   cursor: pointer;
-  background: rgba(33, 15, 55, 0.6);
-  border: 1px solid rgba(220, 160, 109, 0.15);
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 8px 12px;
   transition: all 0.15s ease;
 }
 
 .tag-item:hover {
-  background: rgba(79, 28, 81, 0.5);
-  border-color: rgba(220, 160, 109, 0.3);
+  background: var(--bg-surface-hover);
+  border-color: var(--border-hover);
 }
 
 .tag-item input[type="checkbox"] {
@@ -2685,14 +2678,14 @@ body {
   font-weight: 700;
   letter-spacing: 0.18em;
   text-align: center;
-  background-color: rgba(33, 15, 55, 0.9);
-  border: 1px solid rgba(220, 160, 109, 0.35);
+  background-color: var(--bg-input);
+  border: 1px solid var(--border-strong);
   color: var(--color-accent, #DCA06D);
   padding: 16px 12px;
   margin: 16px 0 6px;
   user-select: all;
   border-radius: 12px;
-  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.15);
 }
 
 .recovery-input {

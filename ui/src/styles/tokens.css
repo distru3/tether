@@ -1,6 +1,10 @@
 /* ==========================================================================
    tokens.css - Screentime Design Tokens
-   Stitch Design Language (Light Theme)
+   Supports 4 distinct theme palettes:
+   - Horizon Dark: Signature warm obsidian, purple & terracotta
+   - Horizon Light: Signature warm cream, parchment & terracotta
+   - Classic Dark: Clean neutral slate & indigo
+   - Classic Light: Clean neutral white, slate & royal blue
    ========================================================================== */
 
 :root {
@@ -12,12 +16,18 @@
     --bg-app: #210F37;           /* Deep Base Floor */
     --bg-card: rgba(79, 28, 81, 0.50);          /* Surface Level 1 */
     --bg-card-elevated: rgba(79, 28, 81, 0.80);
+    --bg-card-hover: rgba(79, 28, 81, 0.65);
+    --bg-surface: rgba(79, 28, 81, 0.35);
+    --bg-surface-hover: rgba(79, 28, 81, 0.55);
+    --bg-surface-raised: rgba(79, 28, 81, 0.70);
     --bg-modal-backdrop: rgba(15, 5, 25, 0.75);
     --bg-recessed: rgba(33, 15, 55, 0.55);      /* Surface Recessed */
     
     /* Borders */
     --border-subtle: rgba(220, 160, 109, 0.10);
+    --border-card: rgba(220, 160, 109, 0.18);
     --border-strong: rgba(220, 160, 109, 0.22);
+    --border-hover: rgba(220, 160, 109, 0.35);
     
     /* Ink (Text) */
     --text-primary: #f5ede8;     /* Warm Off-White */
@@ -46,6 +56,30 @@
     
     /* Info / Focus */
     --color-focus: #DCA06D;
+
+    /* Distinct Accents & Subtle Tones */
+    --accent-indigo: #818CF8;
+    --accent-indigo-hover: #6366F1;
+    --accent-indigo-subtle: rgba(129, 140, 248, 0.12);
+    --accent-indigo-border: rgba(129, 140, 248, 0.28);
+
+    --accent-emerald: #34D399;
+    --accent-emerald-hover: #10B981;
+    --accent-emerald-subtle: rgba(52, 211, 153, 0.12);
+    --accent-emerald-border: rgba(52, 211, 153, 0.28);
+
+    --accent-amber: #FBBF24;
+    --accent-amber-hover: #F59E0B;
+    --accent-amber-subtle: rgba(251, 191, 36, 0.12);
+    --accent-amber-border: rgba(251, 191, 36, 0.28);
+
+    --accent-rose: #FB7185;
+    --accent-rose-hover: #F43F5E;
+    --accent-rose-subtle: rgba(251, 113, 133, 0.12);
+    --accent-rose-border: rgba(251, 113, 133, 0.28);
+
+    --accent-cyan: #22D3EE;
+    --accent-cyan-subtle: rgba(34, 211, 238, 0.12);
 
     /* ---- Fonts ---- */
     --font-sans: 'Hanken Grotesk', sans-serif;

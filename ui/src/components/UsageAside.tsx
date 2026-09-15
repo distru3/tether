@@ -8,9 +8,11 @@ interface UsageAsideProps {
   entries: UsageRowDto[];
   total: number;
   catalog?: CatalogDto | null;
+  onCategorize?: (appId: number, appName: string, primaryId: number | null, tagIds: number[]) => void;
+  onOpenAppDirectory?: () => void;
 }
 
-export function UsageAside({ entries, total, catalog }: UsageAsideProps) {
+export function UsageAside({ entries, total, catalog, onCategorize, onOpenAppDirectory }: UsageAsideProps) {
   const ranked = [...entries].sort((a, b) => b.seconds - a.seconds).slice(0, 5);
   const max = Math.max(ranked[0]?.seconds ?? 0, 1);
 
@@ -21,7 +23,19 @@ export function UsageAside({ entries, total, catalog }: UsageAsideProps) {
           <p className="panel-eyebrow">Your activity</p>
           <h3>Most used</h3>
         </div>
-        <span className="panel-count">{ranked.length}</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {onOpenAppDirectory && (
+            <button
+              type="button"
+              className="usage-manage-apps-btn"
+              onClick={onOpenAppDirectory}
+              title="Browse and categorize all applications"
+            >
+              All apps &rarr;
+            </button>
+          )}
+          <span className="panel-count">{ranked.length}</span>
+        </div>
       </div>
       {ranked.length === 0 ? (
         <div className="usage-empty">No application activity recorded yet.</div>
@@ -53,16 +67,32 @@ export function UsageAside({ entries, total, catalog }: UsageAsideProps) {
                   </div>
                   <div className="usage-app-subline">
                     <small>{percent}% of today</small>
-                    <span 
-                      className="usage-category-pill"
-                      style={{
-                        color: catColor,
-                        backgroundColor: `${catColor}1c`,
-                        borderColor: `${catColor}38`,
-                      }}
-                    >
-                      {catName}
-                    </span>
+                    {onCategorize ? (
+                      <button
+                        type="button"
+                        className="usage-category-pill usage-category-pill--clickable"
+                        style={{
+                          color: catColor,
+                          backgroundColor: `${catColor}1c`,
+                          borderColor: `${catColor}38`,
+                        }}
+                        onClick={() => onCategorize(entry.id, entry.label, appObj?.primary_category ?? null, appObj?.tags ?? [])}
+                        title="Click to change category"
+                      >
+                        {catName}
+                      </button>
+                    ) : (
+                      <span 
+                        className="usage-category-pill"
+                        style={{
+                          color: catColor,
+                          backgroundColor: `${catColor}1c`,
+                          borderColor: `${catColor}38`,
+                        }}
+                      >
+                        {catName}
+                      </span>
+                    )}
                   </div>
                 </div>
               </div>

@@ -1,11 +1,12 @@
 {
   "name": "screentime-ui",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0-beta",
   "type": "module",
   "description": "Screentime dashboard shell (Tauri 2 + React + Vite).",
   "scripts": {
     "dev": "vite",
+    "dev:all": "powershell -ExecutionPolicy Bypass -File ../dev.ps1",
     "build": "tsc && vite build",
     "preview": "vite preview",
     "tauri": "tauri"

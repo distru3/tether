@@ -8,6 +8,24 @@
         <link href="https://fonts.googleapis.com" rel="preconnect">
         <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect">
         <link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,300..900;1,300..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+        <script>
+            (function () {
+                try {
+                    var pref = localStorage.getItem("tether_theme");
+                    if (pref === "dark") pref = "horizon-dark";
+                    if (pref === "light") pref = "horizon-light";
+                    var effective = "horizon-dark";
+                    if (pref === "horizon-dark" || pref === "horizon-light" || pref === "classic-dark" || pref === "classic-light") {
+                        effective = pref;
+                    } else {
+                        var isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+                        effective = isDark ? "horizon-dark" : "horizon-light";
+                    }
+                    document.documentElement.setAttribute("data-theme", effective);
+                    document.documentElement.setAttribute("data-theme-mode", effective.indexOf("light") !== -1 ? "light" : "dark");
+                } catch (e) {}
+            })();
+        </script>
     </head>
     <body>
         <div id="root"></div>

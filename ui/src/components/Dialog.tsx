@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 
 const FOCUSABLE = [
     "a[href]",
@@ -15,10 +15,12 @@ interface DialogProps {
     label: string;
     onClose: () => void;
     children: ReactNode;
+    zIndex?: number;
 }
 
-export function Dialog({ label, onClose, children }: DialogProps) {
+export function Dialog({ label, onClose, children, zIndex }: DialogProps) {
     const cardRef = useRef<HTMLDivElement | null>(null);
+    const [level, setLevel] = useState(1);
     const onCloseRef = useRef(onClose);
     onCloseRef.current = onClose;
 
@@ -27,6 +29,7 @@ export function Dialog({ label, onClose, children }: DialogProps) {
         if (!card) return;
         const opener = document.activeElement instanceof HTMLElement ? document.activeElement : null;
         stack.push(card);
+        setLevel(stack.length);
 
         const first = card.querySelector<HTMLElement>(FOCUSABLE);
         if (first) first.focus();
@@ -69,9 +72,12 @@ export function Dialog({ label, onClose, children }: DialogProps) {
         };
     }, []);
 
+    const computedZIndex = zIndex ?? (60 + level * 10);
+
     return (
         <div
             className="backdrop"
+            style={{ zIndex: computedZIndex }}
             role="presentation"
             onMouseDown={(event) => {
                 if (event.target === event.currentTarget) onCloseRef.current();

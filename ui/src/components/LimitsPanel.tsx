@@ -12,6 +12,7 @@ import { LiveTimer } from "./LiveTimer";
 import { ToggleSwitch } from "./ToggleSwitch";
 import { FilterTabs } from "./FilterTabs";
 import { MetricCards, type MetricData } from "./MetricCards";
+import { DowntimeSection } from "./DowntimeSection";
 import './LimitsPanel.css';
 
 interface LimitsPanelProps {
@@ -26,6 +27,9 @@ interface LimitsPanelProps {
     onCancelPending: (target: LimitTargetDto) => void;
     onNew: () => void;
     onOpenPinSetup: () => void;
+    onCategorize?: (appId: number, appName: string, primaryId: number | null, tagIds: number[]) => void;
+    onOpenAppDirectory?: () => void;
+    notify?: (kind: "success" | "error", message: string) => void;
 }
 
 export function LimitsPanel({
@@ -40,8 +44,12 @@ export function LimitsPanel({
     onCancelPending,
     onNew,
     onOpenPinSetup,
+    onCategorize,
+    onOpenAppDirectory,
+    notify,
 }: LimitsPanelProps) {
     const { t } = useTranslation();
+    const [subSection, setSubSection] = useState<"limits" | "downtime">("limits");
     const [activeTab, setActiveTab] = useState("All");
 
     const activeLimits = limits.filter(l => l.enabled).length;
@@ -89,16 +97,45 @@ export function LimitsPanel({
         <div className="limits-container view-container limits-page-shell">
             <div className="view-header page-intro">
                 <div>
-                    <h2 className="view-title">{t("limits.title")}</h2>
-                    <p className="view-subtitle">{t("limits.subtitle")}</p>
+                    <h2 className="view-title">
+                        {subSection === "limits" ? t("limits.title") : t("downtime.title", "Scheduled Downtime")}
+                    </h2>
+                    <p className="view-subtitle">
+                        {subSection === "limits" ? t("limits.subtitle") : t("downtime.subtitle", "Set recurring bedtime or focus windows during which non-allowlisted apps are locked.")}
+                    </p>
                 </div>
-                <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={onNew}>
-                    <PlusIcon size={14} />
-                    {t("limits.addNewLimit")}
-                </button>
+                {subSection === "limits" && (
+                    <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        {onOpenAppDirectory && (
+                            <button type="button" className="btn btn-secondary btn-sm" disabled={busy} onClick={onOpenAppDirectory}>
+                                <FolderTree size={14} />
+                                {t("categorize.manageApps", "Manage Apps")}
+                            </button>
+                        )}
+                        <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={onNew}>
+                            <PlusIcon size={14} />
+                            {t("limits.addNewLimit")}
+                        </button>
+                    </div>
+                )}
             </div>
 
-            <MetricCards metrics={metrics} />
+            <div style={{ marginBottom: "20px" }}>
+                <FilterTabs
+                    tabs={[t("limits.tabLimits", "Daily Limits"), t("downtime.tabDowntime", "Scheduled Downtime")]}
+                    activeTab={subSection === "limits" ? t("limits.tabLimits", "Daily Limits") : t("downtime.tabDowntime", "Scheduled Downtime")}
+                    onChange={(tab) => setSubSection(tab === t("downtime.tabDowntime", "Scheduled Downtime") ? "downtime" : "limits")}
+                />
+            </div>
+
+            {subSection === "downtime" ? (
+                <DowntimeSection
+                    catalog={catalog}
+                    notify={notify || (() => {})}
+                />
+            ) : (
+                <>
+                    <MetricCards metrics={metrics} />
 
             {!pinConfigured && (
                 <div className="glass-card banner-warning-card" style={{ marginBottom: 24 }}>
@@ -189,16 +226,37 @@ export function LimitsPanel({
                                                         {t("limits.app")}
                                                     </span>
                                                     {categoryName && (
-                                                        <span 
-                                                            className="target-badge target-badge--category-tag"
-                                                            style={{ 
-                                                                backgroundColor: `${categoryColor}22`, 
-                                                                color: categoryColor, 
-                                                                borderColor: `${categoryColor}44` 
-                                                            }}
-                                                        >
-                                                            {categoryName}
-                                                        </span>
+                                                        onCategorize ? (
+                                                            <button
+                                                                type="button"
+                                                                className="target-badge target-badge--category-tag target-badge--clickable"
+                                                                style={{ 
+                                                                    backgroundColor: `${categoryColor}22`, 
+                                                                    color: categoryColor, 
+                                                                    borderColor: `${categoryColor}44`,
+                                                                    cursor: "pointer",
+                                                                }}
+                                                                onClick={() => {
+                                                                    const appObj = catalog?.apps.find(a => a.id === targetId);
+                                                                    onCategorize(targetId, label, appObj?.primary_category ?? null, appObj?.tags ?? []);
+                                                                }}
+                                                                title={t("categorize.changeCategory", "Click to change category")}
+                                                                disabled={busy}
+                                                            >
+                                                                {categoryName}
+                                                            </button>
+                                                        ) : (
+                                                            <span 
+                                                                className="target-badge target-badge--category-tag"
+                                                                style={{ 
+                                                                    backgroundColor: `${categoryColor}22`, 
+                                                                    color: categoryColor, 
+                                                                    borderColor: `${categoryColor}44` 
+                                                                }}
+                                                            >
+                                                                {categoryName}
+                                                            </span>
+                                                        )
                                                     )}
                                                 </>
                                             )}
@@ -315,6 +373,8 @@ export function LimitsPanel({
                     );
                 })}
             </div>
+                </>
+            )}
         </div>
     );
 }

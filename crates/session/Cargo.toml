@@ -31,10 +31,22 @@ st-win32 = { path = "../st-win32" }
 # Foreground-window + idle sampling; the session helper is the sampling front.
 st-tracker-win.workspace = true
 windows = { workspace = true, features = [
+    "Foundation_Numerics",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_DirectComposition",
+    "Win32_Graphics_Direct2D",
+    "Win32_Graphics_Direct2D_Common",
+    "Win32_Graphics_DirectWrite",
     "Win32_System_LibraryLoader",
     # HKCU ...\Run autostart management (see src/autostart.rs for why HKCU).
     "Win32_System_Registry",
     "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_Input_KeyboardAndMouse",
+    "Win32_UI_Shell",
+    "Win32_System_Threading",
 ] }

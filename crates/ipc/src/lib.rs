@@ -42,6 +42,9 @@ pub const MAX_FRAME_BYTES: u32 = 8 * 1024 * 1024;
 /// replaced by this constant when those crates are rewired.
 pub const PIPE_NAME: &str = "screentime";
 
+/// Named pipe used by the session tracker front to command the UI's block overlay.
+pub const OVERLAY_PIPE_NAME: &str = "screentime_overlay_bridge";
+
 #[derive(Debug, Error)]
 pub enum IpcError {
     #[error("io error: {0}")]
@@ -223,6 +226,55 @@ pub struct HudStateDto {
     pub is_timer: bool,
 }
 
+/// Request sent across the overlay bridge from `screentime-session` to `screentime-ui`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OverlayBridgeRequest {
+    /// Show the overlay covering the specified app and geometry.
+    Show {
+        #[ts(as = "i32")]
+        app_id: i64,
+        label: String,
+        pin_locked: bool,
+        #[ts(as = "Option<i32>")]
+        target_hwnd: Option<i64>,
+        process_id: u32,
+        rect: Option<OverlayRectDto>,
+    },
+    /// Dismiss the active overlay.
+    Hide,
+    /// Liveness ping.
+    Ping,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct OverlayRectDto {
+    pub x: i32,
+    pub y: i32,
+    pub width: i32,
+    pub height: i32,
+}
+
+/// Acknowledgement / response sent from `screentime-ui` back to `screentime-session`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum OverlayBridgeResponse {
+    Ack,
+    Error { message: String },
+}
+
+/// Active overlay state surfaced to the frontend React layer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct OverlayActiveStateDto {
+    #[ts(as = "i32")]
+    pub app_id: i64,
+    pub label: String,
+    pub pin_locked: bool,
+    #[ts(as = "i32")]
+    pub target_hwnd: i64,
+    pub process_id: u32,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Response {
@@ -323,6 +375,8 @@ pub enum ErrorCode {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct ReportUsageDto {
     pub observations: Vec<ObservationDto>,
+    #[serde(default)]
+    pub focused_key: Option<AppKey>,
 }
 
 /// One collapsed foreground-window sample taken by the session helper.
@@ -434,6 +488,12 @@ pub struct StatusDto {
     pub strict_mode: bool,
     pub pin_configured: bool,
     pub show_hud_overlay: bool,
+    #[serde(default)]
+    pub show_hud_in_fullscreen: bool,
+    #[serde(default = "default_hud_peek_hotkey")]
+    pub hud_peek_hotkey: String,
+    #[serde(default = "default_alert_volume")]
+    pub alert_volume: i64,
     pub limit_cooldown_hours: i64,
     pub day_start_minutes: i64,
     pub idle_threshold_secs: i64,
@@ -444,6 +504,14 @@ pub struct StatusDto {
     /// neither `hosts` nor DNS can see a path; only a browser extension can.
     pub path_level: bool,
     pub family_dns_enabled: bool,
+}
+
+fn default_hud_peek_hotkey() -> String {
+    "Ctrl+Alt+T".to_string()
+}
+
+fn default_alert_volume() -> i64 {
+    80
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -881,6 +949,7 @@ mod tests {
                     observed_at_utc: "2026-08-25T10:01:00Z".into(),
                 },
             ],
+            focused_key: None,
         }
     }
 
@@ -951,5 +1020,9 @@ mod tests {
         // dependencies in st-core) is reachable from one of them.
         Response::export_all_to(&dir).expect("export response bindings");
         Request::export_all_to(&dir).expect("export request bindings");
+        OverlayBridgeRequest::export_all_to(&dir).expect("export overlay bridge request bindings");
+        OverlayBridgeResponse::export_all_to(&dir)
+            .expect("export overlay bridge response bindings");
+        OverlayActiveStateDto::export_all_to(&dir).expect("export overlay active state bindings");
     }
 }

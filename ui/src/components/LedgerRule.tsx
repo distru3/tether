@@ -8,11 +8,12 @@ interface LedgerRuleProps {
     loading: boolean;
     now: Date;
     catalog?: CatalogDto | null;
+    isToday?: boolean;
 }
 
 const SCALE_HOURS = ["00", "06", "12", "18", "24"] as const;
 
-export function LedgerRule({ summary, loading, now, catalog }: LedgerRuleProps) {
+export function LedgerRule({ summary, loading, now, catalog, isToday = false }: LedgerRuleProps) {
     const apps = summary?.apps ?? [];
     const intervals = summary?.intervals ?? [];
     const categories = summary?.categories ?? [];
@@ -71,8 +72,13 @@ export function LedgerRule({ summary, loading, now, catalog }: LedgerRuleProps) 
                         />
                     );
                 })}
-                <span className="ledger-future" style={{ position: "absolute", left: `${fraction * 100}%`, right: 0, top: 0, bottom: 0, backgroundColor: "var(--bg-card)" }} aria-hidden="true" />
-                <span className="ledger-now" style={{ left: `${fraction * 100}%` }} aria-hidden="true" />
+                {isToday && (
+                    <span className="ledger-future" style={{ position: "absolute", left: `${fraction * 100}%`, right: 0, top: 0, bottom: 0, backgroundColor: "var(--bg-card)" }} aria-hidden="true" />
+                )}
+                {isToday && (
+                    <span className="ledger-now" style={{ left: `${fraction * 100}%` }} aria-hidden="true" />
+                )}
+
             </div>
             <div className="ledger-scale" aria-hidden="true">
                 {SCALE_HOURS.map((hour) => (

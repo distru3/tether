@@ -69,6 +69,8 @@ mod snapshot;
 #[cfg(windows)]
 mod hud;
 #[cfg(windows)]
+mod mpo;
+#[cfg(windows)]
 mod overlay;
 
 /// Non-Windows shim: overlays are Win32 work, and the agent transport does not
@@ -103,8 +105,11 @@ use tracing_appender::non_blocking::WorkerGuard;
 // SubscriberExt/Layer for stacking the two-layer registry in init_tracing.
 use tracing_subscriber::prelude::*;
 
-/// Cycle cadence. Matches the ~1 Hz the sampling contract promises.
-const POLL: Duration = Duration::from_millis(1000);
+/// High-responsiveness cycle cadence for overlay reconciliation and focus tracking (~100 ms).
+const POLL: Duration = Duration::from_millis(100);
+
+/// Cadence for normal usage reporting batch flush to the agent (~1 Hz).
+const REPORT_INTERVAL: Duration = Duration::from_millis(1000);
 
 /// Exit status used exclusively for "another session helper is already
 /// running". Distinct from generic failure so launchers and scripts can
@@ -136,6 +141,13 @@ struct SessionState {
     /// ingest support.
     pub usage_flowing: Option<bool>,
     pub hud: Option<st_ipc::HudStateDto>,
+    pub hud_app: Option<AppKey>,
+    pub show_hud_overlay: bool,
+    pub show_hud_in_fullscreen: bool,
+    pub hud_peek_hotkey: String,
+    pub alert_volume: i64,
+    pub last_remaining: Option<i64>,
+    pub peek_until: Option<Instant>,
 }
 
 impl SessionState {
@@ -206,10 +218,21 @@ fn main() -> anyhow::Result<()> {
         prev_focused: None,
         usage_flowing: None,
         hud: None,
+        hud_app: None,
+        show_hud_overlay: true,
+        show_hud_in_fullscreen: false,
+        hud_peek_hotkey: "Ctrl+Alt+T".to_string(),
+        alert_volume: 80,
+        last_remaining: None,
+        peek_until: None,
     };
+    #[cfg(windows)]
+    let hotkey_mgr = HotkeyManager::spawn(sess.hud_peek_hotkey.clone());
     // App id paired with its live overlay thread handle.
-    let mut active: Option<(i64, overlay::OverlayRun)> = None;
+    let mut active: Option<(i64, st_core::model::AppKey, overlay::OverlayRun)> = None;
     let mut active_hud: Option<(isize, hud::HudOverlayRun)> = None;
+    let mut next_1hz_report = Instant::now();
+    let mut prev_raw_focused: Option<st_core::model::AppKey> = None;
 
     // Proactive app discovery runs once per process lifetime, on first successful
     // agent connection. It must run in the session helper (not the agent) because
@@ -219,32 +242,20 @@ fn main() -> anyhow::Result<()> {
     loop {
         let tick = Instant::now();
         let now = Utc::now();
+        let is_1hz_tick = tick >= next_1hz_report;
 
         // -- 1. Local sampling ------------------------------------------------
         #[cfg(windows)]
         let sample = take_sample(&mut tracker, &mut idle_mon);
         #[cfg(not(windows))]
         let sample: Option<cycle::SampleOutcome> = None;
-        outbox.extend(acc.offer(
-            sample.clone().unwrap_or(cycle::SampleOutcome {
-                key: None,
-                title: None,
-                idle_seconds: 0,
-            }),
-            now,
-        ));
-        let focused = sample.and_then(|s| s.key);
-        let focused_changed = focused != sess.prev_focused;
-        if focused_changed && focused.is_some() {
-            tracing::debug!(app = ?focused, "focused app changed");
-        }
 
-        // Bound buffered work if reporting has been failing for a long time.
-        if outbox.len() > cycle::MAX_OUTBOX_OBSERVATIONS {
-            let dropped = outbox.len() - cycle::MAX_OUTBOX_OBSERVATIONS;
-            outbox.drain(..dropped);
-            tracing::warn!(dropped, "outbox overflow; oldest observations discarded");
+        let raw_focused = sample.as_ref().and_then(|s| s.key.clone());
+        let raw_focused_changed = raw_focused != prev_raw_focused;
+        if raw_focused_changed && raw_focused.is_some() {
+            tracing::debug!(app = ?raw_focused, "focused app changed");
         }
+        prev_raw_focused = raw_focused.clone();
 
         // -- 2. Connection ----------------------------------------------------
         if stream.is_none() && Instant::now() >= retry_at {
@@ -301,40 +312,97 @@ fn main() -> anyhow::Result<()> {
             }
         }
 
+        let is_ui_focused = raw_focused
+            .as_ref()
+            .map(|k| {
+                let b = k.basename();
+                b.eq_ignore_ascii_case("screentime-ui.exe")
+                    || b.eq_ignore_ascii_case("screentime-ui")
+            })
+            .unwrap_or(false);
+
+        let is_overlay_focused = is_ui_focused && is_overlay_window_focused();
+
+        // If the focused window belongs specifically to our secondary "Tether Overlay"
+        // and an overlay is active, map it to the active blocked app's key so the cycle
+        // knows the user is interacting with the block screen rather than dismissing it.
+        // If the user focused the main "Tether" window, is_overlay_focused is false,
+        // which correctly lets the cycle dismiss the overlay card.
+        let effective_focused = match (&active, is_overlay_focused) {
+            (Some((_, active_key, _)), true) => Some(active_key.clone()),
+            _ => raw_focused.clone(),
+        };
+        let effective_focused_changed = effective_focused != sess.prev_focused;
+
+        // Record observations into the accumulator on focus transitions or ~1 Hz boundary
+        if is_1hz_tick || effective_focused_changed {
+            let mut eff_sample = sample.clone().unwrap_or(cycle::SampleOutcome {
+                key: None,
+                title: None,
+                idle_seconds: 0,
+            });
+            eff_sample.key = effective_focused.clone();
+            outbox.extend(acc.offer(eff_sample, now));
+        }
+
+        // Bound buffered work if reporting has been failing for a long time.
+        if outbox.len() > cycle::MAX_OUTBOX_OBSERVATIONS {
+            let dropped = outbox.len() - cycle::MAX_OUTBOX_OBSERVATIONS;
+            outbox.drain(..dropped);
+            tracing::warn!(dropped, "outbox overflow; oldest observations discarded");
+        }
+
         // -- 3.–5. Frames over the persistent link ----------------------------
         let fetch_blocked = cycle::needs_blocked_refresh(cycle::CycleFacts {
-            focused_key: focused.as_ref(),
-            focused_key_changed: focused_changed,
+            focused_key: effective_focused.as_ref(),
+            focused_key_changed: effective_focused_changed,
             cache_valid: sess.cache_valid(),
             pin_configured: sess.pin_configured,
-            overlay_active_app: active.as_ref().map(|(id, _)| *id),
+            overlay_active_app: active.as_ref().map(|(id, _, _)| *id),
         });
-        if let Some(s) = stream.as_mut() {
-            // Reset the backoff only after a *healthy exchange*, not merely a
-            // TCP-style connect: a link that dies mid-frame must keep backing
-            // off, exactly as the module docs promise.
-            if run_frames(s, &mut outbox, &mut sess, fetch_blocked, now) {
-                backoff.on_success();
-            } else {
-                stream = None;
+
+        let should_run_frames = is_1hz_tick || effective_focused_changed;
+
+        if should_run_frames {
+            if let Some(s) = stream.as_mut() {
+                // Reset the backoff only after a *healthy exchange*, not merely a
+                // TCP-style connect: a link that dies mid-frame must keep backing
+                // off, exactly as the module docs promise.
+                if run_frames(
+                    s,
+                    &mut outbox,
+                    &mut sess,
+                    fetch_blocked,
+                    now,
+                    effective_focused.as_ref(),
+                    #[cfg(windows)]
+                    &hotkey_mgr,
+                ) {
+                    backoff.on_success();
+                } else {
+                    stream = None;
+                }
+            }
+            if is_1hz_tick {
+                next_1hz_report = tick + REPORT_INTERVAL;
             }
         }
 
         // -- 6. Overlay reconcile ---------------------------------------------
         let plan = cycle::plan_cycle(
             cycle::CycleFacts {
-                focused_key: focused.as_ref(),
-                focused_key_changed: focused_changed,
+                focused_key: effective_focused.as_ref(),
+                focused_key_changed: effective_focused_changed,
                 cache_valid: sess.cache_valid(),
                 pin_configured: sess.pin_configured,
-                overlay_active_app: active.as_ref().map(|(id, _)| *id),
+                overlay_active_app: active.as_ref().map(|(id, _, _)| *id),
             },
             &sess.blocked,
         );
         match plan.overlay {
             cycle::OverlayCmd::Stay => {}
             cycle::OverlayCmd::Dismiss => {
-                if let Some((id, run)) = active.take() {
+                if let Some((id, _, run)) = active.take() {
                     tracing::info!(app = id, "block lifted or focus lost; dismissing");
                     run.dismiss_and_join();
                 }
@@ -342,26 +410,64 @@ fn main() -> anyhow::Result<()> {
             cycle::OverlayCmd::Show { app_id, gate } => {
                 // Tear the old one down (and join it) before spawning, so two
                 // keyboard hooks never overlap needlessly.
-                if let Some((_, old)) = active.take() {
+                if let Some((_, _, old)) = active.take() {
                     old.dismiss_and_join();
                 }
-                match show_overlay(app_id, &sess.blocked, gate) {
-                    Some(run) => active = Some((app_id, run)),
+                match show_overlay(
+                    app_id,
+                    &sess.blocked,
+                    gate,
+                    sess.alert_volume.clamp(0, 100) as u32,
+                ) {
+                    Some((key, run)) => active = Some((app_id, key, run)),
                     // Focus moved between decision and snapshot; next cycle
                     // re-plans with fresh facts.
                     None => tracing::debug!(app = app_id, "overlay deferred; focus moved"),
                 }
             }
         }
-        sess.prev_focused = focused;
-
         // -- 7. HUD reconcile -------------------------------------------------
         #[cfg(windows)]
         {
-            if let Some(hud_state) = &sess.hud {
+            if effective_focused_changed {
+                sess.last_remaining = None;
+            }
+
+            let current_key = effective_focused.as_ref();
+            let hud_matches_focus = sess.hud_app.as_ref() == current_key;
+
+            if active.is_some() || current_key.is_none() || !hud_matches_focus {
+                if let Some((_, run)) = active_hud.take() {
+                    run.dismiss();
+                }
+            } else if let Some(hud_state) = &sess.hud {
                 if let Some(snap) = snapshot::focused_snapshot() {
-                    if snap.rect.2 > 0 && snap.rect.3 > 0 {
-                        // Check if we need to respawn because target window handle changed
+                    // Check for milestone transitions (15m, 10m, 5m, 1m)
+                    const MILESTONES: &[i64] = &[15 * 60, 10 * 60, 5 * 60, 60];
+                    if let Some(prev) = sess.last_remaining {
+                        for &m in MILESTONES {
+                            if prev > m && hud_state.remaining_secs <= m {
+                                play_alert_sound(sess.alert_volume.clamp(0, 100) as u32);
+                                sess.peek_until = Some(Instant::now() + Duration::from_secs(4));
+                                break;
+                            }
+                        }
+                    }
+                    sess.last_remaining = Some(hud_state.remaining_secs);
+
+                    let in_game = is_game_or_fullscreen(&snap);
+                    let allow_continuous =
+                        sess.show_hud_overlay && (sess.show_hud_in_fullscreen || !in_game);
+                    let peek_active = hotkey_mgr.was_pressed_recently(4000)
+                        || sess.peek_until.map(|t| Instant::now() < t).unwrap_or(false);
+
+                    if !allow_continuous && !peek_active {
+                        // Suppress HUD overlay when continuous HUD is disabled or over full-screen games,
+                        // unless temporarily revealed via peek shortcut or milestone alert.
+                        if let Some((_, run)) = active_hud.take() {
+                            run.dismiss();
+                        }
+                    } else if snap.rect.2 > 0 && snap.rect.3 > 0 && current_key == Some(&snap.key) {
                         let should_respawn = active_hud
                             .as_ref()
                             .map(|(hwnd, _)| *hwnd != snap.hwnd)
@@ -378,14 +484,17 @@ fn main() -> anyhow::Result<()> {
                         if let Some((_, ref run)) = active_hud {
                             run.update(hud_state.remaining_secs, hud_state.is_timer);
                         }
+                    } else if let Some((_, run)) = active_hud.take() {
+                        run.dismiss();
                     }
-                }
-            } else {
-                if let Some((_, run)) = active_hud.take() {
+                } else if let Some((_, run)) = active_hud.take() {
                     run.dismiss();
                 }
+            } else if let Some((_, run)) = active_hud.take() {
+                run.dismiss();
             }
         }
+        sess.prev_focused = effective_focused;
 
         // Hold the cadence even when a cycle's work took real time.
         let spent = tick.elapsed();
@@ -442,6 +551,8 @@ fn run_frames(
     sess: &mut SessionState,
     fetch_blocked: bool,
     sent_at: DateTime<Utc>,
+    current_focused: Option<&AppKey>,
+    #[cfg(windows)] hotkey_mgr: &HotkeyManager,
 ) -> bool {
     // 3. Usage batch. Ascending order is contractual; sort defensively even
     // though the accumulator produces ascending stamps. Sent every cycle so
@@ -449,6 +560,7 @@ fn run_frames(
     outbox.sort_by(|a, b| a.observed_at_utc.cmp(&b.observed_at_utc));
     let report = ReportUsageDto {
         observations: outbox.clone(),
+        focused_key: current_focused.cloned(),
     };
     match link::round_trip(stream, &Request::ReportUsage { report }) {
         Ok(Response::Accepted { effective_utc, hud }) => {
@@ -459,6 +571,11 @@ fn run_frames(
             }
             sess.usage_flowing = Some(true);
             sess.hud = hud;
+            sess.hud_app = if sess.hud.is_some() {
+                current_focused.cloned()
+            } else {
+                None
+            };
         }
         // Whole-batch discard + idempotency makes retaining correct.
         Ok(Response::Error { code, message }) => {
@@ -479,7 +596,17 @@ fn run_frames(
 
     // 4. Status: pin gate input + liveness.
     match link::round_trip(stream, &Request::Status) {
-        Ok(Response::Status(dto)) => sess.pin_configured = dto.pin_configured,
+        Ok(Response::Status(dto)) => {
+            sess.pin_configured = dto.pin_configured;
+            sess.show_hud_overlay = dto.show_hud_overlay;
+            sess.show_hud_in_fullscreen = dto.show_hud_in_fullscreen;
+            sess.alert_volume = dto.alert_volume;
+            #[cfg(windows)]
+            if sess.hud_peek_hotkey != dto.hud_peek_hotkey {
+                sess.hud_peek_hotkey = dto.hud_peek_hotkey.clone();
+                hotkey_mgr.update_hotkey(dto.hud_peek_hotkey);
+            }
+        }
         Ok(other) => {
             tracing::warn!(?other, "unexpected response to Status; recycling link");
             return false;
@@ -527,6 +654,53 @@ fn log_ingest_ack(effective_utc: &str, sent_at: DateTime<Utc>) {
     }
 }
 
+/// Plays a modern, smooth, non-intrusive alert chime for overlay milestone alerts and block events.
+#[cfg(windows)]
+pub fn play_alert_sound(volume_pct: u32) {
+    if volume_pct == 0 {
+        return;
+    }
+    const CHIME_WAV: &[u8] = include_bytes!("assets/chime.wav");
+    #[link(name = "winmm")]
+    extern "system" {
+        fn PlaySoundW(pszsound: *const u16, hmod: isize, fdwsound: u32) -> i32;
+    }
+    const SND_ASYNC: u32 = 0x0001;
+    const SND_NODEFAULT: u32 = 0x0002;
+    const SND_MEMORY: u32 = 0x0004;
+
+    if volume_pct >= 100 {
+        unsafe {
+            let _ = PlaySoundW(
+                CHIME_WAV.as_ptr() as *const u16,
+                0,
+                SND_ASYNC | SND_NODEFAULT | SND_MEMORY,
+            );
+        }
+    } else {
+        let mut scaled = CHIME_WAV.to_vec();
+        if scaled.len() > 44 {
+            for chunk in scaled[44..].chunks_exact_mut(2) {
+                let sample = i16::from_le_bytes([chunk[0], chunk[1]]);
+                let new_sample = ((sample as i32 * volume_pct as i32) / 100)
+                    .clamp(i16::MIN as i32, i16::MAX as i32)
+                    as i16;
+                chunk.copy_from_slice(&new_sample.to_le_bytes());
+            }
+        }
+        unsafe {
+            let _ = PlaySoundW(
+                scaled.as_ptr() as *const u16,
+                0,
+                SND_ASYNC | SND_NODEFAULT | SND_MEMORY,
+            );
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn play_alert_sound(_volume_pct: u32) {}
+
 #[cfg(windows)]
 /// Spawn the overlay for `app_id`, if the world still agrees.
 ///
@@ -538,7 +712,8 @@ fn show_overlay(
     app_id: i64,
     blocked: &[st_ipc::BlockedAppDto],
     gate: cycle::QuitGate,
-) -> Option<overlay::OverlayRun> {
+    alert_volume: u32,
+) -> Option<(st_core::model::AppKey, overlay::OverlayRun)> {
     let entry = blocked.iter().find(|b| b.app_id == app_id)?;
     let snap = snapshot::focused_snapshot()?;
     if !cycle::app_key_matches(&entry.app_key, &snap.key) {
@@ -553,8 +728,12 @@ fn show_overlay(
     };
     let pid = snap.pid;
     let target_hwnd = snap.hwnd;
+    let key = snap.key.clone();
     tracing::info!(app = app_id, pid, ?mode, "showing block overlay");
-    Some(overlay::spawn_overlay(
+    play_alert_sound(alert_volume);
+    let run = overlay::spawn_overlay(
+        app_id,
+        pid,
         target_hwnd,
         snap.rect,
         overlay::OverlayCallbacks::new(
@@ -563,7 +742,8 @@ fn show_overlay(
         ),
         mode,
         entry.label.clone(),
-    ))
+    );
+    Some((key, run))
 }
 
 /// "Quit" from the overlay: instantly terminate the target app and notify the agent.
@@ -632,6 +812,409 @@ fn request_agent(request: Request) -> anyhow::Result<Response> {
     let mut stream = transport::client_connect(PIPE_NAME)?;
     let response = link::round_trip(&mut stream, &request)?;
     Ok(response)
+}
+
+#[cfg(windows)]
+/// Checks whether the foreground window is specifically the secondary "Tether Overlay"
+/// window, as opposed to the main Tether dashboard window or any other application.
+fn is_overlay_window_focused() -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowTextW};
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        if hwnd.0.is_null() {
+            return false;
+        }
+        let mut buf = [0u16; 256];
+        let len = GetWindowTextW(hwnd, &mut buf);
+        if len <= 0 {
+            return false;
+        }
+        let title = String::from_utf16_lossy(&buf[..len as usize]);
+        title.contains("Tether Overlay")
+    }
+}
+
+#[cfg(not(windows))]
+fn is_overlay_window_focused() -> bool {
+    false
+}
+
+#[cfg(windows)]
+/// Known game binary names (all lowercased).
+fn is_known_game_name(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+
+    const KNOWN_GAMES: &[&str] = &[
+        "cs2.exe",
+        "csgo.exe",
+        "valorant.exe",
+        "valorant-win64-shipping.exe",
+        "vgc.exe",
+        "dota2.exe",
+        "leagueclient.exe",
+        "leagueclientux.exe",
+        "league of legends.exe",
+        "gta5.exe",
+        "gtav.exe",
+        "rdr2.exe",
+        "cyberpunk2077.exe",
+        "witcher3.exe",
+        "fortniteclient-win64-shipping.exe",
+        "fortnite.exe",
+        "overwatch.exe",
+        "wow.exe",
+        "wowclassic.exe",
+        "diablo iv.exe",
+        "rocketleague.exe",
+        "apex.exe",
+        "r5apex.exe",
+        "pubg.exe",
+        "tslgame.exe",
+        "rainbowsix.exe",
+        "rainbowsix_vulkan.exe",
+        "destiny2.exe",
+        "robloxplayerbeta.exe",
+        "genshinimpact.exe",
+        "starrail.exe",
+        "zenlesszonezero.exe",
+        "eldenring.exe",
+        "sekiro.exe",
+        "darksoulsiii.exe",
+        "armoredcore6.exe",
+        "helldivers2.exe",
+        "baldursgate3.exe",
+        "bg3.exe",
+        "bg3_dx11.exe",
+        "minecraft.exe",
+        "halo-infinite.exe",
+        "forzahorizon5.exe",
+        "forzahorizon4.exe",
+        "warframe.x64.exe",
+    ];
+
+    if KNOWN_GAMES.contains(&lower.as_str()) {
+        return true;
+    }
+
+    // Engine shipping suffixes & generic game naming patterns
+    if lower.ends_with("-shipping.exe")
+        || lower.ends_with("-win64-shipping.exe")
+        || lower.ends_with("-win32-shipping.exe")
+        || lower.ends_with("game.exe")
+        || lower.ends_with("_game.exe")
+        || lower.ends_with("-game.exe")
+    {
+        return true;
+    }
+
+    false
+}
+
+#[cfg(windows)]
+/// Matches common game launcher install directories and game library paths.
+fn is_game_path(path: &str) -> bool {
+    let lower = path.to_ascii_lowercase();
+    const GAME_PATH_MARKERS: &[&str] = &[
+        "\\steamapps\\common\\",
+        "/steamapps/common/",
+        "\\epic games\\",
+        "\\gog galaxy\\games\\",
+        "\\gog games\\",
+        "\\riot games\\",
+        "\\ubisoft\\ubisoft game launcher\\games\\",
+        "\\ubisoft game launcher\\",
+        "\\ea games\\",
+        "\\electronic arts\\",
+        "\\origin games\\",
+        "\\xboxgames\\",
+        "\\battle.net\\",
+        "\\battlenet\\",
+        "\\roblox\\versions\\",
+        "\\.minecraft\\",
+        "\\minecraft\\",
+        "\\genshin impact\\",
+        "\\honkai star rail\\",
+        "\\zenless zone zero\\",
+        "\\games\\",
+        "\\game\\",
+    ];
+    GAME_PATH_MARKERS
+        .iter()
+        .any(|marker| lower.contains(marker))
+}
+
+#[cfg(windows)]
+/// Checks whether a window is running a 3D game or full-screen display,
+/// where rendering a top-level Win32 HUD overlay would force DWM Composed Flip,
+/// overriding in-game frame caps, VRR (FreeSync/G-Sync), and driver limiters (AMD Chill/FRTC).
+fn is_game_or_fullscreen(snap: &snapshot::FocusedSnapshot) -> bool {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::Graphics::Gdi::{
+        GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    use windows::Win32::UI::Shell::{
+        SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
+    };
+    use windows::Win32::UI::WindowsAndMessaging::{
+        GetClassNameW, GetWindowLongW, GWL_STYLE, WS_MAXIMIZE,
+    };
+
+    // 1. Path-based detection (known game launcher directories)
+    if let st_core::model::AppKey::WindowsExe(ref path) = snap.key {
+        if is_game_path(path) {
+            return true;
+        }
+    }
+
+    // 2. Executable name pattern detection
+    if is_known_game_name(snap.key.basename()) {
+        return true;
+    }
+
+    let hwnd = HWND(snap.hwnd as *mut std::ffi::c_void);
+    if hwnd.0.is_null() {
+        return false;
+    }
+
+    unsafe {
+        // 3. Game engine window class detection (Unreal, Unity, Source, SDL, GLFW, Godot)
+        let mut class_buf = [0u16; 256];
+        let class_len = GetClassNameW(hwnd, &mut class_buf);
+        if class_len > 0 {
+            let class_name =
+                String::from_utf16_lossy(&class_buf[..class_len as usize]).to_ascii_lowercase();
+            const GAME_CLASSES: &[&str] = &[
+                "unrealwindow",
+                "unitywndclass",
+                "valve001",
+                "glfw30",
+                "sdl_app",
+                "godot_engine",
+            ];
+            if GAME_CLASSES.iter().any(|c| class_name.contains(c))
+                || class_name.contains("direct3d")
+                || class_name.contains("renderwindow")
+            {
+                return true;
+            }
+        }
+
+        // 4. Direct D3D Fullscreen / Presentation check via Windows Shell notification state
+        if let Ok(state) = SHQueryUserNotificationState() {
+            if state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_PRESENTATION_MODE {
+                return true;
+            }
+        }
+
+        // 5. Geometry check: does the window cover or approximate the monitor?
+        // Allows a 48px margin for borderless windowed mode, drop shadows, or DPI virtualization.
+        let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        let mut mi = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if GetMonitorInfoW(hmon, &mut mi).as_bool() {
+            let (x, y, w, h) = snap.rect;
+            let wr = RECT {
+                left: x,
+                top: y,
+                right: x + w,
+                bottom: y + h,
+            };
+
+            let mon_w = mi.rcMonitor.right - mi.rcMonitor.left;
+            let mon_h = mi.rcMonitor.bottom - mi.rcMonitor.top;
+
+            let covers_monitor = wr.left <= mi.rcMonitor.left + 48
+                && wr.top <= mi.rcMonitor.top + 48
+                && wr.right >= mi.rcMonitor.right - 48
+                && wr.bottom >= mi.rcMonitor.bottom - 48
+                && w >= mon_w - 48
+                && h >= mon_h - 48;
+
+            if covers_monitor {
+                let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+                let covers_taskbar = wr.bottom >= mi.rcWork.bottom || wr.top <= mi.rcWork.top;
+                if (style & WS_MAXIMIZE.0) == 0 || covers_taskbar {
+                    return true;
+                }
+            }
+        }
+    }
+
+    false
+}
+
+#[cfg(not(windows))]
+fn is_game_or_fullscreen(_snap: &snapshot::FocusedSnapshot) -> bool {
+    false
+}
+
+#[cfg(windows)]
+const WM_HOTKEY_UPDATE: u32 = windows::Win32::UI::WindowsAndMessaging::WM_USER + 10;
+#[cfg(windows)]
+const HOTKEY_ID: i32 = 0x5448; // "TH" for Tether HUD
+
+#[cfg(windows)]
+pub fn parse_hotkey(
+    s: &str,
+) -> Option<(
+    windows::Win32::UI::Input::KeyboardAndMouse::HOT_KEY_MODIFIERS,
+    u32,
+)> {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{
+        MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT, MOD_WIN,
+    };
+
+    let mut mods = MOD_NOREPEAT;
+    let mut vk: Option<u32> = None;
+
+    for part in s.split('+') {
+        let trimmed = part.trim();
+        let upper = trimmed.to_ascii_uppercase();
+        match upper.as_str() {
+            "CTRL" | "CONTROL" => mods |= MOD_CONTROL,
+            "ALT" => mods |= MOD_ALT,
+            "SHIFT" => mods |= MOD_SHIFT,
+            "WIN" | "WINDOWS" | "SUPER" | "META" => mods |= MOD_WIN,
+            "F1" => vk = Some(0x70),
+            "F2" => vk = Some(0x71),
+            "F3" => vk = Some(0x72),
+            "F4" => vk = Some(0x73),
+            "F5" => vk = Some(0x74),
+            "F6" => vk = Some(0x75),
+            "F7" => vk = Some(0x76),
+            "F8" => vk = Some(0x77),
+            "F9" => vk = Some(0x78),
+            "F10" => vk = Some(0x79),
+            "F11" => vk = Some(0x7A),
+            "F12" => vk = Some(0x7B),
+            "TAB" => vk = Some(0x09),
+            "SPACE" => vk = Some(0x20),
+            "\\" => vk = Some(0xDC),
+            "/" => vk = Some(0xBF),
+            "`" => vk = Some(0xC0),
+            "-" => vk = Some(0xBD),
+            "=" => vk = Some(0xBB),
+            "[" => vk = Some(0xDB),
+            "]" => vk = Some(0xDD),
+            "'" => vk = Some(0xDE),
+            ";" => vk = Some(0xBA),
+            "," => vk = Some(0xBC),
+            "." => vk = Some(0xBE),
+            other if other.len() == 1 => {
+                let c = other.chars().next().unwrap();
+                if c.is_ascii_alphanumeric() {
+                    vk = Some(c as u32);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    vk.map(|k| (mods, k))
+}
+
+#[cfg(windows)]
+struct HotkeyManager {
+    update_tx: std::sync::mpsc::Sender<String>,
+    last_pressed: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    thread_id: u32,
+}
+
+#[cfg(windows)]
+impl HotkeyManager {
+    fn spawn(initial_hotkey: String) -> Self {
+        use windows::Win32::System::Threading::GetCurrentThreadId;
+        use windows::Win32::UI::Input::KeyboardAndMouse::{RegisterHotKey, UnregisterHotKey};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            DispatchMessageW, GetMessageW, PeekMessageW, TranslateMessage, MSG, PM_NOREMOVE,
+            WM_HOTKEY,
+        };
+
+        let (ready_tx, ready_rx) = std::sync::mpsc::channel();
+        let (update_tx, update_rx) = std::sync::mpsc::channel::<String>();
+        let last_pressed = std::sync::Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let last_pressed_clone = last_pressed.clone();
+
+        std::thread::spawn(move || unsafe {
+            let tid = GetCurrentThreadId();
+            // Force Windows to instantiate the thread's message queue
+            let mut dummy = MSG::default();
+            let _ = PeekMessageW(&mut dummy, None, 0, 0, PM_NOREMOVE);
+            let _ = ready_tx.send(tid);
+
+            let mut current_hotkey = initial_hotkey;
+            if let Some((mods, vk)) = parse_hotkey(&current_hotkey) {
+                let _ = RegisterHotKey(None, HOTKEY_ID, mods, vk);
+            }
+
+            let mut msg = MSG::default();
+            while GetMessageW(&mut msg, None, 0, 0).as_bool() {
+                if msg.message == WM_HOTKEY && msg.wParam.0 as i32 == HOTKEY_ID {
+                    let now_ms = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_millis() as u64;
+                    last_pressed_clone.store(now_ms, std::sync::atomic::Ordering::Relaxed);
+                } else if msg.message == WM_HOTKEY_UPDATE {
+                    while let Ok(new_key) = update_rx.try_recv() {
+                        if new_key != current_hotkey {
+                            let _ = UnregisterHotKey(None, HOTKEY_ID);
+                            if let Some((mods, vk)) = parse_hotkey(&new_key) {
+                                let _ = RegisterHotKey(None, HOTKEY_ID, mods, vk);
+                            }
+                            current_hotkey = new_key;
+                        }
+                    }
+                }
+                let _ = TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+
+            let _ = UnregisterHotKey(None, HOTKEY_ID);
+        });
+
+        let thread_id = ready_rx.recv().unwrap_or(0);
+        Self {
+            update_tx,
+            last_pressed,
+            thread_id,
+        }
+    }
+
+    fn update_hotkey(&self, new_hotkey: String) {
+        use windows::Win32::Foundation::{LPARAM, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::PostThreadMessageW;
+        let _ = self.update_tx.send(new_hotkey);
+        if self.thread_id != 0 {
+            unsafe {
+                let _ = PostThreadMessageW(self.thread_id, WM_HOTKEY_UPDATE, WPARAM(0), LPARAM(0));
+            }
+        }
+    }
+
+    fn was_pressed_recently(&self, within_ms: u64) -> bool {
+        let last = self.last_pressed.load(std::sync::atomic::Ordering::Relaxed);
+        if last == 0 {
+            return false;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        now.saturating_sub(last) <= within_ms
+    }
+}
+
+#[cfg(not(windows))]
+struct HotkeyManager;
+
+#[cfg(not(windows))]
+impl HotkeyManager {
+    fn was_pressed_recently(&self, _within_ms: u64) -> bool {
+        false
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -869,5 +1452,73 @@ mod tests {
             single_instance_mutex_name_for(Some("")),
             r"Local\screentime-session"
         );
+    }
+
+    #[test]
+    fn game_detection_matches_known_game_binaries_and_patterns() {
+        assert!(is_known_game_name("cs2.exe"));
+        assert!(is_known_game_name("CS2.EXE"));
+        assert!(is_known_game_name("Valorant-Win64-Shipping.exe"));
+        assert!(is_known_game_name("Cyberpunk2077.exe"));
+        assert!(is_known_game_name("FortniteClient-Win64-Shipping.exe"));
+        assert!(is_known_game_name("some_indie_game.exe"));
+        assert!(is_known_game_name("Project-Win64-Shipping.exe"));
+        assert!(!is_known_game_name("notepad.exe"));
+        assert!(!is_known_game_name("chrome.exe"));
+        assert!(!is_known_game_name("code.exe"));
+    }
+
+    #[test]
+    fn game_detection_matches_launcher_and_library_paths() {
+        assert!(is_game_path(
+            r"C:\Program Files (x86)\Steam\steamapps\common\Counter-Strike Global Offensive\game\bin\win64\cs2.exe"
+        ));
+        assert!(is_game_path(
+            r"D:\Epic Games\Fortnite\FortniteGame\Binaries\Win64\FortniteClient-Win64-Shipping.exe"
+        ));
+        assert!(is_game_path(
+            r"C:\Riot Games\VALORANT\live\ShooterGame\Binaries\Win64\VALORANT-Win64-Shipping.exe"
+        ));
+        assert!(is_game_path(
+            r"C:\XboxGames\Halo Infinite\Content\halo-infinite.exe"
+        ));
+        assert!(!is_game_path(
+            r"C:\Program Files\Google\Chrome\Application\chrome.exe"
+        ));
+        assert!(!is_game_path(r"C:\Windows\System32\notepad.exe"));
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn parse_hotkey_recognizes_standard_and_custom_combinations() {
+        use windows::Win32::UI::Input::KeyboardAndMouse::{
+            MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT,
+        };
+
+        let (mods, vk) = parse_hotkey("Ctrl+Alt+T").expect("valid");
+        assert_eq!(mods, MOD_NOREPEAT | MOD_CONTROL | MOD_ALT);
+        assert_eq!(vk, 0x54);
+
+        let (mods, vk) = parse_hotkey("Alt+\\").expect("valid");
+        assert_eq!(mods, MOD_NOREPEAT | MOD_ALT);
+        assert_eq!(vk, 0xDC);
+
+        let (mods, vk) = parse_hotkey("Ctrl+Shift+F9").expect("valid");
+        assert_eq!(mods, MOD_NOREPEAT | MOD_CONTROL | MOD_SHIFT);
+        assert_eq!(vk, 0x78);
+
+        assert!(parse_hotkey("invalid_combo_with_no_key").is_none());
+    }
+
+    #[test]
+    fn alert_chime_asset_is_valid_wav() {
+        const CHIME_WAV: &[u8] = include_bytes!("assets/chime.wav");
+        assert!(CHIME_WAV.len() > 1000);
+        assert_eq!(&CHIME_WAV[0..4], b"RIFF");
+        assert_eq!(&CHIME_WAV[8..12], b"WAVE");
+        // Ensure play_alert_sound runs without panicking with scaling and mute
+        play_alert_sound(80);
+        play_alert_sound(0);
+        play_alert_sound(100);
     }
 }

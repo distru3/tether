@@ -17,6 +17,7 @@
 //! parsing English.
 
 mod ipc_client;
+mod overlay_bridge;
 mod tray;
 
 #[cfg(windows)]
@@ -46,6 +47,7 @@ mod corners {
 
 use serde::Serialize;
 use st_ipc::{ErrorCode, Response};
+use tauri::Manager;
 
 /// Everything the header needs, plus one host-owned fact: whether the IPC
 /// round trip succeeded at all. `StatusDto` describes the agent's own state;
@@ -61,6 +63,8 @@ pub struct AgentStatus {
     pub pin_configured: bool,
     pub strict_mode: bool,
     pub show_hud_overlay: bool,
+    pub show_hud_in_fullscreen: bool,
+    pub hud_peek_hotkey: String,
     pub limit_cooldown_hours: i64,
     pub idle_threshold_secs: i64,
     pub day_start_minutes: i64,
@@ -136,6 +140,8 @@ fn get_status() -> AgentStatus {
             pin_configured: dto.pin_configured,
             strict_mode: dto.strict_mode,
             show_hud_overlay: dto.show_hud_overlay,
+            show_hud_in_fullscreen: dto.show_hud_in_fullscreen,
+            hud_peek_hotkey: dto.hud_peek_hotkey,
             limit_cooldown_hours: dto.limit_cooldown_hours,
             idle_threshold_secs: dto.idle_threshold_secs,
             day_start_minutes: dto.day_start_minutes,
@@ -155,6 +161,8 @@ fn get_status() -> AgentStatus {
             pin_configured: false,
             strict_mode: false,
             show_hud_overlay: true,
+            show_hud_in_fullscreen: false,
+            hud_peek_hotkey: "Ctrl+Alt+T".to_string(),
             limit_cooldown_hours: 24,
             idle_threshold_secs: 60,
             day_start_minutes: 0,
@@ -485,6 +493,106 @@ fn stop_all_services(app: tauri::AppHandle) -> CmdResult<()> {
     Ok(())
 }
 
+/// Returns the user's saved theme preference from `{app_data_dir}/theme.txt`.
+/// Returns `"system"` if the file doesn't exist or can't be read.
+#[tauri::command]
+fn get_theme(app: tauri::AppHandle) -> String {
+    let path = app.path().app_data_dir().map(|d| d.join("theme.txt")).ok();
+    if let Some(p) = path {
+        if let Ok(s) = std::fs::read_to_string(&p) {
+            let s = s.trim().to_string();
+            if matches!(
+                s.as_str(),
+                "horizon-dark" | "horizon-light" | "classic-dark" | "classic-light" | "system"
+            ) {
+                return s;
+            }
+        }
+    }
+    "system".into()
+}
+
+/// Persists the user's theme preference to `{app_data_dir}/theme.txt`.
+#[tauri::command]
+fn set_theme(app: tauri::AppHandle, theme: String) -> CmdResult<()> {
+    if !matches!(
+        theme.as_str(),
+        "horizon-dark" | "horizon-light" | "classic-dark" | "classic-light" | "system"
+    ) {
+        return Err(CommandError {
+            code: "invalid_theme".into(),
+            message: format!("unknown theme: {theme}"),
+        });
+    }
+    let path = app
+        .path()
+        .app_data_dir()
+        .map(|d| d.join("theme.txt"))
+        .map_err(|e| CommandError {
+            code: "io_error".into(),
+            message: format!("cannot resolve app data dir: {e}"),
+        })?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| CommandError {
+            code: "io_error".into(),
+            message: format!("cannot create app data dir: {e}"),
+        })?;
+    }
+    std::fs::write(&path, theme.as_bytes()).map_err(|e| CommandError {
+        code: "io_error".into(),
+        message: format!("cannot write theme file: {e}"),
+    })?;
+    Ok(())
+}
+
+#[tauri::command]
+fn preview_alert_sound(volume: Option<u32>) -> CmdResult<()> {
+    #[cfg(windows)]
+    {
+        let volume_pct = volume.unwrap_or(80);
+        if volume_pct == 0 {
+            return Ok(());
+        }
+        const CHIME_WAV: &[u8] = include_bytes!("../../../crates/session/src/assets/chime.wav");
+        #[link(name = "winmm")]
+        extern "system" {
+            fn PlaySoundW(pszsound: *const u16, hmod: isize, fdwsound: u32) -> i32;
+        }
+        const SND_ASYNC: u32 = 0x0001;
+        const SND_NODEFAULT: u32 = 0x0002;
+        const SND_MEMORY: u32 = 0x0004;
+
+        if volume_pct >= 100 {
+            unsafe {
+                let _ = PlaySoundW(
+                    CHIME_WAV.as_ptr() as *const u16,
+                    0,
+                    SND_ASYNC | SND_NODEFAULT | SND_MEMORY,
+                );
+            }
+        } else {
+            let mut scaled = CHIME_WAV.to_vec();
+            if scaled.len() > 44 {
+                for chunk in scaled[44..].chunks_exact_mut(2) {
+                    let sample = i16::from_le_bytes([chunk[0], chunk[1]]);
+                    let new_sample = ((sample as i32 * volume_pct as i32) / 100)
+                        .clamp(i16::MIN as i32, i16::MAX as i32)
+                        as i16;
+                    chunk.copy_from_slice(&new_sample.to_le_bytes());
+                }
+            }
+            unsafe {
+                let _ = PlaySoundW(
+                    scaled.as_ptr() as *const u16,
+                    0,
+                    SND_ASYNC | SND_NODEFAULT | SND_MEMORY,
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 pub fn run() {
     tracing_subscriber::fmt()
         .with_env_filter(
@@ -494,7 +602,11 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_denylist(&["overlay"])
+                .build(),
+        )
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
             use tauri::Manager;
@@ -531,9 +643,24 @@ pub fn run() {
             start_focus_session,
             end_focus_session,
             emergency_reset_network,
-            stop_all_services
+            stop_all_services,
+            preview_alert_sound,
+            get_theme,
+            set_theme,
+            overlay_bridge::get_overlay_state,
+            overlay_bridge::overlay_extend,
+            overlay_bridge::overlay_quit,
+            overlay_bridge::hide_overlay_window
         ])
         .setup(|app| {
+            if let Some(overlay_win) = app.get_webview_window("overlay") {
+                let _ = overlay_win.hide();
+            }
+
+            let bridge_state = overlay_bridge::OverlayBridgeState::new();
+            app.manage(bridge_state.clone());
+            overlay_bridge::start_bridge_server(app.handle().clone(), bridge_state.0.clone());
+
             #[cfg(windows)]
             {
                 use tauri::Manager;
@@ -549,7 +676,7 @@ pub fn run() {
                 use std::os::windows::process::CommandExt;
                 // Auto-launch the session tracker alongside the UI.
                 // The tracker uses a single-instance mutex, so this is perfectly
-                // safe to call blindly ?" it will just exit if already running.
+                // safe to call blindly — it will just exit if already running.
                 if let Ok(exe) = std::env::current_exe() {
                     if let Some(dir) = exe.parent() {
                         let tracker = dir.join("bin").join("screentime-session.exe");

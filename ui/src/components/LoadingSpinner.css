@@ -51,9 +51,9 @@
 .skeleton-shimmer {
     background: linear-gradient(
         90deg,
-        rgba(79, 28, 81, 0.35) 0%,
-        rgba(165, 91, 75, 0.45) 50%,
-        rgba(79, 28, 81, 0.35) 100%
+        var(--bg-surface) 0%,
+        var(--bg-surface-hover) 50%,
+        var(--bg-surface) 100%
     );
     background-size: 200% 100%;
     animation: skeleton-shimmer 1.8s cubic-bezier(0.4, 0, 0.6, 1) infinite;

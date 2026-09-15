@@ -126,6 +126,12 @@ pub struct Policy {
     pub idle_threshold_secs: i64,
     /// Whether to show the remaining time HUD on limited apps.
     pub show_hud_overlay: bool,
+    /// Whether to allow the floating HUD over full-screen games (may break driver FPS limits).
+    pub show_hud_in_fullscreen: bool,
+    /// Remapable global hotkey to peek the HUD when dormant in games (default "Ctrl+Alt+T").
+    pub hud_peek_hotkey: String,
+    /// Alert chime audio volume from 0 to 100 (default 80).
+    pub alert_volume: i64,
 }
 
 /// Runtime-updated facts shared between IPC workers and the main loop.
@@ -436,6 +442,168 @@ fn remove_manual_block(ctx: &Ctx, domain: &str, pin: &str) -> Response {
     }
 }
 
+fn schedule_to_dto(s: &st_core::schedules::DowntimeSchedule) -> st_ipc::ScheduleDto {
+    st_ipc::ScheduleDto {
+        id: s.id,
+        name: s.name.clone(),
+        weekday_mask: s.weekday_mask,
+        start_minute: s.start_minute,
+        end_minute: s.end_minute,
+        enabled: s.enabled,
+    }
+}
+
+fn list_schedules(ctx: &Ctx) -> Response {
+    let db = lock_db(&ctx.db);
+    match db.list_schedules() {
+        Ok(schedules) => Response::Schedules(st_ipc::SchedulesDto {
+            schedules: schedules.iter().map(schedule_to_dto).collect(),
+        }),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list schedules");
+            Response::Error {
+                code: ErrorCode::Internal,
+                message: "Database error".into(),
+            }
+        }
+    }
+}
+
+fn create_schedule(
+    ctx: &Ctx,
+    name: &str,
+    weekday_mask: u8,
+    start_minute: u32,
+    end_minute: u32,
+) -> Response {
+    let db = lock_db(&ctx.db);
+    match db.create_schedule(name, weekday_mask, start_minute, end_minute) {
+        Ok(id) => Response::ScheduleCreated(st_ipc::ScheduleDto {
+            id,
+            name: name.to_string(),
+            weekday_mask,
+            start_minute,
+            end_minute,
+            enabled: true,
+        }),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to create schedule");
+            Response::Error {
+                code: ErrorCode::Internal,
+                message: e.to_string(),
+            }
+        }
+    }
+}
+
+fn update_schedule(
+    ctx: &Ctx,
+    id: i64,
+    name: &str,
+    weekday_mask: u8,
+    start_minute: u32,
+    end_minute: u32,
+) -> Response {
+    let db = lock_db(&ctx.db);
+    match db.update_schedule(id, name, weekday_mask, start_minute, end_minute) {
+        Ok(()) => accepted(ctx.clock.now_utc()),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to update schedule");
+            Response::Error {
+                code: ErrorCode::Internal,
+                message: e.to_string(),
+            }
+        }
+    }
+}
+
+fn set_schedule_enabled(ctx: &Ctx, id: i64, enabled: bool) -> Response {
+    let db = lock_db(&ctx.db);
+    match db.set_schedule_enabled(id, enabled) {
+        Ok(()) => accepted(ctx.clock.now_utc()),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to set schedule enabled");
+            Response::Error {
+                code: ErrorCode::Internal,
+                message: e.to_string(),
+            }
+        }
+    }
+}
+
+fn delete_schedule(ctx: &Ctx, id: i64) -> Response {
+    let db = lock_db(&ctx.db);
+    match db.delete_schedule(id) {
+        Ok(()) => accepted(ctx.clock.now_utc()),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to delete schedule");
+            Response::Error {
+                code: ErrorCode::Internal,
+                message: e.to_string(),
+            }
+        }
+    }
+}
+
+fn list_allowlist(ctx: &Ctx) -> Response {
+    let db = lock_db(&ctx.db);
+    let items = match db.list_allowlist() {
+        Ok(items) => items,
+        Err(e) => {
+            tracing::error!(error = %e, "failed to list allowlist");
+            return Response::Error {
+                code: ErrorCode::Internal,
+                message: "Database error".into(),
+            };
+        }
+    };
+
+    let apps = db.list_apps().unwrap_or_default();
+    let app_map: HashMap<i64, String> = apps.into_iter().map(|a| (a.id, a.display_name)).collect();
+    let sites = db.list_sites().unwrap_or_default();
+    let site_map: HashMap<i64, String> = sites.into_iter().map(|s| (s.id, s.domain)).collect();
+
+    let dtos = items
+        .into_iter()
+        .map(|(subject_type, subject_id)| {
+            let name = if subject_type == "app" {
+                app_map
+                    .get(&subject_id)
+                    .cloned()
+                    .unwrap_or_else(|| format!("App #{}", subject_id))
+            } else if subject_type == "site" {
+                site_map
+                    .get(&subject_id)
+                    .cloned()
+                    .unwrap_or_else(|| format!("Site #{}", subject_id))
+            } else {
+                format!("{} #{}", subject_type, subject_id)
+            };
+            st_ipc::AllowlistItemDto {
+                subject_type,
+                subject_id,
+                name,
+            }
+        })
+        .collect();
+
+    Response::Allowlist(st_ipc::AllowlistDto { items: dtos })
+}
+
+fn set_allowlist(ctx: &Ctx, subject_type: &str, subject_id: i64, allowed: bool) -> Response {
+    let db = lock_db(&ctx.db);
+    match db.set_allowlist_subject(subject_type, subject_id, allowed) {
+        Ok(()) => accepted(ctx.clock.now_utc()),
+        Err(e) => {
+            tracing::error!(error = %e, "failed to set allowlist");
+            Response::Error {
+                code: ErrorCode::Internal,
+                message: e.to_string(),
+            }
+        }
+    }
+}
+
 fn handle(ctx: &Ctx, request: Request) -> Response {
     let now = ctx.clock.now_utc();
     match request {
@@ -517,6 +685,9 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
                     "day_start_minutes" => if let Ok(v) = value.parse() { p.day_start_minutes = v; }
                     "idle_threshold_secs" => if let Ok(v) = value.parse() { p.idle_threshold_secs = v; }
                     "show_hud_overlay" => p.show_hud_overlay = value != "false",
+                    "show_hud_in_fullscreen" => p.show_hud_in_fullscreen = value == "true",
+                    "hud_peek_hotkey" => p.hud_peek_hotkey = value.clone(),
+                    "alert_volume" => if let Ok(v) = value.parse() { p.alert_volume = v; }
                     _ => {}
                 }
             }
@@ -559,6 +730,28 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
         Request::ListManualBlocks => list_manual_blocks(ctx),
         Request::AddManualBlock { domain } => add_manual_block(ctx, &domain),
         Request::RemoveManualBlock { domain, pin } => remove_manual_block(ctx, &domain, &pin),
+        Request::ListSchedules => list_schedules(ctx),
+        Request::CreateSchedule {
+            name,
+            weekday_mask,
+            start_minute,
+            end_minute,
+        } => create_schedule(ctx, &name, weekday_mask, start_minute, end_minute),
+        Request::UpdateSchedule {
+            id,
+            name,
+            weekday_mask,
+            start_minute,
+            end_minute,
+        } => update_schedule(ctx, id, &name, weekday_mask, start_minute, end_minute),
+        Request::SetScheduleEnabled { id, enabled } => set_schedule_enabled(ctx, id, enabled),
+        Request::DeleteSchedule { id } => delete_schedule(ctx, id),
+        Request::ListAllowlist => list_allowlist(ctx),
+        Request::SetAllowlist {
+            subject_type,
+            subject_id,
+            allowed,
+        } => set_allowlist(ctx, &subject_type, subject_id, allowed),
         _ => Response::Error {
             code: st_ipc::ErrorCode::BadRequest,
             message: "Feature not yet available.".to_string(),
@@ -591,6 +784,9 @@ fn status_response(ctx: &Ctx) -> Response {
         strict_mode: policy.strict_mode,
         pin_configured,
         show_hud_overlay: policy.show_hud_overlay,
+        show_hud_in_fullscreen: policy.show_hud_in_fullscreen,
+        hud_peek_hotkey: policy.hud_peek_hotkey.clone(),
+        alert_volume: policy.alert_volume,
         limit_cooldown_hours: policy.limit_cooldown_hours,
         day_start_minutes: policy.day_start_minutes,
         idle_threshold_secs: policy.idle_threshold_secs,
@@ -1311,46 +1507,57 @@ fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
         }
     }
 
+    if let Some(ref fk) = report.focused_key {
+        ctx.live.note_focus(fk.clone(), now);
+    }
+
     ctx.live.note_report(now);
 
     // 6. Compute HUD overlay state for the currently focused app.
+    // Always computed so the session layer can support on-demand peek shortcut
+    // even when continuous floating HUD overlay is toggled off.
     let mut hud = None;
-    if ctx.policy.read().unwrap().show_hud_overlay {
-        if let Some((_, obs)) = parsed.last() {
-            let db_guard = lock_db(&ctx.db);
-            let today = DayKey::from_utc(now, tz_offset, day_start);
-            if let Ok(snap) = db_guard.day_snapshot(today) {
-                if let Ok(Some(app_id)) = db_guard.app_id_for_key(&obs.app_key) {
-                    if let Ok(Some(record)) = db_guard.app_record(app_id) {
-                        let limits = db_guard.load_limits().unwrap_or_default();
-                        let engine = st_core::limits::LimitEngine::with_default_warnings(limits);
-                        let decision = engine.evaluate(
-                            record.id,
-                            &record.all_categories(),
-                            true, // we assume it's blockable for the HUD check
-                            today.weekday_index().unwrap_or(0),
-                            &snap,
-                            now,
-                        );
-                        let match_res = match decision {
-                            st_core::limits::Decision::Allow {
-                                remaining_secs,
-                                binding: Some(target),
-                            } => Some((remaining_secs, target)),
-                            st_core::limits::Decision::Warn {
-                                remaining_secs,
-                                binding: target,
-                                ..
-                            } => Some((remaining_secs, target)),
-                            _ => None,
-                        };
-                        if let Some((remaining_secs, target)) = match_res {
-                            let is_timer = snap.active_timer_expires_utc(&target).is_some();
-                            hud = Some(st_ipc::HudStateDto {
-                                remaining_secs,
-                                is_timer,
-                            });
-                        }
+    let focused_key = report.focused_key.or_else(|| {
+        parsed
+            .last()
+            .map(|(_, obs)| obs.app_key.clone())
+            .or_else(|| ctx.live.focus_key(now))
+    });
+    if let Some(app_key) = focused_key {
+        let db_guard = lock_db(&ctx.db);
+        let today = DayKey::from_utc(now, tz_offset, day_start);
+        if let Ok(snap) = db_guard.day_snapshot(today) {
+            if let Ok(Some(app_id)) = db_guard.app_id_for_key(&app_key) {
+                if let Ok(Some(record)) = db_guard.app_record(app_id) {
+                    let all_categories = record.all_categories();
+                    let limits = db_guard.load_limits().unwrap_or_default();
+                    let engine = st_core::limits::LimitEngine::with_default_warnings(limits);
+                    let decision = engine.evaluate(
+                        record.id,
+                        &all_categories,
+                        true, // we assume it's blockable for the HUD check
+                        today.weekday_index().unwrap_or(0),
+                        &snap,
+                        now,
+                    );
+                    let match_res = match decision {
+                        st_core::limits::Decision::Allow {
+                            remaining_secs,
+                            binding: Some(target),
+                        } => Some((remaining_secs, target)),
+                        st_core::limits::Decision::Warn {
+                            remaining_secs,
+                            binding: target,
+                            ..
+                        } => Some((remaining_secs, target)),
+                        _ => None,
+                    };
+                    if let Some((remaining_secs, target)) = match_res {
+                        let is_timer = snap.active_timer_expires_utc(&target).is_some();
+                        hud = Some(st_ipc::HudStateDto {
+                            remaining_secs,
+                            is_timer,
+                        });
                     }
                 }
             }
@@ -1671,6 +1878,9 @@ mod tests {
                 day_start_minutes: 0,
                 idle_threshold_secs: 60,
                 show_hud_overlay: true,
+                show_hud_in_fullscreen: false,
+                hud_peek_hotkey: "Ctrl+Alt+T".to_string(),
+                alert_volume: 80,
             })),
             processes: Arc::new(Mutex::new(Box::new(FakeProcesses::default()))),
             clock: Arc::new(clock),
@@ -1685,6 +1895,9 @@ mod tests {
             day_start_minutes: 0,
             idle_threshold_secs: 60,
             show_hud_overlay: true,
+            show_hud_in_fullscreen: false,
+            hud_peek_hotkey: "Ctrl+Alt+T".to_string(),
+            alert_volume: 80,
         };
         tweak(&mut policy);
         Ctx {
@@ -1767,7 +1980,10 @@ mod tests {
 
     fn report_of(observations: Vec<ObservationDto>) -> Request {
         Request::ReportUsage {
-            report: ReportUsageDto { observations },
+            report: ReportUsageDto {
+                observations,
+                focused_key: None,
+            },
         }
     }
 
@@ -2602,6 +2818,9 @@ mod tests {
                 day_start_minutes: 0,
                 idle_threshold_secs: 60,
                 show_hud_overlay: true,
+                show_hud_in_fullscreen: false,
+                hud_peek_hotkey: "Ctrl+Alt+T".to_string(),
+                alert_volume: 80,
             },
             Arc::new(Mutex::new(Box::<FakeProcesses>::default())),
             Arc::new(TestClock::new(at("2026-08-20T12:00:00Z"), 0)),
@@ -2689,5 +2908,137 @@ mod tests {
             st_ipc::read_message::<_, Response>(&mut probe),
             Ok(Response::Pong)
         ));
+    }
+
+    #[test]
+    fn schedule_and_allowlist_ipc_roundtrip() {
+        let db = Db::open_in_memory().expect("db");
+        let clock = TestClock::new(
+            DateTime::parse_from_rfc3339("2026-03-30T10:00:00Z")
+                .unwrap()
+                .with_timezone(&Utc),
+            0,
+        );
+        let ctx = test_ctx(db, clock);
+
+        // 1. Initially empty schedules
+        let res = handle(&ctx, Request::ListSchedules);
+        match res {
+            Response::Schedules(dto) => assert_eq!(dto.schedules.len(), 0),
+            other => panic!("expected Schedules, got {other:?}"),
+        }
+
+        // 2. Create schedule
+        let res = handle(
+            &ctx,
+            Request::CreateSchedule {
+                name: "Bedtime".into(),
+                weekday_mask: 127,
+                start_minute: 1320,
+                end_minute: 420,
+            },
+        );
+        let sched_id = match res {
+            Response::ScheduleCreated(dto) => {
+                assert_eq!(dto.name, "Bedtime");
+                assert_eq!(dto.start_minute, 1320);
+                assert_eq!(dto.end_minute, 420);
+                assert_eq!(dto.weekday_mask, 127);
+                assert!(dto.enabled);
+                dto.id
+            }
+            other => panic!("expected ScheduleCreated, got {other:?}"),
+        };
+
+        // 3. List schedules returns 1
+        let res = handle(&ctx, Request::ListSchedules);
+        match res {
+            Response::Schedules(dto) => {
+                assert_eq!(dto.schedules.len(), 1);
+                assert_eq!(dto.schedules[0].id, sched_id);
+            }
+            other => panic!("expected Schedules, got {other:?}"),
+        }
+
+        // 4. Update schedule
+        let res = handle(
+            &ctx,
+            Request::UpdateSchedule {
+                id: sched_id,
+                name: "Deep Sleep".into(),
+                weekday_mask: 31,
+                start_minute: 1380,
+                end_minute: 480,
+            },
+        );
+        assert!(matches!(res, Response::Accepted { .. }));
+
+        // 5. Toggle enabled
+        let res = handle(
+            &ctx,
+            Request::SetScheduleEnabled {
+                id: sched_id,
+                enabled: false,
+            },
+        );
+        assert!(matches!(res, Response::Accepted { .. }));
+
+        // Verify updated state
+        let res = handle(&ctx, Request::ListSchedules);
+        match res {
+            Response::Schedules(dto) => {
+                assert_eq!(dto.schedules[0].name, "Deep Sleep");
+                assert!(!dto.schedules[0].enabled);
+            }
+            other => panic!("expected Schedules, got {other:?}"),
+        }
+
+        // 6. Delete schedule
+        let res = handle(&ctx, Request::DeleteSchedule { id: sched_id });
+        assert!(matches!(res, Response::Accepted { .. }));
+
+        let res = handle(&ctx, Request::ListSchedules);
+        match res {
+            Response::Schedules(dto) => assert_eq!(dto.schedules.len(), 0),
+            other => panic!("expected Schedules, got {other:?}"),
+        }
+
+        // 7. Allowlist roundtrip
+        let res = handle(
+            &ctx,
+            Request::SetAllowlist {
+                subject_type: "app".into(),
+                subject_id: 42,
+                allowed: true,
+            },
+        );
+        assert!(matches!(res, Response::Accepted { .. }));
+
+        let res = handle(&ctx, Request::ListAllowlist);
+        match res {
+            Response::Allowlist(dto) => {
+                assert_eq!(dto.items.len(), 1);
+                assert_eq!(dto.items[0].subject_type, "app");
+                assert_eq!(dto.items[0].subject_id, 42);
+            }
+            other => panic!("expected Allowlist, got {other:?}"),
+        }
+
+        // Remove from allowlist
+        let res = handle(
+            &ctx,
+            Request::SetAllowlist {
+                subject_type: "app".into(),
+                subject_id: 42,
+                allowed: false,
+            },
+        );
+        assert!(matches!(res, Response::Accepted { .. }));
+
+        let res = handle(&ctx, Request::ListAllowlist);
+        match res {
+            Response::Allowlist(dto) => assert_eq!(dto.items.len(), 0),
+            other => panic!("expected Allowlist, got {other:?}"),
+        }
     }
 }

@@ -1,0 +1,13 @@
+{
+  "name": "screentime-workspace",
+  "private": true,
+  "description": "Tether (screentime) workspace development runner.",
+  "scripts": {
+    "dev": "powershell -ExecutionPolicy Bypass -File ./dev.ps1",
+    "dev:headless": "powershell -ExecutionPolicy Bypass -File ./dev.ps1 -Headless",
+    "dev:backend": "powershell -ExecutionPolicy Bypass -File ./dev.ps1 -BackendOnly",
+    "dev:nobuild": "powershell -ExecutionPolicy Bypass -File ./dev.ps1 -NoBuild",
+    "kill": "powershell -ExecutionPolicy Bypass -File ./kill_service.ps1",
+    "build": "cd ui && npm run build"
+  }
+}

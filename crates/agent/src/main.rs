@@ -291,6 +291,24 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
         .flatten()
         .map(|v| v == "true")
         .unwrap_or(false);
+    let show_hud_overlay = lock_db(&db)
+        .setting("show_hud_overlay")
+        .ok()
+        .flatten()
+        .map(|v| v != "false")
+        .unwrap_or(true);
+    let show_hud_in_fullscreen = lock_db(&db)
+        .setting("show_hud_in_fullscreen")
+        .ok()
+        .flatten()
+        .map(|v| v == "true")
+        .unwrap_or(false);
+    let hud_peek_hotkey = lock_db(&db)
+        .setting("hud_peek_hotkey")
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "Ctrl+Alt+T".to_string());
+    let alert_volume = lock_db(&db).setting_i64("alert_volume", 80).clamp(0, 100);
     let ipc = ipc_server::spawn(
         PIPE_NAME,
         db.clone(),
@@ -300,12 +318,10 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
             strict_mode,
             day_start_minutes,
             idle_threshold_secs: idle_threshold as i64,
-            show_hud_overlay: lock_db(&db)
-                .setting("show_hud_overlay")
-                .ok()
-                .flatten()
-                .map(|v| v != "false")
-                .unwrap_or(true),
+            show_hud_overlay,
+            show_hud_in_fullscreen,
+            hud_peek_hotkey,
+            alert_volume,
         },
         processes,
         clock.clone(),

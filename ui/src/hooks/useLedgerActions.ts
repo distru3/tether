@@ -130,7 +130,9 @@ export function useLedgerActions(deps: Deps) {
     const toggleLimit = useCallback(
         (limit: LimitDto, next: boolean) => {
             attempt(
-                `${next ? "Reinstate" : "Suspend"} the order for ${targetLabel(limit.target, depsRef.current.catalog)}`,
+                next
+                    ? t("pinGate.reinstateOrder", { target: targetLabel(limit.target, depsRef.current.catalog) })
+                    : t("pinGate.suspendOrder", { target: targetLabel(limit.target, depsRef.current.catalog) }),
                 async (pin) => {
                     // Toggling is a re-issue of the same standing order: the
                     // per-day overrides travel through untouched.
@@ -146,7 +148,7 @@ export function useLedgerActions(deps: Deps) {
                 },
             );
         },
-        [attempt],
+        [attempt, t],
     );
 
     const removeLimit = useCallback(

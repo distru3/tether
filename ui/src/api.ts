@@ -6,8 +6,13 @@ import type { DaySummaryDto } from "./types/generated/DaySummaryDto";
 import type { LimitTargetDto } from "./types/generated/LimitTargetDto";
 import type { StatusDto } from "./types/generated/StatusDto";
 import type { WeeklySummaryDto } from "./types/generated/WeeklySummaryDto";
+import type { ScheduleDto } from "./types/generated/ScheduleDto";
+import type { SchedulesDto } from "./types/generated/SchedulesDto";
+import type { AllowlistDto } from "./types/generated/AllowlistDto";
+import type { AllowlistItemDto } from "./types/generated/AllowlistItemDto";
+import type { OverlayActiveStateDto } from "./types/generated/OverlayActiveStateDto";
 
-export type { ErrorCode };
+export type { ErrorCode, ScheduleDto, SchedulesDto, AllowlistDto, AllowlistItemDto, OverlayActiveStateDto };
 
 export const OVERRIDE_SECONDS = 15 * 60;
 
@@ -106,6 +111,73 @@ export function addManualBlock(domain: string): Promise<void> {
 
 export function removeManualBlock(domain: string, pin: string): Promise<void> {
     return invoke("remove_manual_block", { domain, pin });
+}
+
+export function previewAlertSound(volume?: number): Promise<void> {
+    return invoke("preview_alert_sound", { volume });
+}
+
+// -- Downtime Schedules & Allowlist -----------------------------------------
+
+export function listSchedules(): Promise<SchedulesDto> {
+    return invoke("list_schedules");
+}
+
+export function createSchedule(
+    name: string,
+    weekdayMask: number,
+    startMinute: number,
+    endMinute: number,
+): Promise<ScheduleDto> {
+    return invoke("create_schedule", { name, weekdayMask, startMinute, endMinute });
+}
+
+export function updateSchedule(
+    id: number,
+    name: string,
+    weekdayMask: number,
+    startMinute: number,
+    endMinute: number,
+): Promise<void> {
+    return invoke("update_schedule", { id, name, weekdayMask, startMinute, endMinute });
+}
+
+export function setScheduleEnabled(id: number, enabled: boolean): Promise<void> {
+    return invoke("set_schedule_enabled", { id, enabled });
+}
+
+export function deleteSchedule(id: number): Promise<void> {
+    return invoke("delete_schedule", { id });
+}
+
+export function listAllowlist(): Promise<AllowlistDto> {
+    return invoke("list_allowlist");
+}
+
+export function setAllowlist(
+    subjectType: string,
+    subjectId: number,
+    allowed: boolean,
+): Promise<void> {
+    return invoke("set_allowlist", { subjectType, subjectId, allowed });
+}
+
+// -- Block Overlay Bridge -----------------------------------------------------
+
+export function getOverlayState(): Promise<OverlayActiveStateDto | null> {
+    return invoke("get_overlay_state");
+}
+
+export function overlayExtend(appId: number, pin: string): Promise<boolean> {
+    return invoke("overlay_extend", { appId, pin });
+}
+
+export function overlayQuit(appId: number, pid: number, targetHwnd: number): Promise<void> {
+    return invoke("overlay_quit", { appId, pid, targetHwnd });
+}
+
+export function hideOverlayWindow(): Promise<void> {
+    return invoke("hide_overlay_window");
 }
 
 import i18n from "./i18n";

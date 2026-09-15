@@ -55,11 +55,18 @@ Violating these rules causes irreversible loss of user work and is strictly proh
 ## 4. Development Commands
 
 ```powershell
-# Dev run order matters: agent → session → UI
+# Unified dev runner (starts Agent -> waits for pipe -> starts Session -> starts Tauri UI)
+./dev.ps1               # or: npm run dev
+./dev.ps1 -Headless     # run backend hidden with no extra console windows
+./dev.ps1 -BackendOnly  # run only Agent + Session without the Tauri UI
+./dev.ps1 -NoBuild      # fast-boot: skip cargo build check and run debug binaries directly
+
+# Manual dev run order (if running in 3 separate terminals):
 $env:SCREENTIME_DATA_DIR = "$PWD\local\data"   # else defaults to C:\ProgramData\screentime
 cargo run -p st-agent
 cargo run -p st-session
 cd ui && npm run tauri dev
+```
 
 # Verification gate (CI runs exactly this order)
 cargo fmt --all -- --check

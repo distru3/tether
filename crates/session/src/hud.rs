@@ -9,17 +9,18 @@ use windows::Win32::Graphics::Gdi::{
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::WindowsAndMessaging::{
     CreateWindowExW, DefWindowProcW, DestroyWindow, DispatchMessageW, GetMessageW,
-    GetWindowLongPtrW, GetWindowRect, IsIconic, IsWindow, IsWindowVisible, KillTimer, PostMessageW,
-    PostQuitMessage, RegisterClassExW, SetLayeredWindowAttributes, SetTimer, SetWindowLongPtrW,
-    SetWindowPos, ShowWindow, TranslateMessage, GWLP_USERDATA, HWND_TOPMOST, LWA_ALPHA, MSG,
-    SWP_NOACTIVATE, SWP_NOOWNERZORDER, SWP_NOSIZE, SWP_SHOWWINDOW, SW_HIDE, SW_SHOWNOACTIVATE,
-    WM_CLOSE, WM_DESTROY, WM_NCCREATE, WM_PAINT, WM_TIMER, WM_USER, WNDCLASSEXW, WS_EX_LAYERED,
-    WS_EX_NOACTIVATE, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP, WS_VISIBLE,
+    GetWindowLongPtrW, GetWindowRect, IsIconic, IsWindow, IsWindowVisible, KillTimer, LoadCursorW,
+    PostMessageW, PostQuitMessage, RegisterClassExW, SetCursor, SetLayeredWindowAttributes,
+    SetTimer, SetWindowLongPtrW, SetWindowPos, ShowWindow, TranslateMessage, GWLP_USERDATA,
+    GWL_EXSTYLE, HTTRANSPARENT, HWND_TOPMOST, IDC_ARROW, LWA_ALPHA, MSG, SWP_NOACTIVATE,
+    SWP_NOOWNERZORDER, SWP_NOSIZE, SW_HIDE, SW_SHOWNOACTIVATE, WINDOW_EX_STYLE, WM_CLOSE,
+    WM_DESTROY, WM_NCCREATE, WM_NCHITTEST, WM_PAINT, WM_SETCURSOR, WM_TIMER, WM_USER, WNDCLASSEXW,
+    WS_EX_LAYERED, WS_EX_NOACTIVATE, WS_EX_TOOLWINDOW, WS_EX_TOPMOST, WS_EX_TRANSPARENT, WS_POPUP,
 };
 
 const WM_UPDATE_HUD: u32 = WM_USER + 1;
 const TRACK_TIMER_ID: usize = 1;
-const TRACK_STEP_MS: u32 = 16; // ~60 FPS real-time clamping
+const TRACK_STEP_MS: u32 = 100; // 10 Hz position tracking
 
 pub const HUD_W: i32 = 92;
 pub const HUD_H: i32 = 28;
@@ -41,6 +42,8 @@ struct HudState {
     is_timer: bool,
     last_x: i32,
     last_y: i32,
+    is_hidden: bool,
+    mpo: Option<crate::mpo::MpoHudRenderer>,
 }
 
 pub struct HudOverlayRun {
@@ -89,6 +92,7 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
             lpfnWndProc: Some(wndproc),
             hInstance: instance.into(),
             lpszClassName: class_name,
+            hCursor: LoadCursorW(None, IDC_ARROW).unwrap_or_default(),
             ..Default::default()
         };
         let _ = RegisterClassExW(&wc);
@@ -99,18 +103,27 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
             is_timer: false,
             last_x: init_x,
             last_y: init_y,
+            is_hidden: false,
+            mpo: None,
         }));
 
+        // WS_EX_NOREDIRECTIONBITMAP (0x00200000): DirectComposition hardware plane presentation
+        let mpo_style = WS_EX_TOPMOST
+            | WS_EX_TRANSPARENT
+            | WS_EX_NOACTIVATE
+            | WS_EX_TOOLWINDOW
+            | WINDOW_EX_STYLE(0x00200000);
+
         let Ok(hwnd) = CreateWindowExW(
-            WS_EX_LAYERED | WS_EX_TOPMOST | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE,
+            mpo_style,
             class_name,
             PCWSTR::null(),
-            WS_POPUP | WS_VISIBLE,
+            WS_POPUP,
             init_x,
             init_y,
             HUD_W,
             HUD_H,
-            None,
+            HWND(std::ptr::null_mut()),
             None,
             instance,
             Some(state as *const c_void),
@@ -119,7 +132,29 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
             return;
         };
 
-        let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 235, LWA_ALPHA);
+        // Try initializing hardware MPO DirectComposition renderer; fallback to GDI layered window if unavailable.
+        match crate::mpo::MpoHudRenderer::new(hwnd) {
+            Ok(mut mpo) => {
+                let _ = mpo.render_frame(0, false);
+                (*state).mpo = Some(mpo);
+                tracing::debug!("Hardware MPO overlay initialized successfully for HUD");
+            }
+            Err(e) => {
+                tracing::warn!(
+                    "MPO initialization failed ({:#}), falling back to GDI layered window",
+                    e
+                );
+                let gdi_style = WS_EX_LAYERED
+                    | WS_EX_TOPMOST
+                    | WS_EX_TRANSPARENT
+                    | WS_EX_NOACTIVATE
+                    | WS_EX_TOOLWINDOW;
+                let _ = SetWindowLongPtrW(hwnd, GWL_EXSTYLE, gdi_style.0 as isize);
+                let _ = SetLayeredWindowAttributes(hwnd, COLORREF(0), 235, LWA_ALPHA);
+            }
+        }
+
+        let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
         let _ = SetTimer(hwnd, TRACK_TIMER_ID, TRACK_STEP_MS, None);
 
         sender.send(hwnd.0 as isize).unwrap();
@@ -148,13 +183,26 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             SetWindowLongPtrW(hwnd, GWLP_USERDATA, state as isize);
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
+        WM_NCHITTEST => {
+            // Ambient HUD: transparent to all mouse hit-testing so cursor and clicks pass through to the game/app underneath.
+            LRESULT(HTTRANSPARENT as isize)
+        }
+        WM_SETCURSOR => {
+            // Ensure standard arrow cursor is set and never defaults to IDC_APPSTARTING (loading spinner).
+            let _ = SetCursor(LoadCursorW(None, IDC_ARROW).unwrap_or_default());
+            LRESULT(1)
+        }
         WM_UPDATE_HUD => {
             let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut HudState;
             if !state.is_null() {
                 let st = &mut *state;
                 st.remaining_secs = wparam.0 as i64;
                 st.is_timer = lparam.0 != 0;
-                let _ = InvalidateRect(hwnd, None, true);
+                if let Some(mpo) = &mut st.mpo {
+                    let _ = mpo.render_frame(st.remaining_secs, st.is_timer);
+                } else {
+                    let _ = InvalidateRect(hwnd, None, true);
+                }
             }
             LRESULT(0)
         }
@@ -166,8 +214,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                     let target = HWND(st.target_hwnd as *mut c_void);
                     if !target.0.is_null() && IsWindow(target).as_bool() {
                         if IsIconic(target).as_bool() {
-                            let _ = ShowWindow(hwnd, SW_HIDE);
+                            if !st.is_hidden {
+                                st.is_hidden = true;
+                                let _ = ShowWindow(hwnd, SW_HIDE);
+                            }
                         } else if IsWindowVisible(target).as_bool() {
+                            if st.is_hidden {
+                                st.is_hidden = false;
+                                let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
+                            }
                             let mut wr = RECT::default();
                             if GetWindowRect(target, &mut wr).is_ok() {
                                 let tw = wr.right - wr.left;
@@ -188,15 +243,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                                             new_y,
                                             HUD_W,
                                             HUD_H,
-                                            SWP_NOACTIVATE
-                                                | SWP_NOOWNERZORDER
-                                                | SWP_NOSIZE
-                                                | SWP_SHOWWINDOW,
+                                            SWP_NOACTIVATE | SWP_NOOWNERZORDER | SWP_NOSIZE,
                                         );
                                     }
                                 }
                             }
-                            let _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE);
                         }
                     } else {
                         // Target window closed or invalid
@@ -207,11 +258,19 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             LRESULT(0)
         }
         WM_PAINT => {
-            let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *const HudState;
+            let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut HudState;
             if state.is_null() {
                 return DefWindowProcW(hwnd, msg, wparam, lparam);
             }
-            let st = &*state;
+            let st = &mut *state;
+
+            if let Some(mpo) = &mut st.mpo {
+                let mut ps = windows::Win32::Graphics::Gdi::PAINTSTRUCT::default();
+                let _ = BeginPaint(hwnd, &mut ps);
+                let _ = mpo.render_frame(st.remaining_secs, st.is_timer);
+                let _ = EndPaint(hwnd, &ps);
+                return LRESULT(0);
+            }
 
             let mut ps = windows::Win32::Graphics::Gdi::PAINTSTRUCT::default();
             let hdc = BeginPaint(hwnd, &mut ps);

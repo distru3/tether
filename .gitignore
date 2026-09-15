@@ -29,3 +29,8 @@ desktop.ini
 *.swp
 
 ui/src-tauri/bin/*.exe
+
+# Scratch & temporary tools
+/scratch/
+*.traineddata
+*.log

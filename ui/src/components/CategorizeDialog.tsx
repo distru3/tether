@@ -76,10 +76,10 @@ function CategorySelect({
                         left: 0,
                         right: 0,
                         zIndex: 100,
-                        background: "#2a1442",
-                        border: "1px solid rgba(220, 160, 109, 0.25)",
+                        background: "var(--bg-card-elevated)",
+                        border: "1px solid var(--border-subtle)",
                         borderRadius: "10px",
-                        boxShadow: "0 12px 32px rgba(15, 5, 25, 0.8)",
+                        boxShadow: "0 12px 32px var(--shadow-modal, rgba(0, 0, 0, 0.4))",
                         maxHeight: "220px",
                         overflowY: "auto",
                         padding: "6px",
@@ -103,14 +103,14 @@ function CategorySelect({
                                         cursor: "pointer",
                                         fontSize: "13px",
                                         color: isSelected ? "var(--color-accent)" : "var(--text-primary)",
-                                        background: isSelected ? "rgba(220, 160, 109, 0.15)" : "transparent",
+                                        background: isSelected ? "var(--bg-surface-hover)" : "transparent",
                                         display: "flex",
                                         alignItems: "center",
                                         justifyContent: "space-between",
                                         fontWeight: isSelected ? 600 : 400,
                                     }}
                                     onMouseEnter={(e) => {
-                                        if (!isSelected) (e.currentTarget as HTMLElement).style.background = "rgba(79, 28, 81, 0.4)";
+                                        if (!isSelected) (e.currentTarget as HTMLElement).style.background = "var(--bg-surface-hover)";
                                     }}
                                     onMouseLeave={(e) => {
                                         if (!isSelected) (e.currentTarget as HTMLElement).style.background = "transparent";
