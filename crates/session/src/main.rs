@@ -947,6 +947,66 @@ fn is_game_path(path: &str) -> bool {
 /// Checks whether a window is running a 3D game or full-screen display,
 /// where rendering a top-level Win32 HUD overlay would force DWM Composed Flip,
 /// overriding in-game frame caps, VRR (FreeSync/G-Sync), and driver limiters (AMD Chill/FRTC).
+/// Determines if a window's bounds and window style correspond to a true borderless fullscreen
+/// window (such as a game, full-screen video, or F11 display) rather than a standard maximized
+/// desktop application.
+///
+/// Windows maximized normally respect the monitor's work area (`rcWork`) and leave the taskbar
+/// visible. True fullscreen applications cover the physical monitor (`rcMonitor`), obscuring
+/// the taskbar, and lack standard window captions (`WS_CAPTION`).
+#[cfg(windows)]
+pub fn is_window_rect_fullscreen(
+    wr: windows::Win32::Foundation::RECT,
+    rc_monitor: windows::Win32::Foundation::RECT,
+    rc_work: windows::Win32::Foundation::RECT,
+    style: u32,
+) -> bool {
+    use windows::Win32::UI::WindowsAndMessaging::{WS_CAPTION, WS_MAXIMIZE};
+
+    // 1. Taskbar occlusion check:
+    // If a taskbar (or docked appbar) is present on this monitor, a standard maximized window
+    // stops at the boundary of rcWork (with up to an 8px invisible resize margin).
+    // If the window leaves the taskbar uncovered by more than 12px, it is not fullscreen.
+    let leaves_taskbar_uncovered = (rc_work.bottom < rc_monitor.bottom
+        && wr.bottom < rc_monitor.bottom - 12)
+        || (rc_work.top > rc_monitor.top && wr.top > rc_monitor.top + 12)
+        || (rc_work.left > rc_monitor.left && wr.left > rc_monitor.left + 12)
+        || (rc_work.right < rc_monitor.right && wr.right < rc_monitor.right - 12);
+
+    if leaves_taskbar_uncovered {
+        return false;
+    }
+
+    // 2. Physical monitor coverage check:
+    // Fullscreen windows cover rcMonitor completely, allowing a tight margin (10px) for
+    // high-DPI scaling, invisible borders, or rounding.
+    let covers_monitor = wr.left <= rc_monitor.left + 10
+        && wr.top <= rc_monitor.top + 10
+        && wr.right >= rc_monitor.right - 10
+        && wr.bottom >= rc_monitor.bottom - 10;
+
+    if !covers_monitor {
+        return false;
+    }
+
+    // 3. Window style check:
+    // Standard desktop applications maximized with window chrome/decorations have both
+    // WS_MAXIMIZE and WS_CAPTION. Even with auto-hidden taskbars, these remain desktop apps.
+    // Fullscreen games and true fullscreen media/F11 windows either lack WS_CAPTION or are
+    // unmaximized windows explicitly sized to cover the entire monitor.
+    let is_maximized = (style & WS_MAXIMIZE.0) != 0;
+    let has_caption = (style & WS_CAPTION.0) == WS_CAPTION.0;
+    if is_maximized && has_caption {
+        return false;
+    }
+
+    true
+}
+
+#[cfg(windows)]
+/// Checks whether a window is running a 3D game or full-screen display,
+/// where rendering a top-level Win32 HUD overlay would force DWM Composed Flip,
+/// overriding in-game frame caps, VRR (FreeSync/G-Sync), and driver limiters (AMD Chill/FRTC).
 fn is_game_or_fullscreen(snap: &snapshot::FocusedSnapshot) -> bool {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::Graphics::Gdi::{
@@ -955,9 +1015,7 @@ fn is_game_or_fullscreen(snap: &snapshot::FocusedSnapshot) -> bool {
     use windows::Win32::UI::Shell::{
         SHQueryUserNotificationState, QUNS_PRESENTATION_MODE, QUNS_RUNNING_D3D_FULL_SCREEN,
     };
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetClassNameW, GetWindowLongW, GWL_STYLE, WS_MAXIMIZE,
-    };
+    use windows::Win32::UI::WindowsAndMessaging::{GetClassNameW, GetWindowLongW, GWL_STYLE};
 
     // 1. Path-based detection (known game launcher directories)
     if let st_core::model::AppKey::WindowsExe(ref path) = snap.key {
@@ -1006,8 +1064,7 @@ fn is_game_or_fullscreen(snap: &snapshot::FocusedSnapshot) -> bool {
             }
         }
 
-        // 5. Geometry check: does the window cover or approximate the monitor?
-        // Allows a 48px margin for borderless windowed mode, drop shadows, or DPI virtualization.
+        // 5. Geometry check: does the window truly cover the physical monitor (borderless fullscreen)?
         let hmon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
         let mut mi = MONITORINFO {
             cbSize: std::mem::size_of::<MONITORINFO>() as u32,
@@ -1021,23 +1078,9 @@ fn is_game_or_fullscreen(snap: &snapshot::FocusedSnapshot) -> bool {
                 right: x + w,
                 bottom: y + h,
             };
-
-            let mon_w = mi.rcMonitor.right - mi.rcMonitor.left;
-            let mon_h = mi.rcMonitor.bottom - mi.rcMonitor.top;
-
-            let covers_monitor = wr.left <= mi.rcMonitor.left + 48
-                && wr.top <= mi.rcMonitor.top + 48
-                && wr.right >= mi.rcMonitor.right - 48
-                && wr.bottom >= mi.rcMonitor.bottom - 48
-                && w >= mon_w - 48
-                && h >= mon_h - 48;
-
-            if covers_monitor {
-                let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
-                let covers_taskbar = wr.bottom >= mi.rcWork.bottom || wr.top <= mi.rcWork.top;
-                if (style & WS_MAXIMIZE.0) == 0 || covers_taskbar {
-                    return true;
-                }
+            let style = GetWindowLongW(hwnd, GWL_STYLE) as u32;
+            if is_window_rect_fullscreen(wr, mi.rcMonitor, mi.rcWork, style) {
+                return true;
             }
         }
     }
@@ -1520,5 +1563,95 @@ mod tests {
         play_alert_sound(80);
         play_alert_sound(0);
         play_alert_sound(100);
+    }
+
+    #[test]
+    #[cfg(windows)]
+    fn window_rect_fullscreen_distinguishes_maximized_from_fullscreen() {
+        use windows::Win32::Foundation::RECT;
+        use windows::Win32::UI::WindowsAndMessaging::{WS_CAPTION, WS_MAXIMIZE, WS_POPUP};
+
+        let mon = RECT {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1080,
+        };
+        let work = RECT {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1040,
+        }; // 40px taskbar at bottom
+
+        // Standard maximized desktop application (e.g. Chrome, VS Code)
+        let max_rect = RECT {
+            left: -8,
+            top: -8,
+            right: 1928,
+            bottom: 1048,
+        };
+        let standard_max_style = WS_MAXIMIZE.0 | WS_CAPTION.0 | 0x00040000; // WS_THICKFRAME
+        assert!(!is_window_rect_fullscreen(
+            max_rect,
+            mon,
+            work,
+            standard_max_style
+        ));
+
+        // Floating/restored window
+        let floating_rect = RECT {
+            left: 200,
+            top: 150,
+            right: 1400,
+            bottom: 900,
+        };
+        assert!(!is_window_rect_fullscreen(
+            floating_rect,
+            mon,
+            work,
+            WS_CAPTION.0
+        ));
+
+        // True borderless fullscreen game (covers taskbar, lacks WS_CAPTION)
+        let game_rect = RECT {
+            left: 0,
+            top: 0,
+            right: 1920,
+            bottom: 1080,
+        };
+        let borderless_game_style = WS_POPUP.0;
+        assert!(is_window_rect_fullscreen(
+            game_rect,
+            mon,
+            work,
+            borderless_game_style
+        ));
+
+        // Chrome F11 fullscreen (covers taskbar, WS_CAPTION removed)
+        assert!(is_window_rect_fullscreen(game_rect, mon, work, 0));
+
+        // Auto-hidden taskbar case: work == mon
+        // Maximized app with caption should STILL NOT be considered a fullscreen game
+        let auto_hide_max_rect = RECT {
+            left: -8,
+            top: -8,
+            right: 1928,
+            bottom: 1088,
+        };
+        assert!(!is_window_rect_fullscreen(
+            auto_hide_max_rect,
+            mon,
+            mon,
+            standard_max_style
+        ));
+
+        // But borderless game on auto-hide monitor IS fullscreen
+        assert!(is_window_rect_fullscreen(
+            game_rect,
+            mon,
+            mon,
+            borderless_game_style
+        ));
     }
 }
