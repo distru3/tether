@@ -254,7 +254,11 @@ fn restore_browser_policies() {
 
 #[cfg(windows)]
 fn run_netsh(args: &[&str]) -> bool {
-    match Command::new("netsh").args(args).output() {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = Command::new("netsh");
+    cmd.args(args);
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    match cmd.output() {
         Ok(output) => output.status.success(),
         Err(e) => {
             tracing::debug!(error = %e, ?args, "netsh execution failed");

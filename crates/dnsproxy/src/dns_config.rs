@@ -349,10 +349,14 @@ pub fn set_registry_family_dns(enabled: bool) {
 /// Run an external command and capture a failure as a string, consuming stdout
 /// for diagnostics. `netsh` is trusted to be on PATH on any Windows install.
 pub fn command(program: &str, args: &[&str]) -> std::result::Result<(), String> {
-    let out = std::process::Command::new(program)
-        .args(args)
-        .output()
-        .map_err(|e| e.to_string())?;
+    let mut cmd = std::process::Command::new(program);
+    cmd.args(args);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    let out = cmd.output().map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok(())
     } else {

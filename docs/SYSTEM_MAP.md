@@ -166,3 +166,27 @@ SQLite database managed via append-only migrations tracked by `PRAGMA user_versi
      - Note on Fullscreen 3D Games: Any external topmost window presented over a fullscreen 3D application requires DWM to composite the topmost layer over the game. For users requiring absolute zero DWM composition overhead (pure Hardware Independent Flip), the continuous overlay in games can be kept disabled via the `show_hud_in_fullscreen` setting while retaining on-demand 4-second peek via hotkey.
    - **Graceful GDI Layered Fallback**:
      - If DirectX 11, DirectComposition, or DXGI swapchain initialization fails (e.g. basic display adapter, remote desktop session, or legacy VM), Tether automatically demotes the HWND to a layered window (`WS_EX_LAYERED`) and routes drawing through GDI ClearType rendering, guaranteeing zero crashes.
+
+---
+
+## 8. Installer, Uninstaller & Silent Process Execution
+
+Tether's Windows deployment uses Tauri 2's NSIS packager customized via `ui/src-tauri/installer.nsi` and `ui/src-tauri/installer_hooks.nsh`.
+
+1. **Zero-Console Silent Execution**:
+   - All internal shell invocations in the installer hooks and Rust backend use hidden console attributes:
+     - In NSIS: `nsExec::Exec` replaces `ExecWait`, executing `screentime-agent.exe`, `screentime-session.exe`, `sc.exe`, and `taskkill.exe` completely silently with `SW_HIDE`.
+     - In Rust (`st-agent::service`, `st-dns::dns_config`, `st-dns::lockdown`): All `std::process::Command` calls specify `creation_flags(0x08000000)` (`CREATE_NO_WINDOW`), preventing any visible command prompt flashing during service registration, DNS configuration, or firewall adjustments.
+2. **Clean Uninstallation & Process Unlocking**:
+   - `screentime-session.exe` runs per-user in interactive user sessions.
+   - During uninstallation (`NSIS_HOOK_PREUNINSTALL`), before files are deleted:
+     - `taskkill.exe /F /IM screentime-session.exe` and `taskkill.exe /F /IM screentime-ui.exe` forcefully terminate running user-space processes.
+     - `screentime-session.exe --autostart off` and explicit registry removals purge HKCU and HKLM Run keys.
+     - A 500ms kernel quiescence pause (`Sleep 500`) allows Windows handle release, preventing file-in-use (`ERROR_ACCESS_DENIED`) locking during file removal.
+     - The background Windows service (`ScreentimeAgent`) is cleanly stopped and uninstalled.
+3. **Interactive Network DNS Restore Option**:
+   - The uninstaller confirmation dialog features a dedicated checkbox:
+     `[x] Restore network DNS settings (disable DNS filtering)`
+     positioned dynamically beneath `Delete the application data`.
+   - The checkbox automatically initializes to checked if Family DNS is currently active (`HKLM\Software\Screentime\FamilyDnsApplied == 1`).
+   - If selected upon uninstallation, `screentime-agent.exe --disable-family-dns` executes prior to binary removal, restoring clean network adapter DNS configurations and purging firewall rules.

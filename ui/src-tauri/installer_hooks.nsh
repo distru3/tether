@@ -1,22 +1,26 @@
 
 !macro NSIS_HOOK_POSTINSTALL
-  ExecWait '"$INSTDIR\bin\screentime-agent.exe" --install'
-  ExecWait 'sc.exe start ScreentimeAgent'
-  ExecWait '"$INSTDIR\bin\screentime-session.exe" --autostart on'
+  nsExec::Exec '"$INSTDIR\bin\screentime-agent.exe" --install'
+  nsExec::Exec '"$SYSDIR\sc.exe" start ScreentimeAgent'
+  nsExec::Exec '"$INSTDIR\bin\screentime-session.exe" --autostart on'
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
-  ClearErrors
-  ReadRegDWORD $0 HKLM "Software\Screentime" "FamilyDnsApplied"
-  IfErrors skip_dns_remove
-  IntCmp $0 1 do_restore skip_dns_remove skip_dns_remove
-
-  do_restore:
-    ExecWait '"$INSTDIR\bin\screentime-agent.exe" --disable-family-dns'
+  ; If user opted to restore DNS settings (or default on passive mode)
+  ${If} $RestoreDnsCheckboxState = 1
+    nsExec::Exec '"$INSTDIR\bin\screentime-agent.exe" --disable-family-dns'
     DeleteRegValue HKLM "Software\Screentime" "FamilyDnsApplied"
-  skip_dns_remove:
+  ${EndIf}
 
-  ExecWait 'sc.exe stop ScreentimeAgent'
-  ExecWait '"$INSTDIR\bin\screentime-agent.exe" --uninstall'
-  ExecWait '"$INSTDIR\bin\screentime-session.exe" --autostart off'
+  ; Terminate running session and UI processes so files are unlocked for deletion
+  nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM screentime-session.exe'
+  nsExec::Exec '"$SYSDIR\taskkill.exe" /F /IM screentime-ui.exe'
+  nsExec::Exec '"$INSTDIR\bin\screentime-session.exe" --autostart off'
+  DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "screentime-session"
+  DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "screentime-session"
+  Sleep 500
+
+  ; Stop and uninstall the agent service silently
+  nsExec::Exec '"$SYSDIR\sc.exe" stop ScreentimeAgent'
+  nsExec::Exec '"$INSTDIR\bin\screentime-agent.exe" --uninstall'
 !macroend

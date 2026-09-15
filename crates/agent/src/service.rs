@@ -310,12 +310,11 @@ mod win {
     /// PowerShell and cmd quoting layers in the field.
     fn run_sc(command_line: &str) -> Result<std::process::Output> {
         println!("> {command_line}");
-        let output = Command::new("cmd")
-            .arg("/D")
-            .arg("/C")
-            .raw_arg(command_line)
-            .output()
-            .context("spawning cmd.exe to invoke sc.exe")?;
+        let mut cmd = Command::new("cmd");
+        cmd.arg("/D").arg("/C").raw_arg(command_line);
+        #[cfg(windows)]
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+        let output = cmd.output().context("spawning cmd.exe to invoke sc.exe")?;
         print!("{}", String::from_utf8_lossy(&output.stdout));
         eprint!("{}", String::from_utf8_lossy(&output.stderr));
         Ok(output)
