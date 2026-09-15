@@ -426,64 +426,68 @@ Var DeleteAppDataCheckbox
 Var DeleteAppDataCheckboxState
 Var RestoreDnsCheckbox
 Var RestoreDnsCheckboxState
-!define /ifndef WS_EX_LAYOUTRTL         0x00400000
-!define MUI_PAGE_CUSTOMFUNCTION_SHOW un.ConfirmShow
-Function un.ConfirmShow ; Add `Delete app data` and `Restore DNS` check boxes
-  ; $1 inner dialog HWND
-  ; $2 window DPI
-  ; $3 style
-  ; $4 x
-  ; $5 y
-  ; $6 width
-  ; $7 height
-  FindWindow $1 "#32770" "" $HWNDPARENT ; Find inner dialog
-  System::Call "user32::GetDpiForWindow(p r1) i .r2"
-  ${If} $(^RTL) = 1
-    StrCpy $3 "${__NSD_CheckBox_EXSTYLE} | ${WS_EX_LAYOUTRTL}"
-    IntOp $4 50 * $2
-  ${Else}
-    StrCpy $3 "${__NSD_CheckBox_EXSTYLE}"
-    IntOp $4 0 * $2
-  ${EndIf}
-  IntOp $5 100 * $2
-  IntOp $6 400 * $2
-  IntOp $7 25 * $2
-  IntOp $4 $4 / 96
-  IntOp $5 $5 / 96
-  IntOp $6 $6 / 96
-  IntOp $7 $7 / 96
-  System::Call 'user32::CreateWindowEx(i r3, w "${__NSD_CheckBox_CLASS}", w "$(deleteAppData)", i ${__NSD_CheckBox_STYLE}, i r4, i r5, i r6, i r7, p r1, i0, i0, i0) i .s'
-  Pop $DeleteAppDataCheckbox
-  SendMessage $HWNDPARENT ${WM_GETFONT} 0 0 $1
-  SendMessage $DeleteAppDataCheckbox ${WM_SETFONT} $1 1
 
-  ; --- Restore network DNS settings Checkbox ---
-  IntOp $5 125 * $2
-  IntOp $5 $5 / 96
-  System::Call 'user32::CreateWindowEx(i r3, w "${__NSD_CheckBox_CLASS}", w "Restore network DNS settings (disable DNS filtering)", i ${__NSD_CheckBox_STYLE}, i r4, i r5, i r6, i r7, p r1, i0, i0, i0) i .s'
-  Pop $RestoreDnsCheckbox
-  SendMessage $HWNDPARENT ${WM_GETFONT} 0 0 $1
-  SendMessage $RestoreDnsCheckbox ${WM_SETFONT} $1 1
-
-  ; Set initial state: checked if Family DNS was applied
-  ClearErrors
-  ReadRegDWORD $0 HKLM "Software\Screentime" "FamilyDnsApplied"
-  ${If} ${Errors}
-    StrCpy $RestoreDnsCheckboxState 0
-  ${ElseIf} $0 = 1
-    StrCpy $RestoreDnsCheckboxState 1
-  ${Else}
-    StrCpy $RestoreDnsCheckboxState 0
-  ${EndIf}
-  SendMessage $RestoreDnsCheckbox ${BM_SETCHECK} $RestoreDnsCheckboxState 0
-FunctionEnd
-!define MUI_PAGE_CUSTOMFUNCTION_LEAVE un.ConfirmLeave
-Function un.ConfirmLeave
-  SendMessage $DeleteAppDataCheckbox ${BM_GETCHECK} 0 0 $DeleteAppDataCheckboxState
-  SendMessage $RestoreDnsCheckbox ${BM_GETCHECK} 0 0 $RestoreDnsCheckboxState
-FunctionEnd
 !define MUI_PAGE_CUSTOMFUNCTION_PRE un.SkipIfPassive
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW un.ConfirmShow
+!define MUI_PAGE_CUSTOMFUNCTION_LEAVE un.ConfirmLeave
 !insertmacro MUI_UNPAGE_CONFIRM
+
+Function un.ConfirmShow
+  ; Find inner dialog
+  FindWindow $0 "#32770" "" $HWNDPARENT
+  
+  ; Get DPI for high-DPI scaling
+  System::Call "user32::GetDpiForWindow(p r0) i .r2"
+  ${If} $2 <= 0
+    StrCpy $2 96
+  ${EndIf}
+
+  ; Checkbox geometry scaled by DPI
+  ; x = 20px
+  IntOp $3 20 * $2
+  IntOp $3 $3 / 96
+
+  ; y1 = 115px (comfortably below the install folder edit control)
+  IntOp $4 115 * $2
+  IntOp $4 $4 / 96
+
+  ; w = 410px
+  IntOp $5 410 * $2
+  IntOp $5 $5 / 96
+
+  ; h = 20px
+  IntOp $6 20 * $2
+  IntOp $6 $6 / 96
+
+  ; WS_CHILD (0x40000000) | WS_VISIBLE (0x10000000) | WS_TABSTOP (0x00010000) | BS_AUTOCHECKBOX (0x00000003) = 0x50010003
+  System::Call 'user32::CreateWindowEx(i 0, w "BUTTON", w "Delete all application data and database history", i 0x50010003, i r3, i r4, i r5, i r6, p r0, i 1050, i 0, i 0) p .s'
+  Pop $DeleteAppDataCheckbox
+
+  ; y2 = 140px
+  IntOp $4 140 * $2
+  IntOp $4 $4 / 96
+
+  System::Call 'user32::CreateWindowEx(i 0, w "BUTTON", w "Restore network DNS settings (disable DNS filtering)", i 0x50010003, i r3, i r4, i r5, i r6, p r0, i 1051, i 0, i 0) p .s'
+  Pop $RestoreDnsCheckbox
+
+  ; Set font from parent
+  SendMessage $HWNDPARENT 0x0031 0 0 $1
+  SendMessage $DeleteAppDataCheckbox 0x0030 $1 1
+  SendMessage $RestoreDnsCheckbox 0x0030 $1 1
+
+  ; Set initial state:
+  ; Restore DNS is checked by default (1)
+  ; Delete App Data is unchecked by default (0)
+  StrCpy $DeleteAppDataCheckboxState 0
+  StrCpy $RestoreDnsCheckboxState 1
+  SendMessage $DeleteAppDataCheckbox 0x00F1 $DeleteAppDataCheckboxState 0
+  SendMessage $RestoreDnsCheckbox 0x00F1 $RestoreDnsCheckboxState 0
+FunctionEnd
+
+Function un.ConfirmLeave
+  SendMessage $DeleteAppDataCheckbox 0x00F0 0 0 $DeleteAppDataCheckboxState
+  SendMessage $RestoreDnsCheckbox 0x00F0 0 0 $RestoreDnsCheckboxState
+FunctionEnd
 
 ; 2. Uninstalling Page
 !insertmacro MUI_UNPAGE_INSTFILES
@@ -915,6 +919,10 @@ Section Uninstall
     SetShellVarContext current
     RmDir /r "$APPDATA\${BUNDLEID}"
     RmDir /r "$LOCALAPPDATA\${BUNDLEID}"
+    RmDir /r "$LOCALAPPDATA\screentime"
+
+    SetShellVarContext all
+    RmDir /r "$APPDATA\screentime"
   ${EndIf}
 
   !ifmacrodef NSIS_HOOK_POSTUNINSTALL

@@ -150,7 +150,31 @@ fn main() -> Result<()> {
             }
             if !restored {
                 if let Ok(ifaces) = st_dns::dns_config::capture() {
-                    st_dns::dns_config::restore_all(&ifaces);
+                    for iface in &ifaces {
+                        let _ = st_dns::dns_config::command(
+                            "netsh",
+                            &[
+                                "interface",
+                                "ipv4",
+                                "set",
+                                "dnsservers",
+                                &format!("name={}", iface.name),
+                                "source=dhcp",
+                            ],
+                        );
+                        let _ = st_dns::dns_config::command(
+                            "netsh",
+                            &[
+                                "interface",
+                                "ipv6",
+                                "set",
+                                "dnsservers",
+                                &format!("name={}", iface.name),
+                                "source=dhcp",
+                            ],
+                        );
+                    }
+                    let _ = st_dns::dns_config::command("ipconfig", &["/flushdns"]);
                 }
             }
             st_dns::dns_config::set_registry_family_dns(false);

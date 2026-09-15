@@ -6,6 +6,9 @@
 !macroend
 
 !macro NSIS_HOOK_PREUNINSTALL
+  ; Stop the agent service first so it releases locks and does not re-apply DNS
+  nsExec::Exec '"$SYSDIR\sc.exe" stop ScreentimeAgent'
+
   ; If user opted to restore DNS settings (or default on passive mode)
   ${If} $RestoreDnsCheckboxState = 1
     nsExec::Exec '"$INSTDIR\bin\screentime-agent.exe" --disable-family-dns'
@@ -20,7 +23,6 @@
   DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "screentime-session"
   Sleep 500
 
-  ; Stop and uninstall the agent service silently
-  nsExec::Exec '"$SYSDIR\sc.exe" stop ScreentimeAgent'
+  ; Uninstall the agent service silently
   nsExec::Exec '"$INSTDIR\bin\screentime-agent.exe" --uninstall'
 !macroend
