@@ -224,7 +224,9 @@ fn query_reg_string(
 ///
 /// In Windows:
 /// - When DNS is Automatic (DHCP), `NameServer` is absent or empty (`""`).
-/// - When DNS is Static (Manual), `NameServer` holds the IP addresses (e.g. `"1.1.1.1,1.0.0.3"`).
+/// - When DNS was previously pinned or set to the local router, `NameServer` matches
+///   `DhcpNameServer`, `DhcpServer`, `DhcpDefaultGateway`, or contains only private LAN IPs
+///   (192.168.x.x, 10.x.x.x, etc.), which are DHCP-assigned addresses.
 #[cfg(windows)]
 fn check_registry_dns_dhcp(adapter_guid: &str) -> Option<bool> {
     use windows::core::PCWSTR;
@@ -259,12 +261,44 @@ fn check_registry_dns_dhcp(adapter_guid: &str) -> Option<bool> {
         }
 
         let val = query_reg_string(key, "NameServer");
+        let dhcp_ns = query_reg_string(key, "DhcpNameServer");
+        let dhcp_srv = query_reg_string(key, "DhcpServer");
+        let dhcp_gw = query_reg_string(key, "DhcpDefaultGateway");
         let _ = RegCloseKey(key);
 
-        match val {
-            Some(s) => Some(s.is_empty()),
-            None => Some(true),
+        let ns = match val {
+            Some(s) if !s.is_empty() => s,
+            _ => return Some(true),
+        };
+
+        // If NameServer matches the DHCP-provided DNS, DHCP server, or DHCP gateway,
+        // it was assigned by DHCP (or previously pinned from DHCP).
+        if dhcp_ns.as_deref() == Some(&ns)
+            || dhcp_srv.as_deref() == Some(&ns)
+            || dhcp_gw.as_deref() == Some(&ns)
+        {
+            return Some(true);
         }
+
+        // If all IPs in NameServer are private LAN IPs (e.g. 192.168.x.x, 10.x.x.x, 172.16-31.x.x),
+        // they are local router addresses, not public static DNS resolvers.
+        let is_all_private = ns
+            .split([',', ' '])
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .all(|ip_str| {
+                if let Ok(ip) = ip_str.parse::<Ipv4Addr>() {
+                    ip.is_private() || ip.is_loopback() || ip.is_link_local()
+                } else {
+                    false
+                }
+            });
+
+        if is_all_private {
+            return Some(true);
+        }
+
+        Some(false)
     }
 }
 
@@ -285,10 +319,30 @@ fn check_netsh_dns_dhcp(friendly_name: &str) -> bool {
         let text = String::from_utf8_lossy(&out.stdout);
         if let Some(pos) = text.find("Statically Configured DNS Servers:") {
             let after = &text[pos + "Statically Configured DNS Servers:".len()..];
-            let first_line = after.lines().next().unwrap_or("").trim();
-            if first_line.eq_ignore_ascii_case("None") || first_line.is_empty() {
+            let static_ips: Vec<&str> = after
+                .lines()
+                .take_while(|line| !line.contains(':'))
+                .map(str::trim)
+                .filter(|s| !s.is_empty() && !s.eq_ignore_ascii_case("None"))
+                .collect();
+
+            if static_ips.is_empty() {
                 return true;
             }
+
+            // If all statically listed IPs are private router/LAN IPs (192.168.x.x, 10.x.x.x, etc.)
+            let all_private = static_ips.iter().all(|s| {
+                if let Ok(ip) = s.parse::<Ipv4Addr>() {
+                    ip.is_private() || ip.is_loopback() || ip.is_link_local()
+                } else {
+                    false
+                }
+            });
+
+            if all_private {
+                return true;
+            }
+
             return false;
         }
         if text.contains("configured through DHCP:") {
@@ -396,7 +450,13 @@ pub fn set_family_dns(ifaces: &[IfaceDns]) {
 pub fn restore_all(ifaces: &[IfaceDns]) {
     for iface in ifaces {
         let name_arg = format!("name={}", iface.name);
-        let result = if iface.is_dhcp || iface.servers.is_empty() {
+        let all_servers_private = !iface.servers.is_empty()
+            && iface.servers.iter().all(|ip| match ip {
+                IpAddr::V4(v4) => v4.is_private() || v4.is_loopback() || v4.is_link_local(),
+                IpAddr::V6(v6) => v6.is_loopback(),
+            });
+        let should_restore_dhcp = iface.is_dhcp || iface.servers.is_empty() || all_servers_private;
+        let result = if should_restore_dhcp {
             command(
                 "netsh",
                 &[
@@ -626,5 +686,14 @@ mod tests {
         let decoded: Vec<IfaceDns> = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded, original);
         assert!(decoded[0].is_dhcp);
+    }
+
+    #[test]
+    fn private_router_ip_is_treated_as_dhcp_candidate() {
+        let private_ip = Ipv4Addr::new(192, 168, 1, 1);
+        assert!(private_ip.is_private());
+
+        let public_ip = Ipv4Addr::new(1, 1, 1, 1);
+        assert!(!public_ip.is_private());
     }
 }
