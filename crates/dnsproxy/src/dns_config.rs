@@ -50,8 +50,11 @@ use windows::Win32::Networking::WinSock::{AF_INET, IN_ADDR, SOCKADDR_IN};
 pub struct IfaceDns {
     /// The interface's friendly name (what `netsh` wants in `name="..."`).
     pub name: String,
-    /// The IPv4 resolver addresses in use, in order. Empty means "DHCP".
+    /// The IPv4 resolver addresses in use, in order.
     pub servers: Vec<IpAddr>,
+    /// Whether DNS servers were obtained automatically via DHCP (true) or configured statically (false).
+    #[serde(default)]
+    pub is_dhcp: bool,
 }
 
 /// Capture the currently-active IPv4 DNS configuration for every up interface.
@@ -104,8 +107,20 @@ pub fn capture() -> PlatformResult<Vec<IfaceDns>> {
                     String::from_utf16_lossy(adapter.FriendlyName.as_wide())
                 };
                 let servers = dns_servers(adapter.FirstDnsServerAddress);
+                let adapter_guid = if adapter.AdapterName.is_null() {
+                    String::new()
+                } else {
+                    std::ffi::CStr::from_ptr(adapter.AdapterName.0 as *const _)
+                        .to_string_lossy()
+                        .into_owned()
+                };
+                let is_dhcp = is_adapter_dns_dhcp(&adapter_guid, &name);
                 if !name.is_empty() {
-                    out.push(IfaceDns { name, servers });
+                    out.push(IfaceDns {
+                        name,
+                        servers,
+                        is_dhcp,
+                    });
                 }
             }
             current = adapter.Next;
@@ -145,6 +160,155 @@ fn sockaddr_to_ipv4(addr: &IN_ADDR) -> Ipv4Addr {
         ((n >> 16) & 0xff) as u8,
         ((n >> 24) & 0xff) as u8,
     )
+}
+
+/// Query a REG_SZ or REG_EXPAND_SZ value from an open registry key.
+#[cfg(windows)]
+fn query_reg_string(
+    key: windows::Win32::System::Registry::HKEY,
+    value_name: &str,
+) -> Option<String> {
+    use windows::core::PCWSTR;
+    use windows::Win32::Foundation::ERROR_SUCCESS;
+    use windows::Win32::System::Registry::{
+        RegQueryValueExW, REG_EXPAND_SZ, REG_SZ, REG_VALUE_TYPE,
+    };
+
+    let wide_name: Vec<u16> = value_name
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+    unsafe {
+        let mut byte_len = 0u32;
+        let res = RegQueryValueExW(
+            key,
+            PCWSTR(wide_name.as_ptr()),
+            None,
+            None,
+            None,
+            Some(&mut byte_len),
+        );
+        if res != ERROR_SUCCESS || byte_len == 0 {
+            return None;
+        }
+
+        let mut data = vec![0u8; byte_len as usize];
+        let mut kind = REG_VALUE_TYPE::default();
+        let res = RegQueryValueExW(
+            key,
+            PCWSTR(wide_name.as_ptr()),
+            None,
+            Some(&mut kind),
+            Some(data.as_mut_ptr()),
+            Some(&mut byte_len),
+        );
+        if res != ERROR_SUCCESS {
+            return None;
+        }
+
+        if kind != REG_SZ && kind != REG_EXPAND_SZ {
+            return None;
+        }
+
+        let units: Vec<u16> = data[..byte_len as usize]
+            .chunks_exact(2)
+            .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+            .collect();
+        let text = String::from_utf16_lossy(&units);
+        Some(text.trim_end_matches('\0').trim().to_string())
+    }
+}
+
+/// Check whether the adapter's IPv4 DNS was configured via DHCP by inspecting
+/// `HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\Interfaces\{adapter_guid}`.
+///
+/// In Windows:
+/// - When DNS is Automatic (DHCP), `NameServer` is absent or empty (`""`).
+/// - When DNS is Static (Manual), `NameServer` holds the IP addresses (e.g. `"1.1.1.1,1.0.0.3"`).
+#[cfg(windows)]
+fn check_registry_dns_dhcp(adapter_guid: &str) -> Option<bool> {
+    use windows::core::PCWSTR;
+    use windows::Win32::System::Registry::{
+        RegCloseKey, RegOpenKeyExW, HKEY, HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE,
+    };
+
+    if adapter_guid.is_empty() {
+        return None;
+    }
+
+    let subkey_str = format!(
+        "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\{adapter_guid}"
+    );
+    let subkey_wide: Vec<u16> = subkey_str
+        .encode_utf16()
+        .chain(std::iter::once(0))
+        .collect();
+
+    unsafe {
+        let mut key = HKEY::default();
+        if RegOpenKeyExW(
+            HKEY_LOCAL_MACHINE,
+            PCWSTR(subkey_wide.as_ptr()),
+            0,
+            KEY_QUERY_VALUE,
+            &mut key,
+        )
+        .is_err()
+        {
+            return None;
+        }
+
+        let val = query_reg_string(key, "NameServer");
+        let _ = RegCloseKey(key);
+
+        match val {
+            Some(s) => Some(s.is_empty()),
+            None => Some(true),
+        }
+    }
+}
+
+/// Fallback check using `netsh interface ipv4 show dnsservers name="..."`.
+#[cfg(windows)]
+fn check_netsh_dns_dhcp(friendly_name: &str) -> bool {
+    use std::os::windows::process::CommandExt;
+    let mut cmd = std::process::Command::new("netsh");
+    cmd.args([
+        "interface",
+        "ipv4",
+        "show",
+        "dnsservers",
+        &format!("name={friendly_name}"),
+    ]);
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    if let Ok(out) = cmd.output() {
+        let text = String::from_utf8_lossy(&out.stdout);
+        if let Some(pos) = text.find("Statically Configured DNS Servers:") {
+            let after = &text[pos + "Statically Configured DNS Servers:".len()..];
+            let first_line = after.lines().next().unwrap_or("").trim();
+            if first_line.eq_ignore_ascii_case("None") || first_line.is_empty() {
+                return true;
+            }
+            return false;
+        }
+        if text.contains("configured through DHCP:") {
+            return true;
+        }
+    }
+    true
+}
+
+#[cfg(windows)]
+fn is_adapter_dns_dhcp(adapter_guid: &str, friendly_name: &str) -> bool {
+    if let Some(is_dhcp) = check_registry_dns_dhcp(adapter_guid) {
+        return is_dhcp;
+    }
+    check_netsh_dns_dhcp(friendly_name)
+}
+
+#[cfg(not(windows))]
+fn is_adapter_dns_dhcp(_adapter_guid: &str, _friendly_name: &str) -> bool {
+    true
 }
 
 /// The first IPv4 resolver found across the (sorted) interface list, to use as
@@ -226,14 +390,13 @@ pub fn set_family_dns(ifaces: &[IfaceDns]) {
 
 /// Restore each interface's captured DNS configuration.
 ///
-/// Idempotent and safe to call with an empty snapshot: adapters with recorded
-/// servers get them back statically; adapters with none go back to DHCP. A
-/// failed restore is logged — the machine is still pointing at `127.0.0.1` (or
-/// already at its original servers), and re-running clear/apply is the remedy.
+/// Idempotent and safe to call with an empty snapshot: adapters configured
+/// with DHCP (or empty servers) return cleanly to `source=dhcp`; adapters
+/// with static configurations have their original IP addresses reinstated.
 pub fn restore_all(ifaces: &[IfaceDns]) {
     for iface in ifaces {
         let name_arg = format!("name={}", iface.name);
-        let result = if iface.servers.is_empty() {
+        let result = if iface.is_dhcp || iface.servers.is_empty() {
             command(
                 "netsh",
                 &[
@@ -395,6 +558,7 @@ mod tests {
         let ifaces = vec![IfaceDns {
             name: "Ethernet".into(),
             servers: vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))],
+            is_dhcp: false,
         }];
         assert_eq!(
             pick_upstream(&ifaces),
@@ -407,6 +571,7 @@ mod tests {
         let ifaces = vec![IfaceDns {
             name: "Wi-Fi".into(),
             servers: vec![],
+            is_dhcp: true,
         }];
         assert_eq!(pick_upstream(&ifaces), None);
     }
@@ -417,10 +582,12 @@ mod tests {
             IfaceDns {
                 name: "Wi-Fi".into(),
                 servers: vec![IpAddr::V4(Ipv4Addr::LOCALHOST)],
+                is_dhcp: false,
             },
             IfaceDns {
                 name: "Ethernet".into(),
                 servers: vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))],
+                is_dhcp: false,
             },
         ];
         assert_eq!(
@@ -434,7 +601,30 @@ mod tests {
         let ifaces = vec![IfaceDns {
             name: "Wi-Fi".into(),
             servers: vec![IpAddr::V4(Ipv4Addr::LOCALHOST)],
+            is_dhcp: false,
         }];
         assert_eq!(pick_upstream(&ifaces), None);
+    }
+
+    #[test]
+    fn serde_backward_compatibility_defaults_is_dhcp_to_false() {
+        let legacy_json = r#"[{"name":"Ethernet","servers":["192.168.1.1"]}]"#;
+        let decoded: Vec<IfaceDns> = serde_json::from_str(legacy_json).unwrap();
+        assert_eq!(decoded.len(), 1);
+        assert_eq!(decoded[0].name, "Ethernet");
+        assert!(!decoded[0].is_dhcp);
+    }
+
+    #[test]
+    fn serde_roundtrip_with_is_dhcp() {
+        let original = vec![IfaceDns {
+            name: "Wi-Fi".into(),
+            servers: vec![IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1))],
+            is_dhcp: true,
+        }];
+        let json = serde_json::to_string(&original).unwrap();
+        let decoded: Vec<IfaceDns> = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded, original);
+        assert!(decoded[0].is_dhcp);
     }
 }
