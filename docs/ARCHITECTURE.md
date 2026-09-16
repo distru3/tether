@@ -91,8 +91,8 @@ manager is worse than any limit is good.
 
 Documented in `docs/THREAT_MODEL.md`. The short version: this is a self-control
 aid, not a bypass-proof lock. Freeze-instead-of-kill preserves the user's work;
-the hosts writer is honest about being defeated by DNS-over-HTTPS; the DNS
-proxy and browser policies in M3 are what make filtering meaningful; a signed
+the hosts writer is honest about being defeated by DNS-over-HTTPS; Cloudflare
+Family DNS and browser policies are what provide robust adult/malware filtering; a signed
 kernel driver is explicitly out of scope.
 
 Expiry is fail-closed. A block carries its end-of-local-day deadline (`DayKey`,

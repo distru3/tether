@@ -7,7 +7,7 @@
 //! implement their own built-in DNS-over-HTTPS clients. When enabled, the
 //! browser sends DNS queries over encrypted HTTPS (port 443) directly to public
 //! resolvers (e.g. Cloudflare 1.1.1.1, Google 8.8.8.8), completely bypassing
-//! both `hosts` files and the machine's local DNS proxy at `127.0.0.1:53`.
+//! both `hosts` files and system-configured DNS resolvers.
 //!
 //! In addition, arbitrary software could attempt direct queries to external DNS
 //! resolvers on UDP/TCP port 53 or DNS-over-TLS on port 853.
@@ -19,7 +19,7 @@
 //!    browser settings and disable built-in DoH clients system-wide.
 //!    When active, the browser displays "Managed by your organization" on its
 //!    Secure DNS setting and routes all lookups through standard OS DNS APIs
-//!    (which hit `screentime-agent`'s local proxy).
+//!    (which respect the hosts file and configured system DNS).
 //! 2. **Firewall Rules**:
 //!    Outbound blocking rules on port 853 (DoT) and port 53 (direct external DNS)
 //!    prevent bypasses while allowing the agent and the designated upstream.

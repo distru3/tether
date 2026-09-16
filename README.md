@@ -68,11 +68,11 @@ Most commercial focus and screen-time applications fall into one of two traps:
 - **Universal On-Demand Peek (`Ctrl+Alt+T`)**: A global keyboard shortcut temporarily reveals your remaining time for 4 seconds on demand across any app or game—even when the continuous HUD is turned off.
 - **Milestone Harmonic Audio Alerts**: Subtle, high-fidelity chimes notify you when crossing 15m, 10m, 5m, and 1m thresholds without breaking immersion.
 
-### 🚫 Web Filtering & DNS Interception
-- **System-Wide DNS Proxy**: Embedded DNS daemon listening on `127.0.0.1:53` with upstream resolution over ephemeral client sockets.
-- **Curated Blocklists**: One-click subscription to community adult and social media blocklists.
-- **Encrypted DNS Interception**: Proactively blocks known DoH / DoT endpoints to prevent browser-level DNS bypasses.
-- **Custom Domain Rules**: Add custom allow/block rules with automatic wildcard subdomain coverage (`*.example.com`).
+### 🚫 Web Filtering & Domain Blocking
+- **Native Hosts File Enforcement**: Custom and manual domain blocks are written directly to Windows's native `hosts` file (`0.0.0.0`), instantly blocking distracting sites across all browsers and desktop apps without running a local proxy server.
+- **Cloudflare Family DNS**: System-wide network adapter configuration to block adult content and malware (`1.1.1.3` / `1.0.0.3`) with automatic original DNS restoration on disable or uninstall.
+- **Custom Domain Rules & Wildcards**: Add custom domain blocks or paste lists with automatic subdomain coverage (`*.example.com`).
+- **Encrypted DNS Lockdown**: Optional firewall policies to prevent browser DNS-over-HTTPS (DoH) bypasses.
 
 ### 🎨 Smoked-Glass Analytics UI
 - **Tauri 2 Native Desktop Shell**: Low memory footprint (~35 MB RAM), hardware-accelerated rendering, frameless native window with custom title bar.
@@ -92,7 +92,7 @@ Tether solves this with **three concurrent cooperating processes**:
 +-----------------------------------------------------------------------------------+
 | 1. screentime-agent (SYSTEM Windows Service)                                      |
 |    - Path: %ProgramFiles%\Tether\bin\screentime-agent.exe                         |
-|    - Owns: SQLite Database, Limits Engine, Process Freeze/Thaw, DNS Proxy (:53)   |
+|    - Owns: SQLite Database, Limits Engine, Process Freeze/Thaw, Hosts Enforcer     |
 |    - IPC Server: \\.\pipe\screentime (Named Pipe, Access Controlled)              |
 +------------------------------------------^----------------------------------------+
                                            |  (1 Hz ReportUsage & Status IPC)
@@ -257,7 +257,7 @@ Options:
 
 ```text
 ├── crates/
-│   ├── agent/             # screentime-agent: privileged daemon, SQLite, limits, DNS proxy, IPC server
+│   ├── agent/             # screentime-agent: privileged daemon, SQLite, limits, hosts enforcer, IPC server
 │   ├── session/           # screentime-session: foreground sampler, DirectComposition MPO HUD, input hooks
 │   ├── core/              # Pure domain logic: limit evaluation engine, clocks, observation models (no SQL/OS)
 │   ├── storage/           # SQLite storage engine, schema migrations, day snapshots, audit log
@@ -267,7 +267,7 @@ Options:
 │   ├── tracker-linux/     # Linux X11/Wayland tracker (stub)
 │   ├── enforce-win/       # Win32 NtSuspendProcess / ResumeProcess tree enforcement & hosts file writer
 │   ├── enforce-linux/     # Linux cgroups/SIGSTOP enforcement (stub)
-│   └── dnsproxy/          # UDP DNS proxy on 127.0.0.1:53 with ephemeral upstream sockets
+│   └── dnsproxy/          # Cloudflare Family DNS adapter configurator & original DNS backup/restore
 ├── ui/
 │   ├── src/               # React 18 application (Dashboard, Daily Timeline, Limits, Settings)
 │   │   ├── components/    # Smoked-glass components, dialogs, charts, SVG icons

@@ -8,7 +8,7 @@ Guidance and mandatory operational rules for AI agents working in this repositor
 
 A high-performance screen-time tracker, limit enforcer, and web filter for Windows (Linux crates are stubs). **Three distinct processes run concurrently at runtime**:
 
-1. `screentime-agent` (`crates/agent`) — privileged daemon (SYSTEM/elevated): SQLite database, limits engine, day rollover, DNS proxy on `127.0.0.1:53`, hosts file enforcer, IPC server on named pipe `\\.\pipe\screentime`.
+1. `screentime-agent` (`crates/agent`) — privileged daemon (SYSTEM/elevated): SQLite database, limits engine, day rollover, native Windows hosts file enforcer, Cloudflare Family DNS adapter configurator, IPC server on named pipe `\\.\pipe\screentime`.
 2. `screentime-session` (`crates/session`) — per-user unprivileged sampling front: tracks foreground window and idle state, reports 1 Hz samples via `ReportUsage` over a persistent pipe connection, and renders the Win32 GDI topmost click-pad block overlay window.
 3. `screentime-ui` (`ui/`) — Tauri 2 desktop shell and React 18 dashboard: one-shot pipe commands only, styled as a smoked-glass analytics workspace.
 
@@ -100,7 +100,7 @@ CLI extras: `screentime-agent --service|--install|--uninstall` (SCM mode; instal
 - **`ui/src-tauri` is a pure IPC adapter**: It serializes `st-ipc` DTOs verbatim (**snake_case wire format**) and returns structured `{code, message}` errors — no business logic there.
 - **The block overlay is hand-painted GDI in the session crate**: Topmost, borderless window (`WS_EX_TOPMOST | WS_EX_NOACTIVATE`) with a low-level keyboard hook (`WH_KEYBOARD_LL`).
 - **Session 1 Hz log quietness**: The session sampling front runs on a 1 Hz cycle. It must **never emit `INFO`-level logs for steady-state periodic flushes** (such as routine usage reports, keepalive ticks, or regular window focus changes). Routine per-second operations belong in `DEBUG`/`TRACE`, reserving `INFO` exclusively for process startup, link disconnects/reconnects, and explicit errors.
-- **DNS proxy upstream forwarding requires an ephemeral socket**: In `st-dns`, forwarding non-blocked queries to an upstream resolver must bind an ephemeral client socket (`0.0.0.0:0`), never reuse the `127.0.0.1:53` listener socket.
+- **Web filtering & DNS architecture**: Domain blocking operates via native Windows hosts file enforcement (`st-enforce-win`), mapping blocked domains to `0.0.0.0` without requiring an active proxy listening on port 53. Network-wide adult and security protection is configured via Cloudflare Family DNS (`1.1.1.3` / `1.0.0.3`) at the adapter level with automatic previous DNS restoration on disable/uninstall.
 
 ---
 

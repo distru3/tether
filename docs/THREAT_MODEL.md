@@ -18,7 +18,7 @@ worse than one that says nothing: users will trust it and then be surprised.
 * The SQLite database (usage history and configured limits).
 * Active limits and current day-key state.
 * The PIN hash (Argon2id).
-* The hosts file / DNS proxy configuration.
+* The hosts file and network DNS configuration.
 * The audit log.
 
 ## In scope
@@ -55,10 +55,9 @@ Documented here so the UI can be honest about them and so that regressions can
 be spotted:
 
 * **Hosts-only mode** is defeated by any browser with DNS-over-HTTPS enabled
-  (Chrome, Edge, Firefox default in many regions). This is why the M3 DNS
-  proxy also (a) installs enterprise policies disabling DoH, (b) firewalls TCP
-  and UDP 853 and 53 to non-local resolvers, and (c) blocks known DoH endpoint
-  domains.
+  (Chrome, Edge, Firefox default in many regions). This is why the app can
+  optionally configure Cloudflare Family DNS at the adapter level, disable browser DoH
+  via enterprise policy keys (`HKLM\SOFTWARE\Policies\...`), and block known DoH endpoints.
 * **VPNs and portable browsers** bypass everything short of a kernel filter.
   Detect a new tunnel interface and surface a warning; do not claim the site
   is blocked when it isn't.

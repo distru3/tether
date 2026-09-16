@@ -1,9 +1,9 @@
 //! Per-interface DNS capture and override.
 //!
 //! This is the one place in the DNS filter that is genuinely system-stateful:
-//! it reads the machine's DNS configuration and, while the filter is active,
-//! points every active interface's IPv4 resolver at `127.0.0.1` so that all
-//! resolver traffic lands on our local responder.
+//! it reads the machine's DNS configuration and, when Family DNS is enabled,
+//! configures active interfaces to use Cloudflare Family DNS resolvers
+//! (`1.1.1.3` / `1.0.0.3`) for adult/malware protection.
 //!
 //! # How it works
 //!
