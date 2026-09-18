@@ -3523,6 +3523,8 @@ version = "0.2.0-beta"
 dependencies = [
  "anyhow",
  "chrono",
+ "serde",
+ "serde_json",
  "st-core",
  "st-ipc",
  "st-tracker-win",

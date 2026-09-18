@@ -39,6 +39,9 @@ const FIRST_RUN_KEY = "screentime_first_run_completed";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export function App() {
+  // Ensure theme is active and synced across all windows (dashboard & overlay)
+  useTheme();
+
   let isOverlay = window.location.search.includes("view=overlay");
   try {
     if (!isOverlay && getCurrentWindow().label === "overlay") {
@@ -485,7 +488,7 @@ function MainDashboard() {
                               onClick={() => setTheme("horizon-dark")}
                             >
                               <span className="theme-swatch-dot theme-swatch-dot--horizon-dark" />
-                              {t("settings.themeHorizonDark", "Horizon Dark")}
+                              {t("settings.themeHorizonDark", "Obsidian Onyx")}
                             </button>
                             <button
                               type="button"
@@ -493,7 +496,7 @@ function MainDashboard() {
                               onClick={() => setTheme("horizon-light")}
                             >
                               <span className="theme-swatch-dot theme-swatch-dot--horizon-light" />
-                              {t("settings.themeHorizonLight", "Horizon Light")}
+                              {t("settings.themeHorizonLight", "Warm Sandstone")}
                             </button>
                             <button
                               type="button"

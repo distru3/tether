@@ -247,7 +247,7 @@ export function BlockOverlay() {
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
-        background: "rgba(10, 12, 16, 0.88)",
+        background: "var(--bg-modal-backdrop, rgba(11, 13, 19, 0.92))",
         opacity: visible && !exiting ? 1 : 0,
         transition: "opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
         margin: 0,
@@ -258,15 +258,15 @@ export function BlockOverlay() {
       }}
     >
       <div
-        className="glass-card"
+        className="solid-card"
         style={{
           width: "480px",
           maxWidth: "92vw",
-          background: "var(--bg-card-elevated, #2a1442)",
-          border: "1px solid var(--border-strong, rgba(220, 160, 109, 0.22))",
-          borderRadius: "18px",
-          boxShadow: "0 28px 72px rgba(15, 5, 25, 0.75)",
-          padding: "30px 28px",
+          background: "var(--bg-card, #131620)",
+          border: "1px solid var(--border-card, #202534)",
+          borderRadius: "16px",
+          boxShadow: "0 24px 64px rgba(0, 0, 0, 0.6)",
+          padding: "32px 28px",
           display: "flex",
           flexDirection: "column",
           gap: "20px",
@@ -274,7 +274,7 @@ export function BlockOverlay() {
           transform:
             visible && !exiting
               ? "scale(1) translateY(0)"
-              : "scale(0.95) translateY(12px)",
+              : "scale(0.96) translateY(12px)",
           transition:
             "opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.24s cubic-bezier(0.16, 1, 0.3, 1)",
           willChange: "opacity, transform",
@@ -288,22 +288,22 @@ export function BlockOverlay() {
                 width: "28px",
                 height: "28px",
                 borderRadius: "6px",
-                background: "var(--color-primary, #A55B4B)",
+                background: "var(--color-primary, #3B82F6)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 color: "#fff",
               }}
             >
-              <Lock size={16} />
+              <Lock size={15} />
             </div>
             <span
               style={{
                 fontSize: "12px",
                 fontWeight: 700,
-                letterSpacing: "0.12em",
+                letterSpacing: "0.1em",
                 textTransform: "uppercase",
-                color: "var(--text-muted, #9b7e7a)",
+                color: "var(--text-muted, #6B7280)",
                 fontFamily: "var(--font-mono, monospace)",
               }}
             >
@@ -318,9 +318,9 @@ export function BlockOverlay() {
               gap: "6px",
               padding: "4px 10px",
               borderRadius: "20px",
-              background: "var(--bg-danger, rgba(224, 112, 112, 0.16))",
-              border: "1px solid var(--border-danger, rgba(224, 112, 112, 0.35))",
-              color: "var(--color-danger, #e07070)",
+              background: "var(--bg-danger, rgba(244, 63, 94, 0.12))",
+              border: "1px solid var(--border-danger, rgba(244, 63, 94, 0.28))",
+              color: "var(--color-danger, #F43F5E)",
               fontSize: "11px",
               fontWeight: 700,
               letterSpacing: "0.06em",
@@ -338,13 +338,13 @@ export function BlockOverlay() {
             style={{
               fontSize: "24px",
               fontWeight: 700,
-              color: "var(--text-primary, #f5ede8)",
+              color: "var(--text-primary, #F3F4F6)",
               margin: "0 0 8px",
               letterSpacing: "-0.01em",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
-              gap: "8px",
+              gap: "10px",
             }}
           >
             <span
@@ -352,7 +352,7 @@ export function BlockOverlay() {
                 width: "10px",
                 height: "10px",
                 borderRadius: "50%",
-                background: "var(--color-accent, #DCA06D)",
+                background: "var(--color-danger, #F43F5E)",
                 display: "inline-block",
                 flexShrink: 0,
               }}
@@ -362,7 +362,7 @@ export function BlockOverlay() {
           <p
             style={{
               fontSize: "13.5px",
-              color: "var(--text-secondary, #d4b8af)",
+              color: "var(--text-secondary, #9CA3AF)",
               margin: 0,
               lineHeight: 1.5,
             }}
@@ -386,7 +386,7 @@ export function BlockOverlay() {
               style={{
                 fontSize: "12px",
                 fontWeight: 600,
-                color: "var(--text-muted, #9b7e7a)",
+                color: "var(--text-muted, #6B7280)",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
               }}
@@ -399,12 +399,12 @@ export function BlockOverlay() {
               style={{
                 display: "flex",
                 gap: "12px",
-                padding: "8px 16px",
-                borderRadius: "12px",
-                background: "var(--bg-recessed, rgba(33, 15, 55, 0.55))",
+                padding: "10px 20px",
+                borderRadius: "10px",
+                background: "var(--bg-recessed, #0E1017)",
                 border: wrongPin
-                  ? "1px solid var(--color-danger, #e07070)"
-                  : "1px solid var(--border-subtle, rgba(220, 160, 109, 0.15))",
+                  ? "1px solid var(--color-danger, #F43F5E)"
+                  : "1px solid var(--border-subtle, #1C202E)",
                 transition: "border-color 0.2s ease",
               }}
             >
@@ -418,10 +418,10 @@ export function BlockOverlay() {
                       height: "14px",
                       borderRadius: "50%",
                       border: filled
-                        ? "2px solid var(--color-primary, #A55B4B)"
-                        : "2px solid var(--border-strong, rgba(220, 160, 109, 0.3))",
-                      background: filled ? "var(--color-primary, #A55B4B)" : "transparent",
-                      boxShadow: filled ? "0 0 10px var(--color-primary, #A55B4B)" : "none",
+                        ? "2px solid var(--color-primary, #3B82F6)"
+                        : "2px solid var(--border-strong, #2D3447)",
+                      background: filled ? "var(--color-primary, #3B82F6)" : "transparent",
+                      boxShadow: filled ? "0 0 8px rgba(59, 130, 246, 0.5)" : "none",
                       transition: "all 0.15s ease",
                     }}
                   />
@@ -434,7 +434,7 @@ export function BlockOverlay() {
               <span
                 style={{
                   fontSize: "12px",
-                  color: "var(--color-danger, #e07070)",
+                  color: "var(--color-danger, #F43F5E)",
                   fontWeight: 600,
                 }}
               >
@@ -462,14 +462,18 @@ export function BlockOverlay() {
                     onClick={() => handleKeypadPress(key)}
                     style={{
                       height: "44px",
-                      borderRadius: "10px",
-                      border: "1px solid var(--border-subtle, rgba(220, 160, 109, 0.15))",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border-card, #202534)",
                       background: isAction
                         ? key === "OK"
-                          ? "var(--color-primary, #A55B4B)"
-                          : "rgba(224, 112, 112, 0.15)"
-                        : "var(--bg-recessed, rgba(33, 15, 55, 0.6))",
-                      color: isAction && key === "C" ? "var(--color-danger, #e07070)" : "#fff",
+                          ? "var(--color-primary, #3B82F6)"
+                          : "var(--bg-danger, rgba(244, 63, 94, 0.15))"
+                        : "var(--bg-recessed, #0E1017)",
+                      color: isAction
+                        ? key === "OK"
+                          ? "#FFFFFF"
+                          : "var(--color-danger, #F43F5E)"
+                        : "var(--text-primary, #F3F4F6)",
                       fontSize: isAction ? "13px" : "18px",
                       fontWeight: 700,
                       fontFamily: isAction ? "inherit" : "var(--font-mono, monospace)",
@@ -480,18 +484,26 @@ export function BlockOverlay() {
                       transition: "all 0.12s ease",
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.transform = "translateY(-1px)";
-                      e.currentTarget.style.borderColor = "var(--border-strong)";
+                      e.currentTarget.style.borderColor = "var(--border-hover, #3E4760)";
+                      e.currentTarget.style.background = isAction
+                        ? key === "OK"
+                          ? "var(--color-primary-hover, #60A5FA)"
+                          : "rgba(244, 63, 94, 0.25)"
+                        : "var(--bg-surface-hover, #1A1E2B)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.transform = "none";
-                      e.currentTarget.style.borderColor = "var(--border-subtle)";
+                      e.currentTarget.style.borderColor = "var(--border-card, #202534)";
+                      e.currentTarget.style.background = isAction
+                        ? key === "OK"
+                          ? "var(--color-primary, #3B82F6)"
+                          : "var(--bg-danger, rgba(244, 63, 94, 0.15))"
+                        : "var(--bg-recessed, #0E1017)";
                     }}
                     onMouseDown={(e) => {
-                      e.currentTarget.style.transform = "scale(0.95)";
+                      e.currentTarget.style.transform = "scale(0.96)";
                     }}
                     onMouseUp={(e) => {
-                      e.currentTarget.style.transform = "translateY(-1px)";
+                      e.currentTarget.style.transform = "scale(1)";
                     }}
                   >
                     {key === "C" ? <Delete size={18} /> : key === "OK" ? <Check size={18} /> : key}
@@ -503,7 +515,7 @@ export function BlockOverlay() {
             <span
               style={{
                 fontSize: "11px",
-                color: "var(--text-muted, #9b7e7a)",
+                color: "var(--text-muted, #6B7280)",
                 marginTop: "2px",
               }}
             >
@@ -550,8 +562,8 @@ export function BlockOverlay() {
               alignItems: "center",
               justifyContent: "center",
               gap: "8px",
-              borderColor: "var(--border-danger, rgba(224, 112, 112, 0.35))",
-              color: "var(--color-danger, #e07070)",
+              borderColor: "var(--border-danger, rgba(244, 63, 94, 0.35))",
+              color: "var(--color-danger, #F43F5E)",
             }}
           >
             <Power size={16} />

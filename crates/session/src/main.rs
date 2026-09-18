@@ -157,7 +157,39 @@ impl SessionState {
     }
 }
 
+/// Opt out of RivaTuner Statistics Server (RTSS / MSI Afterburner) hooking.
+///
+/// RTSS checks for this export upon DLL injection. Setting this to 0x0 signals
+/// to RTSS that this is a 2D utility desktop overlay and must not be hooked or
+/// overlaid with OSD statistics.
+#[cfg(windows)]
+#[no_mangle]
+pub static RTSSHooksCompatibility: u32 = 0x00000000;
+
+#[cfg(windows)]
+fn ensure_rtss_exclusion() {
+    // If RTSS is installed, drop an application profile ensuring EnableHooking=0
+    let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") else {
+        return;
+    };
+    let rtss_profiles = PathBuf::from(program_files_x86)
+        .join("RivaTuner Statistics Server")
+        .join("Profiles");
+    if rtss_profiles.is_dir() {
+        let profile_cfg = rtss_profiles.join("screentime-session.exe.cfg");
+        if !profile_cfg.exists() {
+            let _ = std::fs::write(&profile_cfg, "[Hooking]\nEnableHooking = 0\n");
+        }
+    }
+}
+
 fn main() -> anyhow::Result<()> {
+    #[cfg(windows)]
+    {
+        // Reference symbol to ensure it isn't stripped by dead code analysis
+        let _ = &RTSSHooksCompatibility;
+        ensure_rtss_exclusion();
+    }
     // Autostart CLI dispatch comes before EVERYTHING below — the
     // single-instance guard included. Managing logon autostart must work
     // while (or especially *because*) a helper is already running: `--autostart

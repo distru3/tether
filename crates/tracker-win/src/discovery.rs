@@ -61,6 +61,24 @@ fn os_to_wide(s: &OsString) -> Vec<u16> {
     s.encode_wide().chain(std::iter::once(0)).collect()
 }
 
+/// Normalizes and expands 8.3 short paths to full canonical Windows paths.
+fn canonicalize_path(raw: &str) -> String {
+    let wide_raw = to_wide(raw);
+    let mut buf = vec![0u16; 1024];
+    let len = unsafe {
+        windows::Win32::Storage::FileSystem::GetLongPathNameW(
+            PCWSTR(wide_raw.as_ptr()),
+            Some(&mut buf),
+        )
+    };
+    let resolved = if len > 0 && (len as usize) < buf.len() {
+        String::from_utf16_lossy(&buf[..len as usize])
+    } else {
+        raw.to_string()
+    };
+    resolved.replace('/', "\\").to_lowercase()
+}
+
 /// Checks if an executable filename looks like an uninstaller, updater, or helper.
 fn is_noise_executable(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
@@ -133,7 +151,7 @@ fn collect_lnk_recursive(dir: &Path, discovered: &mut HashMap<AppKey, Discovered
             collect_lnk_recursive(&path, discovered);
         } else if path.extension().and_then(|ext| ext.to_str()) == Some("lnk") {
             if let Some((target_path, display_name)) = resolve_lnk(&path) {
-                let target_lower = target_path.to_ascii_lowercase();
+                let target_lower = canonicalize_path(&target_path);
                 let file_name = Path::new(&target_path)
                     .file_name()
                     .and_then(|f| f.to_str())
@@ -394,7 +412,7 @@ fn inspect_app_key(
     }
 
     if let Some(exe_path) = target_exe {
-        let target_lower = exe_path.to_ascii_lowercase();
+        let target_lower = canonicalize_path(&exe_path);
         let file_name = Path::new(&exe_path)
             .file_name()
             .and_then(|f| f.to_str())
@@ -446,7 +464,7 @@ fn clean_display_icon(raw: &str, display_name: &str) -> Option<String> {
     s = s.trim_matches('"').trim();
 
     if s.ends_with(".exe") && Path::new(s).is_file() {
-        return Some(s.to_string());
+        return Some(canonicalize_path(s));
     }
 
     // If icon is an .ico or in the app directory, search its parent directory for the exe
@@ -454,7 +472,7 @@ fn clean_display_icon(raw: &str, display_name: &str) -> Option<String> {
     if let Some(parent) = path.parent() {
         if parent.is_dir() {
             if let Some(found) = find_main_exe_in_dir(parent, display_name) {
-                return Some(found);
+                return Some(canonicalize_path(&found));
             }
         }
     }
@@ -633,7 +651,7 @@ fn inspect_game_config_key(
         if let Some(path) = exe_path {
             let path_trimmed = path.trim().trim_matches('"');
             if path_trimmed.ends_with(".exe") && Path::new(path_trimmed).is_file() {
-                let target_lower = path_trimmed.to_lowercase();
+                let target_lower = canonicalize_path(path_trimmed);
                 let file_name = Path::new(&target_lower)
                     .file_name()
                     .and_then(|n| n.to_str())

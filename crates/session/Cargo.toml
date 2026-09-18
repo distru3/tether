@@ -22,6 +22,8 @@ tracing-appender = "0.2"
 # chrono is already in the dependency tree via st-core/st-storage/st-ipc, so
 # this pulls in no new code.
 chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 # Canonical process-image-path query (replaces this crate's inline

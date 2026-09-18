@@ -217,8 +217,8 @@ mod registry {
     use windows::Win32::Foundation::{ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND, ERROR_SUCCESS};
     use windows::Win32::System::Registry::{
         RegCloseKey, RegCreateKeyW, RegDeleteValueW, RegOpenKeyExW, RegQueryValueExW,
-        RegSetValueExW, HKEY, HKEY_CURRENT_USER, KEY_QUERY_VALUE, KEY_SET_VALUE, REG_SZ,
-        REG_VALUE_TYPE,
+        RegSetValueExW, HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_QUERY_VALUE,
+        KEY_SET_VALUE, REG_SZ, REG_VALUE_TYPE,
     };
 
     /// NUL-terminated UTF-16 for the wide registry APIs.
@@ -269,109 +269,103 @@ mod registry {
         }
     }
 
+    unsafe fn delete_from_root(root: HKEY) -> anyhow::Result<bool> {
+        let subkey = wide(RUN_SUBKEY);
+        let name = wide(VALUE_NAME);
+        let mut key = HKEY::default();
+        match RegOpenKeyExW(root, PCWSTR(subkey.as_ptr()), 0, KEY_SET_VALUE, &mut key) {
+            ERROR_SUCCESS => {}
+            ERROR_FILE_NOT_FOUND | ERROR_PATH_NOT_FOUND => return Ok(false),
+            code => return expect_ok("RegOpenKeyExW", code).map(|()| false),
+        }
+        let result = match RegDeleteValueW(key, PCWSTR(name.as_ptr())) {
+            ERROR_SUCCESS => Ok(true),
+            ERROR_FILE_NOT_FOUND => Ok(false),
+            code => expect_ok("RegDeleteValueW", code).map(|()| false),
+        };
+        let _ = RegCloseKey(key);
+        result
+    }
+
     /// Deletes the value; returns whether anything was actually removed.
     ///
     /// Missing key/value are reported as `false` (nothing to do), not errors,
     /// so `--autostart off` succeeds identically on clean and dirty systems.
     pub(super) fn delete_run_value() -> anyhow::Result<bool> {
         unsafe {
-            let subkey = wide(RUN_SUBKEY);
-            let name = wide(VALUE_NAME);
-            let mut key = HKEY::default();
-            match RegOpenKeyExW(
-                HKEY_CURRENT_USER,
-                PCWSTR(subkey.as_ptr()),
-                0,
-                KEY_SET_VALUE,
-                &mut key,
-            ) {
-                ERROR_SUCCESS => {}
-                ERROR_FILE_NOT_FOUND | ERROR_PATH_NOT_FOUND => return Ok(false),
-                code => return expect_ok("RegOpenKeyExW", code).map(|()| false),
-            }
-            let result = match RegDeleteValueW(key, PCWSTR(name.as_ptr())) {
-                ERROR_SUCCESS => Ok(true),
-                ERROR_FILE_NOT_FOUND => Ok(false),
-                code => expect_ok("RegDeleteValueW", code).map(|()| false),
-            };
-            let _ = RegCloseKey(key);
-            result
+            let hkcu_deleted = delete_from_root(HKEY_CURRENT_USER).unwrap_or(false);
+            let hklm_deleted = delete_from_root(HKEY_LOCAL_MACHINE).unwrap_or(false);
+            Ok(hkcu_deleted || hklm_deleted)
         }
     }
 
-    /// Reads the stored value, or `None` when absent.
-    ///
-    /// Two-step query (size probe, then fill) follows the documented pattern
-    /// for value data whose length is unknown up front. Only REG_SZ is
-    /// accepted: anything else means someone else wrote this value name, and
-    /// reporting an error beats displaying binary junk as a "path".
-    pub(super) fn query_run_value() -> anyhow::Result<Option<String>> {
-        unsafe {
-            let subkey = wide(RUN_SUBKEY);
-            let name = wide(VALUE_NAME);
-            let mut key = HKEY::default();
-            match RegOpenKeyExW(
-                HKEY_CURRENT_USER,
-                PCWSTR(subkey.as_ptr()),
-                0,
-                KEY_QUERY_VALUE,
-                &mut key,
+    unsafe fn query_from_root(root: HKEY) -> anyhow::Result<Option<String>> {
+        let subkey = wide(RUN_SUBKEY);
+        let name = wide(VALUE_NAME);
+        let mut key = HKEY::default();
+        match RegOpenKeyExW(root, PCWSTR(subkey.as_ptr()), 0, KEY_QUERY_VALUE, &mut key) {
+            ERROR_SUCCESS => {}
+            ERROR_FILE_NOT_FOUND | ERROR_PATH_NOT_FOUND => return Ok(None),
+            code => return expect_ok("RegOpenKeyExW", code).map(|()| None),
+        }
+
+        let probe = (|| -> anyhow::Result<Option<String>> {
+            let mut byte_len = 0u32;
+            match RegQueryValueExW(
+                key,
+                PCWSTR(name.as_ptr()),
+                None,
+                None,
+                None,
+                Some(&mut byte_len),
             ) {
                 ERROR_SUCCESS => {}
-                ERROR_FILE_NOT_FOUND | ERROR_PATH_NOT_FOUND => return Ok(None),
-                code => return expect_ok("RegOpenKeyExW", code).map(|()| None),
+                ERROR_FILE_NOT_FOUND => return Ok(None),
+                code => return expect_ok("RegQueryValueExW", code).map(|()| None),
             }
-
-            let probe = (|| -> anyhow::Result<Option<String>> {
-                let mut byte_len = 0u32;
-                match RegQueryValueExW(
+            if byte_len == 0 {
+                return Ok(None);
+            }
+            let mut data = vec![0u8; byte_len as usize];
+            let mut kind = REG_VALUE_TYPE::default();
+            expect_ok(
+                "RegQueryValueExW",
+                RegQueryValueExW(
                     key,
                     PCWSTR(name.as_ptr()),
                     None,
-                    None,
-                    None,
+                    Some(&mut kind),
+                    Some(data.as_mut_ptr()),
                     Some(&mut byte_len),
-                ) {
-                    ERROR_SUCCESS => {}
-                    // Key exists but our value does not: that IS "off".
-                    ERROR_FILE_NOT_FOUND => return Ok(None),
-                    code => return expect_ok("RegQueryValueExW", code).map(|()| None),
-                }
-                if byte_len == 0 {
-                    // An empty value carries no path; treat as unregistered.
-                    return Ok(None);
-                }
-                let mut data = vec![0u8; byte_len as usize];
-                let mut kind = REG_VALUE_TYPE::default();
-                expect_ok(
-                    "RegQueryValueExW",
-                    RegQueryValueExW(
-                        key,
-                        PCWSTR(name.as_ptr()),
-                        None,
-                        Some(&mut kind),
-                        Some(data.as_mut_ptr()),
-                        Some(&mut byte_len),
-                    ),
-                )
-                .context("reading the autostart value")?;
-                if kind != REG_SZ {
-                    anyhow::bail!(
-                        "autostart value has unexpected registry type {} (expected REG_SZ)",
-                        kind.0
-                    );
-                }
-                // The registry hands back little-endian UTF-16 bytes.
-                let units: Vec<u16> = data[..byte_len as usize]
-                    .chunks_exact(2)
-                    .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
-                    .collect();
-                let text = String::from_utf16_lossy(&units);
-                Ok(Some(text.trim_end_matches('\0').to_string()))
-            })();
+                ),
+            )
+            .context("reading the autostart value")?;
+            if kind != REG_SZ {
+                anyhow::bail!(
+                    "autostart value has unexpected registry type {} (expected REG_SZ)",
+                    kind.0
+                );
+            }
+            let units: Vec<u16> = data[..byte_len as usize]
+                .chunks_exact(2)
+                .map(|pair| u16::from_le_bytes([pair[0], pair[1]]))
+                .collect();
+            let text = String::from_utf16_lossy(&units);
+            Ok(Some(text.trim_end_matches('\0').to_string()))
+        })();
 
-            let _ = RegCloseKey(key);
-            probe
+        let _ = RegCloseKey(key);
+        probe
+    }
+
+    /// Reads the stored value, or `None` when absent.
+    /// Checks HKCU first, then falls back to HKLM so machine-level entries are recognized.
+    pub(super) fn query_run_value() -> anyhow::Result<Option<String>> {
+        unsafe {
+            if let Ok(Some(val)) = query_from_root(HKEY_CURRENT_USER) {
+                return Ok(Some(val));
+            }
+            query_from_root(HKEY_LOCAL_MACHINE)
         }
     }
 }

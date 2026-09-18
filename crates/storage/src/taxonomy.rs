@@ -100,6 +100,47 @@ impl Db {
         now: DateTime<Utc>,
     ) -> Result<i64> {
         let now_s = now.to_rfc3339();
+        let key_s = key.to_db_string();
+
+        // 1. If exact app_key exists, update and return
+        if let Some(existing_id) = self
+            .conn
+            .query_row(
+                "SELECT id FROM apps WHERE app_key = ?1",
+                params![key_s],
+                |row| row.get::<_, i64>(0),
+            )
+            .optional()?
+        {
+            self.conn.execute(
+                "UPDATE apps SET last_seen_utc = ?2, display_name = ?3 WHERE id = ?1",
+                params![existing_id, now_s, display_name],
+            )?;
+            return Ok(existing_id);
+        }
+
+        // 2. Basename alias check: if an app with this executable name was discovered
+        let basename = key.basename().to_lowercase();
+        if !basename.is_empty() && basename.ends_with(".exe") {
+            let pattern = format!("%\\{basename}");
+            if let Some(candidate_id) = self
+                .conn
+                .query_row(
+                    "SELECT id FROM apps WHERE app_key LIKE ?1 ORDER BY id ASC LIMIT 1",
+                    params![pattern],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()?
+            {
+                self.conn.execute(
+                    "UPDATE apps SET app_key = ?1, last_seen_utc = ?2 WHERE id = ?3",
+                    params![key_s, now_s, candidate_id],
+                )?;
+                return Ok(candidate_id);
+            }
+        }
+
+        // 3. New app insertion
         let id = self.conn.query_row(
             "INSERT INTO apps
                  (app_key, display_name, publisher, primary_category_id,
@@ -109,13 +150,7 @@ impl Db {
                  last_seen_utc = excluded.last_seen_utc,
                  display_name  = excluded.display_name
              RETURNING id",
-            params![
-                key.to_db_string(),
-                display_name,
-                publisher,
-                default_category,
-                now_s
-            ],
+            params![key_s, display_name, publisher, default_category, now_s],
             |row| row.get(0),
         )?;
         Ok(id)
@@ -215,14 +250,44 @@ impl Db {
 
     /// The database id of an app given its canonical key, if it has been seen.
     pub fn app_id_for_key(&self, key: &AppKey) -> Result<Option<i64>> {
-        Ok(self
+        let exact: Option<i64> = self
             .conn
             .query_row(
                 "SELECT id FROM apps WHERE app_key = ?1",
                 params![key.to_db_string()],
                 |row| row.get(0),
             )
-            .optional()?)
+            .optional()?;
+        if exact.is_some() {
+            return Ok(exact);
+        }
+
+        // Basename fallback for WindowsExe and LinuxExe
+        let basename = key.basename().to_lowercase();
+        if !basename.is_empty() && basename.ends_with(".exe") {
+            let pattern = format!("%\\{basename}");
+            let candidate: Option<(i64, String)> = self
+                .conn
+                .query_row(
+                    "SELECT id, app_key FROM apps WHERE app_key LIKE ?1 ORDER BY id ASC LIMIT 1",
+                    params![pattern],
+                    |row| Ok((row.get(0)?, row.get(1)?)),
+                )
+                .optional()?;
+
+            if let Some((id, old_key)) = candidate {
+                let new_key_s = key.to_db_string();
+                if old_key != new_key_s {
+                    let _ = self.conn.execute(
+                        "UPDATE apps SET app_key = ?1 WHERE id = ?2",
+                        params![new_key_s, id],
+                    );
+                }
+                return Ok(Some(id));
+            }
+        }
+
+        Ok(None)
     }
 
     /// A single app record, for the enforcement loop and the categoriser.
@@ -473,5 +538,40 @@ mod tests {
         }
         assert_eq!(row_to_target("widget", Some(1)), None);
         assert_eq!(subject_from_row("gadget", 1), None);
+    }
+
+    #[test]
+    fn test_basename_fallback_matches_discovered_apps() {
+        let db = Db::open_in_memory().expect("open");
+        let uncat = db.category_id("uncategorized").expect("uncat");
+
+        // App discovered with short path or launcher
+        let discovered_key = AppKey::windows_exe("C:\\progra~1\\discord\\discord.exe");
+        let discovered_id = db
+            .upsert_app(&discovered_key, "Discord", None, uncat, now())
+            .expect("upsert discovered");
+
+        // When running, st_win32 reports canonical full path
+        let running_key = AppKey::windows_exe("C:\\Program Files\\Discord\\Discord.exe");
+
+        // app_id_for_key should match discovered_id by basename fallback and update key
+        let resolved_id = db
+            .app_id_for_key(&running_key)
+            .expect("lookup")
+            .expect("found");
+        assert_eq!(resolved_id, discovered_id);
+
+        // Subsequent lookup is an exact match
+        let exact_id = db
+            .app_id_for_key(&running_key)
+            .expect("lookup")
+            .expect("found");
+        assert_eq!(exact_id, discovered_id);
+
+        // upsert_app for running_key reuses the same app row instead of creating a duplicate
+        let upserted_id = db
+            .upsert_app(&running_key, "Discord", None, uncat, now())
+            .expect("upsert running");
+        assert_eq!(upserted_id, discovered_id);
     }
 }

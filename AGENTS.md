@@ -35,6 +35,14 @@ Violating these rules causes irreversible loss of user work and is strictly proh
    - Stop immediately, state honestly what is known vs. unknown, and ask the user for guidance or clarification.
 4. **NO CASCADING PATCH SCRIPTS**:
    - Avoid executing multi-pass ad-hoc string-replacement scripts on core source files. Verify exact line boundaries and file contents before making edits.
+5. **MANDATORY DOWNSTREAM IMPACT AUDIT**:
+   - Whenever changing a feature, setting, theme, or user-facing identifier in one part of the app, you **MUST systematically locate and update all downstream references** across the entire workspace:
+     - Localization bundles (`ui/src/locales/en/translation.json`, `ui/src/locales/ar/translation.json`, etc.)
+     - Component fallbacks and labels (`ui/src/App.tsx`, pages, controls)
+     - Native platform renderers and fallback palettes (`crates/session/src/hud.rs`, `crates/session/src/mpo.rs`)
+     - Styles and CSS tokens (`ui/src/styles/tokens.css`, `redesign.css`)
+     - Documentation (`docs/UI_SPECIFICATION.md`, release notes, user guides)
+   - Never leave downstream files stale when introducing or renaming functionality.
 
 ---
 

@@ -4,21 +4,43 @@ This document defines the frontend layout, design system tokens, and component a
 
 ---
 
-## 1. Design System & Brand Identity: Tether Smoked-Glass Workspace
+## 1. Design System & Brand Identity: Tether Solid Modern Workspace
 
 The application is branded as **Tether**, featuring an official brand mark depicting an architectural "T" encircled by an orbital tether connecting to a clock/timer orb in warm terracotta and caramel hues.
 
-The UI uses a dark obsidian purple and warm amber smoked-glass aesthetic defined in `ui/src/styles/tokens.css`, `ui/src/styles/redesign.css`, and `ui/src/styles/app.css`:
+The UI utilizes a crisp, solid, high-contrast modern aesthetic (Obsidian Dark & Titanium Light) defined in `ui/src/styles/tokens.css`, `ui/src/styles/redesign.css`, and `ui/src/styles/app.css`. All glassmorphism (`backdrop-filter: blur`, semi-transparent frosted cards) has been completely eliminated in favor of opaque, tactile surfaces with 1px border contrast:
 
-### Core Palette (Color Hunt #210F374F1C51A55B4BDCA06D)
-- **Obsidian Purple Base**: `#210F37` (`--bg-canvas`, `--bg-app`, `--redesign-bg`) — Deep background canvas.
-- **Rich Purple Glass Surfaces**: `#4F1C51` (`--bg-card`, `--bg-surface`, `--redesign-panel`) — Floating glass cards with subtle border illumination.
-- **Warm Terracotta Accents**: `#A55B4B` (`--accent-indigo`, `--color-primary`) — Primary action buttons, progress bars, category highlights.
-- **Amber Gold Highlights**: `#DCA06D` (`--color-accent`, `--accent-amber`, `--redesign-orange`) — Badges, timer readouts, glowing PIN dots, active tab icons.
-- **Danger / Urgent Warning**: `#DF5E4E` (`--color-danger`, `--accent-rose`) — Limit reached, destructive actions, error prompts.
-- **Borders**: Translucent amber/terracotta rules (`rgba(220, 160, 109, 0.14)`).
-- **Typography**: System sans-serif for headings/copy, monospace for tabular numbers and time codes.
-- **Elevation & Blur**: `backdrop-filter: blur(24px); box-shadow: 0 16px 40px rgba(15, 5, 25, 0.45); border-radius: 14px;`.
+### Core Palettes (4 Distinct Signatures)
+
+#### A. Obsidian Onyx (Signature Solid Dark Theme)
+- **Base Canvas**: `#090A0F` (`--bg-app`, `--redesign-bg`) — Solid pitch carbon base.
+- **Solid Surfaces**: `#12141A` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Warm carbon panel level 1.
+- **Elevated Surfaces**: `#181B24` (`--bg-card-elevated`, `--redesign-panel-strong`) — Elevated carbon dialogs and cards.
+- **Recessed / Inputs**: `#0C0E14` (`--bg-input`, `--bg-recessed`, `--redesign-panel-muted`) — Recessed carbon inputs.
+- **Borders**: `#222736` (`--border-card`, `--redesign-line`), `#1C202C` (`--border-subtle`), `#2E354A` (`--border-strong`).
+- **Typography**: `#F4F5F7` primary text (crisp titanium cream), `#9EA3B0` secondary graphite, `#636979` muted text.
+- **Accents**: Radiant Amber Gold `#F59E0B` (`--color-primary`, `--redesign-orange`), Citrine Gold `#FBBF24`, Emerald `#10B981`, Coral Red `#F43F5E`.
+- **Character**: Deep dark luxury watch / obsidian carbon workspace.
+
+#### B. Warm Sandstone (Signature Solid Light Theme)
+- **Base Canvas**: `#F5F2EB` (`--bg-app`, `--redesign-bg`) — Soft warm sand / parchment canvas, gentle on eyes.
+- **Solid Surfaces**: `#FFFFFF` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Crisp porcelain / alabaster cards.
+- **Elevated Surfaces**: `#FFFFFF` with warm elevated shadow.
+- **Recessed / Inputs**: `#ECE7DC` (`--bg-input`, `--bg-recessed`) — Warm recessed sand.
+- **Borders**: `#DDD7CC` (`--border-card`), `#EAE5DC` (`--border-subtle`), `#CCC5B8` (`--border-strong`).
+- **Typography**: `#1C1917` primary text (deep rich espresso), `#57534E` secondary roasted walnut, `#78716C` muted clay.
+- **Accents**: Artisan Terracotta / Burnt Sienna `#C2410C` (`--color-primary`, `--redesign-orange`), Flame `#EA580C`, Pine Green `#047857`, Crimson `#BE123C`.
+- **Character**: Tactile, editorial notebook / architectural workspace.
+
+#### C. Classic Dark (Cool Slate & Indigo)
+- **Base Canvas**: `#0B0F17` — Deep neutral slate.
+- **Solid Surfaces**: `#141A26` — Deep navy-slate panels.
+- **Accents**: Electric Indigo `#6366F1`, Cyan `#38BDF8`.
+
+#### D. Classic Light (Crisp White & Royal Blue)
+- **Base Canvas**: `#F8FAFC` — Crisp clean neutral slate light.
+- **Solid Surfaces**: `#FFFFFF` — Pure white cards.
+- **Accents**: Royal Blue `#2563EB`, Emerald `#059669`.
 
 ---
 
@@ -181,44 +203,51 @@ The dashboard overview is structured as an interactive grid:
 
 ---
 
-## 5. Overlays: Win32 HUD & Hardware-Accelerated Block Overlay
+## 5. Overlays: Win32 Draggable HUD & Hardware-Accelerated Block Overlay
 
-### A. Timer HUD Overlay (`crates/session/src/hud.rs`)
-- **Visual Design**: High-contrast 92x28 pill (14px corner radius) with smoked-glass translucency (alpha 235/255).
-  - Background: Obsidian purple `#210F37` (`rgb(0x21, 0x0F, 0x37)`).
-  - Border: Amber gold `#DCA06D` (`rgb(0xDC, 0xA0, 0x6D)`) when active timer, or warm terracotta `#A55B4B` (`rgb(0xA5, 0x5B, 0x4B)`) in normal budget tracking.
-  - Indicator: 4px glowing indicator dot on the left.
-  - Digits: Bold monospace ClearType `Consolas` tabular time readout in amber gold or ivory white.
-- **Hit-Testing Transparency & Native Cursor Passthrough**:
-  - Registered with `hCursor = LoadCursorW(None, IDC_ARROW)` so Windows never falls back to an uninitialized or `IDC_APPSTARTING` (loading spinner) cursor.
-  - Intercepts `WM_NCHITTEST` and returns `HTTRANSPARENT`, making the window completely transparent to mouse clicks and cursor hover so underlying game or desktop interactions and custom cursors remain 100% active and uninhibited.
-  - Handles `WM_SETCURSOR` defensively to immediately set standard arrow without wait-cursor artifacts.
-- **Real-Time Window Clamping**:
-  - Attached via `SetTimer(hwnd, TRACK_TIMER_ID, TRACK_STEP_MS, None)` (100 ms / 10 Hz position reconciliation).
-  - Follows `target_hwnd` position in real-time, clamping to the top-center of the application frame: `wr.top + 10`.
-  - Auto-hides on app minimize (`IsIconic`) and restores smoothly when reopened.
-  - Session loop preserves the window and only calls `run.update(...)`, respawning only when application focus changes.
+### A. Timer HUD Overlay (`crates/session/src/hud.rs` & `crates/session/src/mpo.rs`)
+- **Visual Design**: Solid, high-contrast 92x28 pill (14px corner radius) with zero glassmorphism.
+  - Dark Theme: Solid Obsidian `#0B0D13` background, `#202534` 1px border, `#F3F4F6` digits.
+  - Light Theme: Solid Titanium `#FFFFFF` background, `#E5E7EB` 1px border, `#111827` digits.
+  - Dynamic Status Dot:
+    - Normal Active Tracking: Electric Cobalt `#3B82F6` (D2D / GDI).
+    - +15m Extension Timer: Amber Gold `#F59E0B`.
+    - Warning (≤60 seconds): Rose Coral `#F43F5E`.
+  - Digits: Bold monospace ClearType `Consolas` tabular time readout.
+- **Direct Dragging & Multi-Monitor Window Clamping**:
+  - Registered with `WS_EX_NOACTIVATE` so mouse dragging never steals keyboard focus or activates the overlay over fullscreen games or typing apps.
+  - Dragging uses Win32 `SetCapture` / `ReleaseCapture` upon `WM_LBUTTONDOWN`, `WM_MOUSEMOVE`, and `WM_LBUTTONUP`.
+  - Moving cursor shows `IDC_SIZEALL` 4-way move cursor.
+  - Position is clamped strictly inside target application window bounds (`wr.left + 4` to `wr.right - HUD_W - 4`).
+  - Position persistence: Saved to `%LOCALAPPDATA%\screentime\hud_pos.json` (relative offset and anchor corner: `from_right` / `from_bottom`). Survives window moves, resizing, and app restarts.
+- **Windows Volume Flyout-Style Entrance Animation**:
+  - Smooth 240 ms entrance animation powered by a 16 ms high-precision timer (`ANIM_TIMER_ID = 2`).
+  - Cubic deceleration easing: `ease = 1.0 - (1.0 - t)^3`.
+  - Adaptive trajectory: If positioned in the top half of the window, gracefully slides **down** from `target_y - 24` to `target_y`. If positioned in the bottom half, gracefully slides **up** from `target_y + 24` to `target_y`.
+  - Drag interruption: If the user begins dragging while the animation is playing, the animation cancels cleanly and mouse drag takes immediate precedence.
+- **Theme Synchronization**:
+  - Overlays continuously adapt to the user's active theme by synchronizing with `%LOCALAPPDATA%\screentime\theme.txt`.
 
 ### B. Hardware-Accelerated Tauri 2 React Block Overlay (`BlockOverlay.tsx` & `overlay_bridge.rs`)
-- **Architecture**: Replaces legacy hand-drawn GDI and the global `WH_KEYBOARD_LL` hook with a hardware-accelerated transparent secondary webview window in Tauri 2 commanded over named pipe `\\.\pipe\screentime_overlay_bridge`.
+- **Architecture**: Hardware-accelerated transparent secondary webview window in Tauri 2 commanded over named pipe `\\.\pipe\screentime_overlay_bridge`.
 - **Two-Tier Sampling & Reconciliation Cadence**:
-  - **100 ms Overlay & Focus Loop**: The session helper polls `take_sample()` at 10 Hz (100 ms interval). Focus transitions to and away from blocked apps react within ≤100 ms (down from legacy 1,000 ms lag), making the block screen snap into place and dismiss with near-instant responsiveness.
+  - **100 ms Overlay & Focus Loop**: The session helper polls `take_sample()` at 10 Hz (100 ms interval). Focus transitions to and away from blocked apps react within ≤100 ms, making the block screen snap into place and dismiss with near-instant responsiveness.
   - **1 Hz Ingest Grid Preservation**: Normal usage accumulation (`ObsAccumulator::offer`) and persistent pipe communication (`run_frames`) are bounded to ~1 Hz (plus immediate focus boundary flushes), preserving the agent's database write contract and zero-noise logging policy.
 - **Window Title Discrimination**:
   - `is_overlay_window_focused()` inspects the Win32 foreground window via `GetWindowTextW`.
   - When the user focuses the secondary block screen (`"Tether Overlay"`), input is preserved for PIN entry and extension.
   - When the user clicks the primary Tether Dashboard (`"Tether"`), the helper correctly treats this as moving focus away from the blocked app, instantly dismissing the block card and preventing the overlay from locking out the main application.
 - **Immediate Dismissal & Ghost Click Elimination**:
-  - On `OverlayBridgeRequest::Hide`, Tauri immediately calls `window.hide()` in 0 ms (rather than keeping an invisible/semi-transparent topmost window floating over the desktop for 240 ms).
-  - This eliminates ghost click stealing and prevents focus oscillation loops where mouse clicks near the overlay area would reactivate `screentime-ui.exe` and cause jitter or glitched lingering.
+  - On `OverlayBridgeRequest::Hide`, Tauri immediately calls `window.hide()` in 0 ms.
+  - Eliminates ghost click stealing and prevents focus oscillation loops where mouse clicks near the overlay area would reactivate `screentime-ui.exe`.
 - **Native OS Input Blocking Without Hooks**:
   - Upon limit trip, `screentime-session` calls `EnableWindow(target_hwnd, FALSE)` to make the blocked application completely inert to mouse, keyboard, and drag events natively at the Win32 OS level.
-  - This eliminates machine-wide key swallowing, allows uninhibited `Alt+Tab` and Windows key usage, and removes antivirus/EDR false positives.
+  - Eliminates machine-wide key swallowing, allows uninhibited `Alt+Tab` and Windows key usage, and removes antivirus/EDR false positives.
   - Upon unlock or focus dismissal, `screentime-session` calls `EnableWindow(target_hwnd, TRUE)` to instantly re-enable normal app interaction.
-- **Visual Design**:
-  - Full-window Backdrop: `rgba(12, 14, 20, 0.78)` smoked glass with hardware `backdrop-filter: blur(24px)`.
-  - Centered Obsidian Card: 480px floating card (`--bg-card-elevated`) with warm border illumination (`--border-strong`), matching `redesign.css`.
-  - Header: Tether brand lock badge paired with `LIMIT REACHED` or `DOWNTIME ACTIVE` status pill.
+- **Visual Design (Solid Crisp Styling — No Glassmorphism)**:
+  - Full-window Backdrop: Solid high-opacity veil (`var(--bg-modal-backdrop, rgba(11, 13, 19, 0.92))`).
+  - Centered Solid Card: 480px card (`--bg-card, #131620`) with crisp 1px border (`--border-card, #202534`) and deep elevation shadow (`0 24px 64px rgba(0, 0, 0, 0.6)`).
+  - Header: Tether brand lock badge paired with `LIMIT REACHED` status pill.
   - App Label: Bold display typography with category accent dot.
   - Dual Input PIN Support:
     - **Physical Keyboard**: Global listener intercepts digits `0–9`, `Backspace`, `Enter` (to submit), and `Escape` (to quit app).

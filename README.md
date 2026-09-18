@@ -64,7 +64,8 @@ Most commercial focus and screen-time applications fall into one of two traps:
 ### 🎮 Hardware Multiplane Overlay (MPO) Gaming HUD
 - **Zero FPS Drop in 3D Games**: Rendered via DirectComposition and DirectX 11 flip swapchain (`DXGI_SWAP_EFFECT_FLIP_DISCARD`), keeping full-screen DirectX 11/12 and Vulkan games in **Hardware Independent Flip (iFlip / DirectFlip)**.
 - **Driver Limiter & VRR Compatibility**: GPU driver-level frame limiters (AMD Radeon Chill, AMD FRTC, Nvidia Max Frame Rate) and Variable Refresh Rate (AMD FreeSync, Nvidia G-Sync) remain 100% active and uncompromised.
-- **Hit-Test Transparency (`HTTRANSPARENT`)**: Cursor hover and mouse clicks pass directly through to the underlying game or application. No cursor lag or wait/loading spinner artifacts.
+- **Draggable & Focus-Safe (`WS_EX_NOACTIVATE`)**: Freely reposition the timer overlay anywhere on the screen by dragging. Clicks and drags never steal focus from active games or typing applications. Position is remembered across app reboots.
+- **Volume Flyout-Style Entrance Animation**: Gracefully slides into position using a 240 ms cubic deceleration curve when apps launch.
 - **Universal On-Demand Peek (`Ctrl+Alt+T`)**: A global keyboard shortcut temporarily reveals your remaining time for 4 seconds on demand across any app or game—even when the continuous HUD is turned off.
 - **Milestone Harmonic Audio Alerts**: Subtle, high-fidelity chimes notify you when crossing 15m, 10m, 5m, and 1m thresholds without breaking immersion.
 
@@ -74,9 +75,10 @@ Most commercial focus and screen-time applications fall into one of two traps:
 - **Custom Domain Rules & Wildcards**: Add custom domain blocks or paste lists with automatic subdomain coverage (`*.example.com`).
 - **Encrypted DNS Lockdown**: Optional firewall policies to prevent browser DNS-over-HTTPS (DoH) bypasses.
 
-### 🎨 Smoked-Glass Analytics UI
+### 🎨 Solid Modern Analytics UI
 - **Tauri 2 Native Desktop Shell**: Low memory footprint (~35 MB RAM), hardware-accelerated rendering, frameless native window with custom title bar.
-- **Obsidian & Glass Aesthetics**: Fine-tuned dark theme, classic light theme, and automatic system theme following Windows OS preferences.
+- **Obsidian Dark & Titanium Light**: Crisp, high-contrast solid themes with zero glassmorphism (`backdrop-filter: blur` eliminated in favor of opaque, tactile surfaces with 1px border contrast).
+- **Synchronized Overlays**: Overlays dynamically match your active theme preference in real-time.
 - **Durable File Store Persistence**: Synchronous DOM bootstrapping combined with asynchronous Tauri file store (`theme.txt`) guarantees zero flash-of-unstyled-content (FOUC) and persistent theme retention across restarts.
 - **Full Internationalization (i18n)**: 100% complete localization in English (`en`) and Arabic (`ar`, with proper RTL layout alignment).
 

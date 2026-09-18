@@ -2088,7 +2088,6 @@ body {
   border: 1px solid var(--border-strong);
   border-radius: 20px;
   box-shadow: var(--shadow-modal);
-  backdrop-filter: blur(28px);
   transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 

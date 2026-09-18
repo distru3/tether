@@ -52,35 +52,61 @@ use windows::Win32::Graphics::Dxgi::{
 pub const HUD_W: u32 = 92;
 pub const HUD_H: u32 = 28;
 
-// Color Hunt palette tokens in linear sRGB for Direct2D
-const COLOR_BG_OBSIDIAN: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 33.0 / 255.0,
-    g: 15.0 / 255.0,
-    b: 55.0 / 255.0,
-    a: 0.92,
-};
-const COLOR_BORDER_AMBER: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 220.0 / 255.0,
-    g: 160.0 / 255.0,
-    b: 109.0 / 255.0,
-    a: 0.95,
-};
-const COLOR_BORDER_TERRACOTTA: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 165.0 / 255.0,
-    g: 91.0 / 255.0,
-    b: 75.0 / 255.0,
-    a: 0.95,
-};
-const COLOR_TEXT_AMBER: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 220.0 / 255.0,
-    g: 160.0 / 255.0,
-    b: 109.0 / 255.0,
+// Solid modern tokens in linear sRGB for Direct2D (Obsidian Onyx & Warm Sandstone)
+const COLOR_BG_DARK: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 9.0 / 255.0,
+    g: 10.0 / 255.0,
+    b: 15.0 / 255.0,
     a: 1.0,
 };
-const COLOR_TEXT_IVORY: D2D1_COLOR_F = D2D1_COLOR_F {
+const COLOR_BORDER_DARK: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 34.0 / 255.0,
+    g: 39.0 / 255.0,
+    b: 54.0 / 255.0,
+    a: 1.0,
+};
+const COLOR_TEXT_DARK: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 244.0 / 255.0,
+    g: 245.0 / 255.0,
+    b: 247.0 / 255.0,
+    a: 1.0,
+};
+
+const COLOR_BG_LIGHT: D2D1_COLOR_F = D2D1_COLOR_F {
     r: 245.0 / 255.0,
-    g: 238.0 / 255.0,
-    b: 248.0 / 255.0,
+    g: 242.0 / 255.0,
+    b: 235.0 / 255.0,
+    a: 1.0,
+};
+const COLOR_BORDER_LIGHT: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 221.0 / 255.0,
+    g: 215.0 / 255.0,
+    b: 204.0 / 255.0,
+    a: 1.0,
+};
+const COLOR_TEXT_LIGHT: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 28.0 / 255.0,
+    g: 25.0 / 255.0,
+    b: 23.0 / 255.0,
+    a: 1.0,
+};
+
+const COLOR_COBALT: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 59.0 / 255.0,
+    g: 130.0 / 255.0,
+    b: 246.0 / 255.0,
+    a: 1.0,
+};
+const COLOR_AMBER: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 245.0 / 255.0,
+    g: 158.0 / 255.0,
+    b: 11.0 / 255.0,
+    a: 1.0,
+};
+const COLOR_CORAL: D2D1_COLOR_F = D2D1_COLOR_F {
+    r: 244.0 / 255.0,
+    g: 63.0 / 255.0,
+    b: 94.0 / 255.0,
     a: 1.0,
 };
 
@@ -94,11 +120,15 @@ pub struct MpoHudRenderer {
     d2d_context: ID2D1DeviceContext,
     render_target: ID2D1RenderTarget,
     text_format: IDWriteTextFormat,
-    brush_bg: ID2D1SolidColorBrush,
+    brush_bg_dark: ID2D1SolidColorBrush,
+    brush_border_dark: ID2D1SolidColorBrush,
+    brush_text_dark: ID2D1SolidColorBrush,
+    brush_bg_light: ID2D1SolidColorBrush,
+    brush_border_light: ID2D1SolidColorBrush,
+    brush_text_light: ID2D1SolidColorBrush,
+    brush_cobalt: ID2D1SolidColorBrush,
     brush_amber: ID2D1SolidColorBrush,
-    brush_amber_text: ID2D1SolidColorBrush,
-    brush_terracotta: ID2D1SolidColorBrush,
-    brush_ivory: ID2D1SolidColorBrush,
+    brush_coral: ID2D1SolidColorBrush,
 }
 
 impl MpoHudRenderer {
@@ -203,21 +233,35 @@ impl MpoHudRenderer {
             let _ = text_format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER);
 
             // Pre-create solid brushes via ID2D1RenderTarget
-            let brush_bg = render_target
-                .CreateSolidColorBrush(&COLOR_BG_OBSIDIAN, None::<*const _>)
-                .context("Failed to create bg brush")?;
+            let brush_bg_dark = render_target
+                .CreateSolidColorBrush(&COLOR_BG_DARK, None::<*const _>)
+                .context("Failed to create bg dark brush")?;
+            let brush_border_dark = render_target
+                .CreateSolidColorBrush(&COLOR_BORDER_DARK, None::<*const _>)
+                .context("Failed to create border dark brush")?;
+            let brush_text_dark = render_target
+                .CreateSolidColorBrush(&COLOR_TEXT_DARK, None::<*const _>)
+                .context("Failed to create text dark brush")?;
+
+            let brush_bg_light = render_target
+                .CreateSolidColorBrush(&COLOR_BG_LIGHT, None::<*const _>)
+                .context("Failed to create bg light brush")?;
+            let brush_border_light = render_target
+                .CreateSolidColorBrush(&COLOR_BORDER_LIGHT, None::<*const _>)
+                .context("Failed to create border light brush")?;
+            let brush_text_light = render_target
+                .CreateSolidColorBrush(&COLOR_TEXT_LIGHT, None::<*const _>)
+                .context("Failed to create text light brush")?;
+
+            let brush_cobalt = render_target
+                .CreateSolidColorBrush(&COLOR_COBALT, None::<*const _>)
+                .context("Failed to create cobalt brush")?;
             let brush_amber = render_target
-                .CreateSolidColorBrush(&COLOR_BORDER_AMBER, None::<*const _>)
+                .CreateSolidColorBrush(&COLOR_AMBER, None::<*const _>)
                 .context("Failed to create amber brush")?;
-            let brush_amber_text = render_target
-                .CreateSolidColorBrush(&COLOR_TEXT_AMBER, None::<*const _>)
-                .context("Failed to create amber text brush")?;
-            let brush_terracotta = render_target
-                .CreateSolidColorBrush(&COLOR_BORDER_TERRACOTTA, None::<*const _>)
-                .context("Failed to create terracotta brush")?;
-            let brush_ivory = render_target
-                .CreateSolidColorBrush(&COLOR_TEXT_IVORY, None::<*const _>)
-                .context("Failed to create ivory brush")?;
+            let brush_coral = render_target
+                .CreateSolidColorBrush(&COLOR_CORAL, None::<*const _>)
+                .context("Failed to create coral brush")?;
 
             // 5. Connect DirectComposition tree to HWND
             let dcomp_device: IDCompositionDevice = DCompositionCreateDevice(Some(&dxgi_device))
@@ -250,17 +294,26 @@ impl MpoHudRenderer {
                 d2d_context,
                 render_target,
                 text_format,
-                brush_bg,
+                brush_bg_dark,
+                brush_border_dark,
+                brush_text_dark,
+                brush_bg_light,
+                brush_border_light,
+                brush_text_light,
+                brush_cobalt,
                 brush_amber,
-                brush_amber_text,
-                brush_terracotta,
-                brush_ivory,
+                brush_coral,
             })
         }
     }
 
     /// Renders a single frame directly to the DXGI flip swapchain and presents it.
-    pub fn render_frame(&mut self, remaining_secs: i64, is_timer: bool) -> Result<()> {
+    pub fn render_frame(
+        &mut self,
+        remaining_secs: i64,
+        is_timer: bool,
+        is_light: bool,
+    ) -> Result<()> {
         unsafe {
             let back_buffer = self
                 .swap_chain
@@ -294,7 +347,31 @@ impl MpoHudRenderer {
                 a: 0.0,
             }));
 
-            // 1. Draw rounded obsidian pill background
+            // 1. Select palette brushes
+            let bg_brush = if is_light {
+                &self.brush_bg_light
+            } else {
+                &self.brush_bg_dark
+            };
+            let border_brush = if is_light {
+                &self.brush_border_light
+            } else {
+                &self.brush_border_dark
+            };
+            let text_brush = if is_light {
+                &self.brush_text_light
+            } else {
+                &self.brush_text_dark
+            };
+            let dot_brush = if remaining_secs <= 60 {
+                &self.brush_coral
+            } else if is_timer {
+                &self.brush_amber
+            } else {
+                &self.brush_cobalt
+            };
+
+            // 2. Draw rounded solid pill background
             let rect = windows::Win32::Graphics::Direct2D::Common::D2D_RECT_F {
                 left: 0.5,
                 top: 0.5,
@@ -308,18 +385,13 @@ impl MpoHudRenderer {
             };
 
             self.render_target
-                .FillRoundedRectangle(&rounded_rect, &self.brush_bg);
+                .FillRoundedRectangle(&rounded_rect, bg_brush);
 
-            // 2. Draw border
-            let border_brush = if is_timer {
-                &self.brush_amber
-            } else {
-                &self.brush_terracotta
-            };
+            // 3. Draw border
             self.render_target
                 .DrawRoundedRectangle(&rounded_rect, border_brush, 1.0, None);
 
-            // 3. Draw glowing indicator dot
+            // 4. Draw glowing status dot
             let dot_ellipse = D2D1_ELLIPSE {
                 point: windows::Win32::Graphics::Direct2D::Common::D2D_POINT_2F {
                     x: 14.0,
@@ -328,9 +400,9 @@ impl MpoHudRenderer {
                 radiusX: 3.5,
                 radiusY: 3.5,
             };
-            self.render_target.FillEllipse(&dot_ellipse, border_brush);
+            self.render_target.FillEllipse(&dot_ellipse, dot_brush);
 
-            // 4. Draw countdown digits with DirectWrite
+            // 5. Draw countdown digits with DirectWrite
             let hrs = remaining_secs / 3600;
             let mins = (remaining_secs % 3600) / 60;
             let secs = remaining_secs % 60;
@@ -346,12 +418,6 @@ impl MpoHudRenderer {
                 top: 0.0,
                 right: HUD_W as f32 - 6.0,
                 bottom: HUD_H as f32,
-            };
-
-            let text_brush = if is_timer {
-                &self.brush_amber_text
-            } else {
-                &self.brush_ivory
             };
 
             self.render_target.DrawText(

@@ -542,6 +542,15 @@ fn set_theme(app: tauri::AppHandle, theme: String) -> CmdResult<()> {
         code: "io_error".into(),
         message: format!("cannot write theme file: {e}"),
     })?;
+    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
+        let p = std::path::PathBuf::from(local_app_data)
+            .join("screentime")
+            .join("theme.txt");
+        if let Some(parent) = p.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::write(&p, theme.as_bytes());
+    }
     Ok(())
 }
 
