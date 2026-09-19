@@ -12,17 +12,18 @@
             (function () {
                 try {
                     var pref = localStorage.getItem("tether_theme");
-                    if (pref === "dark") pref = "horizon-dark";
-                    if (pref === "light") pref = "horizon-light";
-                    var effective = "horizon-dark";
-                    if (pref === "horizon-dark" || pref === "horizon-light" || pref === "classic-dark" || pref === "classic-light") {
+                    if (pref === "dark" || pref === "horizon-dark" || pref === "classic-dark") pref = "midnight-cobalt";
+                    if (pref === "light" || pref === "horizon-light" || pref === "classic-light") pref = "clean-titanium";
+                    var effective = "midnight-cobalt";
+                    if (pref === "midnight-cobalt" || pref === "cyber-emerald" || pref === "clean-titanium" || pref === "nordic-frost") {
                         effective = pref;
                     } else {
                         var isDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
-                        effective = isDark ? "horizon-dark" : "horizon-light";
+                        effective = isDark ? "midnight-cobalt" : "clean-titanium";
                     }
                     document.documentElement.setAttribute("data-theme", effective);
-                    document.documentElement.setAttribute("data-theme-mode", effective.indexOf("light") !== -1 ? "light" : "dark");
+                    var isLight = effective === "clean-titanium" || effective === "nordic-frost";
+                    document.documentElement.setAttribute("data-theme-mode", isLight ? "light" : "dark");
                 } catch (e) {}
             })();
         </script>

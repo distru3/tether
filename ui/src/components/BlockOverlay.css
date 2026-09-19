@@ -1,0 +1,109 @@
+/* ==========================================================================
+   BlockOverlay.css - Hardware-accelerated entrance/exit & theme styles
+   ========================================================================== */
+
+@keyframes overlayBackdropIn {
+  from {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+  }
+  to {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+}
+
+@keyframes overlayBackdropOut {
+  from {
+    opacity: 1;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  to {
+    opacity: 0;
+    backdrop-filter: blur(0px);
+    -webkit-backdrop-filter: blur(0px);
+  }
+}
+
+@keyframes overlayCardIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(16px) translateZ(0);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0) translateZ(0);
+  }
+}
+
+@keyframes overlayCardOut {
+  from {
+    opacity: 1;
+    transform: scale(1) translateY(0) translateZ(0);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.95) translateY(16px) translateZ(0);
+  }
+}
+
+.block-overlay-container,
+.tether-overlay-backdrop {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  box-sizing: border-box;
+  background: var(--bg-modal-backdrop, rgba(0, 0, 0, 0.75));
+  animation: overlayBackdropIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, backdrop-filter;
+  user-select: none;
+}
+
+.block-overlay-container.is-exiting,
+.tether-overlay-backdrop.tether-overlay-backdrop--exiting {
+  animation: overlayBackdropOut 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.block-overlay-card,
+.tether-overlay-card {
+  width: 480px;
+  max-width: calc(100vw - 32px);
+  max-height: calc(100vh - 32px);
+  background: var(--bg-panel, var(--bg-card));
+  border: 1px solid var(--border-card, var(--border-subtle));
+  border-radius: 16px;
+  box-shadow: 0 24px 64px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-subtle);
+  overflow: hidden;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  color: var(--text-primary);
+  animation: overlayCardIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+  box-sizing: border-box;
+}
+
+.block-overlay-card.is-exiting,
+.tether-overlay-card.tether-overlay-card--exiting {
+  animation: overlayCardOut 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* PIN dial input and buttons inside overlay */
+.block-overlay-card .pin-cell {
+  background: var(--bg-input, var(--bg-recessed));
+  border: 1px solid var(--border-subtle);
+  color: var(--text-primary);
+}
+
+.block-overlay-card .pin-cell:focus {
+  border-color: var(--color-primary);
+}

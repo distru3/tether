@@ -94,12 +94,7 @@ pub fn start_bridge_server(
                             let _ = st_ipc::write_message(&mut stream, &OverlayBridgeResponse::Ack);
                         }
                         Ok(OverlayBridgeRequest::Hide) => {
-                            *bridge_state.lock().unwrap() = None;
-                            if let Some(window) = app.get_webview_window("overlay") {
-                                let _ = window.hide();
-                                let _ = app.emit("overlay_hide", ());
-                                let _ = window.emit("overlay_hide", ());
-                            }
+                            hide_overlay_gracefully(&app, bridge_state.clone());
                             let _ = st_ipc::write_message(&mut stream, &OverlayBridgeResponse::Ack);
                         }
                         Ok(OverlayBridgeRequest::Ping) => {
@@ -126,6 +121,8 @@ fn hide_overlay_gracefully(
 ) {
     *bridge_state.lock().unwrap() = None;
     if let Some(window) = app.get_webview_window("overlay") {
+        let _ = app.emit("overlay_graceful_exit", ());
+        let _ = window.emit("overlay_graceful_exit", ());
         let _ = app.emit("overlay_hide", ());
         let _ = window.emit("overlay_hide", ());
         let win = window.clone();

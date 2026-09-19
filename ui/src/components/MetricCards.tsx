@@ -15,21 +15,19 @@ interface MetricCardsProps {
 
 export function MetricCards({ metrics }: MetricCardsProps) {
     return (
-        <div className="metric-cards-grid">
+        <div className="metric-telemetry-bar">
             {metrics.map((metric, idx) => (
-                <div key={idx} className="metric-card">
-                    <div className="metric-card-header">
-                        <span className="metric-label">{metric.label}</span>
-                        <div className="metric-icon">{metric.icon}</div>
+                <div key={idx} className="metric-telemetry-item">
+                    <div className="metric-telemetry-top">
+                        <span className="metric-telemetry-label">{metric.label}</span>
+                        <div className="metric-telemetry-icon">{metric.icon}</div>
                     </div>
-                    <div className="metric-value-row">
-                        <span className="metric-value">{metric.value}</span>
-                        {metric.badge && <span className="metric-badge">{metric.badge}</span>}
+                    <div className="metric-telemetry-val-row">
+                        <span className="metric-telemetry-value">{metric.value}</span>
+                        {metric.badge && <span className="metric-telemetry-badge">{metric.badge}</span>}
                     </div>
                     {metric.trend && (
-                        <div className="metric-footer">
-                            <span className="metric-trend">{metric.trend}</span>
-                        </div>
+                        <div className="metric-telemetry-trend">{metric.trend}</div>
                     )}
                 </div>
             ))}

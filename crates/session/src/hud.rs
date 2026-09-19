@@ -39,18 +39,18 @@ const fn rgb(r: u8, g: u8, b: u8) -> COLORREF {
     COLORREF(r as u32 | ((g as u32) << 8) | ((b as u32) << 16))
 }
 
-// Solid Obsidian Onyx Dark tokens
-const BG_DARK: COLORREF = rgb(0x09, 0x0A, 0x0F);
-const BORDER_DARK: COLORREF = rgb(0x22, 0x27, 0x36);
-const TEXT_DARK: COLORREF = rgb(0xF4, 0xF5, 0xF7);
+// Midnight Cobalt / Cyber Emerald Dark tokens
+const BG_DARK: COLORREF = rgb(0x0B, 0x0E, 0x17);
+const BORDER_DARK: COLORREF = rgb(0x1E, 0x26, 0x38);
+const TEXT_DARK: COLORREF = rgb(0xF8, 0xFA, 0xFC);
 
-// Solid Warm Sandstone Light tokens
-const BG_LIGHT: COLORREF = rgb(0xF5, 0xF2, 0xEB);
-const BORDER_LIGHT: COLORREF = rgb(0xDD, 0xD7, 0xCC);
-const TEXT_LIGHT: COLORREF = rgb(0x1C, 0x19, 0x17);
+// Clean Titanium / Nordic Frost Light tokens
+const BG_LIGHT: COLORREF = rgb(0xF8, 0xFA, 0xFC);
+const BORDER_LIGHT: COLORREF = rgb(0xE2, 0xE8, 0xF0);
+const TEXT_LIGHT: COLORREF = rgb(0x0F, 0x17, 0x2A);
 
 // Indicator dot states
-const DOT_COBALT: COLORREF = rgb(0x3B, 0x82, 0xF6);
+const DOT_COBALT: COLORREF = rgb(0x4F, 0x46, 0xE5); // Electric Cobalt
 const DOT_AMBER: COLORREF = rgb(0xF5, 0x9E, 0x0B);
 const DOT_CORAL: COLORREF = rgb(0xF4, 0x3F, 0x5E);
 
@@ -92,10 +92,67 @@ fn is_light_theme() -> bool {
     if let Some(p) = path {
         if let Ok(content) = std::fs::read_to_string(p) {
             let trimmed = content.trim();
-            return trimmed.contains("titanium-light") || trimmed.contains("light");
+            return trimmed.contains("clean-titanium")
+                || trimmed.contains("nordic-frost")
+                || trimmed.contains("light")
+                || trimmed.contains("titanium")
+                || trimmed.contains("frost");
         }
     }
     false
+}
+
+pub const PHASE_ENTERING: u8 = 0;
+pub const PHASE_SETTLED: u8 = 1;
+pub const PHASE_EXITING: u8 = 2;
+pub const PHASE_CLOSED: u8 = 3;
+
+pub struct HudAnimShared {
+    pub phase: std::sync::atomic::AtomicU8,
+    pub cancel: AtomicBool,
+    pub start_y: std::sync::atomic::AtomicI32,
+    pub target_y: std::sync::atomic::AtomicI32,
+    pub current_y: std::sync::atomic::AtomicI32,
+    pub final_y: std::sync::atomic::AtomicI32,
+    pub anim_start_y: std::sync::atomic::AtomicI32,
+}
+
+impl HudAnimShared {
+    pub fn new(final_y: i32, anim_start_y: i32) -> Self {
+        Self {
+            phase: std::sync::atomic::AtomicU8::new(PHASE_ENTERING),
+            cancel: AtomicBool::new(false),
+            start_y: std::sync::atomic::AtomicI32::new(anim_start_y),
+            target_y: std::sync::atomic::AtomicI32::new(final_y),
+            current_y: std::sync::atomic::AtomicI32::new(anim_start_y),
+            final_y: std::sync::atomic::AtomicI32::new(final_y),
+            anim_start_y: std::sync::atomic::AtomicI32::new(anim_start_y),
+        }
+    }
+
+    pub fn trigger_exit(&self) {
+        let cur = self.phase.load(Ordering::Relaxed);
+        if cur == PHASE_EXITING || cur == PHASE_CLOSED {
+            return;
+        }
+        let cur_y = self.current_y.load(Ordering::Relaxed);
+        self.start_y.store(cur_y, Ordering::Relaxed);
+        self.target_y
+            .store(self.anim_start_y.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.phase.store(PHASE_EXITING, Ordering::Relaxed);
+    }
+
+    pub fn trigger_enter(&self) {
+        let cur = self.phase.load(Ordering::Relaxed);
+        if cur == PHASE_ENTERING || cur == PHASE_SETTLED {
+            return;
+        }
+        let cur_y = self.current_y.load(Ordering::Relaxed);
+        self.start_y.store(cur_y, Ordering::Relaxed);
+        self.target_y
+            .store(self.final_y.load(Ordering::Relaxed), Ordering::Relaxed);
+        self.phase.store(PHASE_ENTERING, Ordering::Relaxed);
+    }
 }
 
 fn compute_target_pos(wr: &RECT, cfg: Option<HudPosConfig>) -> (i32, i32) {
@@ -137,7 +194,7 @@ struct HudState {
     drag_start_cursor: POINT,
     drag_start_win: (i32, i32),
     anim_active: bool,
-    anim_cancel: Arc<AtomicBool>,
+    anim_ctrl: Arc<HudAnimShared>,
     pos_config: Option<HudPosConfig>,
     mpo: Option<crate::mpo::MpoHudRenderer>,
 }
@@ -145,10 +202,29 @@ struct HudState {
 pub struct HudOverlayRun {
     thread: Option<std::thread::JoinHandle<()>>,
     hwnd: HWND,
+    controller: Arc<HudAnimShared>,
 }
 
 impl HudOverlayRun {
+    pub fn is_exiting(&self) -> bool {
+        self.controller.phase.load(Ordering::Relaxed) == PHASE_EXITING
+    }
+
+    pub fn is_alive(&self) -> bool {
+        let p = self.controller.phase.load(Ordering::Relaxed);
+        p != PHASE_CLOSED && !self.hwnd.0.is_null() && unsafe { IsWindow(self.hwnd).as_bool() }
+    }
+
+    pub fn start_exit(&self) {
+        self.controller.trigger_exit();
+    }
+
+    pub fn reverse_to_enter(&self) {
+        self.controller.trigger_enter();
+    }
+
     pub fn dismiss(mut self) {
+        self.controller.cancel.store(true, Ordering::Relaxed);
         if !self.hwnd.0.is_null() {
             unsafe {
                 let _ = PostMessageW(self.hwnd, WM_CLOSE, WPARAM(0), LPARAM(0));
@@ -192,8 +268,9 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
         final_y - 24
     };
 
-    let anim_cancel = Arc::new(AtomicBool::new(false));
-    let anim_cancel_for_thread = anim_cancel.clone();
+    let anim_shared = Arc::new(HudAnimShared::new(final_y, anim_start_y));
+    let anim_ctrl_for_thread = anim_shared.clone();
+    let anim_ctrl_for_state = anim_shared.clone();
 
     let (sender, receiver) = std::sync::mpsc::channel();
     let thread = std::thread::spawn(move || unsafe {
@@ -223,7 +300,7 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
             drag_start_cursor: POINT::default(),
             drag_start_win: (final_x, anim_start_y),
             anim_active: true,
-            anim_cancel: anim_cancel.clone(),
+            anim_ctrl: anim_ctrl_for_state,
             pos_config: saved_cfg,
             mpo: None,
         }));
@@ -281,8 +358,7 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
 
         // Dedicated 120 FPS high-precision animation worker thread
         let anim_hwnd = hwnd.0 as isize;
-        let anim_start_y_val = anim_start_y;
-        let final_y_val = final_y;
+        let anim_ctrl = anim_ctrl_for_thread;
         std::thread::spawn(move || {
             #[link(name = "winmm")]
             extern "system" {
@@ -291,31 +367,72 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
             }
 
             let _ = timeBeginPeriod(1);
-
-            let start_time = Instant::now();
             let hwnd = HWND(anim_hwnd as *mut c_void);
 
-            while !anim_cancel_for_thread.load(Ordering::Relaxed) {
-                let elapsed = start_time.elapsed().as_secs_f32() * 1000.0;
-                let t = (elapsed / ANIM_DURATION_MS).clamp(0.0, 1.0);
-                // Windows 11 volume cubic ease-out
-                let ease = 1.0 - (1.0 - t).powi(3);
-                let cur_y = (anim_start_y_val as f32
-                    + (final_y_val - anim_start_y_val) as f32 * ease)
-                    .round() as i32;
+            let mut active_phase = PHASE_ENTERING;
+            let mut anim_start = Instant::now();
+            let mut from_y = anim_ctrl.start_y.load(Ordering::Relaxed);
+            let mut to_y = anim_ctrl.target_y.load(Ordering::Relaxed);
 
-                if !IsWindow(hwnd).as_bool() {
+            while !anim_ctrl.cancel.load(Ordering::Relaxed) {
+                let current_phase = anim_ctrl.phase.load(Ordering::Relaxed);
+                if current_phase == PHASE_CLOSED {
                     break;
                 }
-                let _ = PostMessageW(
-                    hwnd,
-                    WM_ANIM_TICK,
-                    WPARAM(cur_y as usize),
-                    LPARAM(if t >= 1.0 { 1 } else { 0 }),
-                );
 
-                if t >= 1.0 {
-                    break;
+                // Detect phase transition (e.g. exit started, or reversed back to entrance)
+                if current_phase != active_phase {
+                    active_phase = current_phase;
+                    anim_start = Instant::now();
+                    from_y = anim_ctrl.start_y.load(Ordering::Relaxed);
+                    to_y = anim_ctrl.target_y.load(Ordering::Relaxed);
+                }
+
+                if active_phase == PHASE_ENTERING {
+                    let elapsed = anim_start.elapsed().as_secs_f32() * 1000.0;
+                    let t = (elapsed / ANIM_DURATION_MS).clamp(0.0, 1.0);
+                    // Windows 11 cubic ease-out
+                    let ease = 1.0 - (1.0 - t).powi(3);
+                    let cur_y = (from_y as f32 + (to_y - from_y) as f32 * ease).round() as i32;
+                    anim_ctrl.current_y.store(cur_y, Ordering::Relaxed);
+
+                    if !IsWindow(hwnd).as_bool() {
+                        break;
+                    }
+                    let _ = PostMessageW(
+                        hwnd,
+                        WM_ANIM_TICK,
+                        WPARAM(cur_y as usize),
+                        LPARAM(if t >= 1.0 { 1 } else { 0 }),
+                    );
+
+                    if t >= 1.0 {
+                        anim_ctrl.phase.store(PHASE_SETTLED, Ordering::Relaxed);
+                        active_phase = PHASE_SETTLED;
+                    }
+                } else if active_phase == PHASE_EXITING {
+                    let elapsed = anim_start.elapsed().as_secs_f32() * 1000.0;
+                    let t = (elapsed / ANIM_DURATION_MS).clamp(0.0, 1.0);
+                    // Smooth cubic ease-in: sliding back off-screen in the direction it entered
+                    let ease = t.powi(3);
+                    let cur_y = (from_y as f32 + (to_y - from_y) as f32 * ease).round() as i32;
+                    anim_ctrl.current_y.store(cur_y, Ordering::Relaxed);
+
+                    if !IsWindow(hwnd).as_bool() {
+                        break;
+                    }
+                    let _ = PostMessageW(
+                        hwnd,
+                        WM_ANIM_TICK,
+                        WPARAM(cur_y as usize),
+                        LPARAM(if t >= 1.0 { 1 } else { 0 }),
+                    );
+
+                    if t >= 1.0 {
+                        anim_ctrl.phase.store(PHASE_CLOSED, Ordering::Relaxed);
+                        let _ = PostMessageW(hwnd, WM_CLOSE, WPARAM(0), LPARAM(0));
+                        break;
+                    }
                 }
 
                 std::thread::sleep(Duration::from_millis(8)); // ~120 Hz tick
@@ -339,6 +456,7 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
     HudOverlayRun {
         thread: Some(thread),
         hwnd,
+        controller: anim_shared,
     }
 }
 
@@ -364,7 +482,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut HudState;
             if !state.is_null() {
                 let st = &mut *state;
-                st.anim_cancel.store(true, Ordering::Relaxed);
+                st.anim_ctrl.cancel.store(true, Ordering::Relaxed);
+                st.anim_ctrl.phase.store(PHASE_SETTLED, Ordering::Relaxed);
                 st.anim_active = false;
                 st.is_dragging = true;
                 let mut pt = POINT::default();
@@ -535,14 +654,27 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                             let th = wr.bottom - wr.top;
                             if tw > 0 && th > 0 {
                                 let (target_x, target_y) = compute_target_pos(&wr, st.pos_config);
-                                if st.anim_active {
-                                    if target_x != st.last_x {
+                                st.anim_ctrl.final_y.store(target_y, Ordering::Relaxed);
+                                let is_bottom_half = (target_y - wr.top) > (th.max(1) / 2);
+                                let offscreen_y = if is_bottom_half {
+                                    target_y + 24
+                                } else {
+                                    target_y - 24
+                                };
+                                st.anim_ctrl
+                                    .anim_start_y
+                                    .store(offscreen_y, Ordering::Relaxed);
+
+                                if st.anim_ctrl.phase.load(Ordering::Relaxed) == PHASE_SETTLED {
+                                    if target_x != st.last_x || target_y != st.last_y {
                                         st.last_x = target_x;
+                                        st.last_y = target_y;
+                                        st.anim_ctrl.current_y.store(target_y, Ordering::Relaxed);
                                         let _ = SetWindowPos(
                                             hwnd,
                                             HWND(std::ptr::null_mut()),
                                             target_x,
-                                            st.last_y,
+                                            target_y,
                                             HUD_W,
                                             HUD_H,
                                             SWP_NOACTIVATE
@@ -552,14 +684,13 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                                                 | SWP_NOSENDCHANGING,
                                         );
                                     }
-                                } else if target_x != st.last_x || target_y != st.last_y {
+                                } else if target_x != st.last_x {
                                     st.last_x = target_x;
-                                    st.last_y = target_y;
                                     let _ = SetWindowPos(
                                         hwnd,
                                         HWND(std::ptr::null_mut()),
                                         target_x,
-                                        target_y,
+                                        st.last_y,
                                         HUD_W,
                                         HUD_H,
                                         SWP_NOACTIVATE
@@ -706,7 +837,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let state = GetWindowLongPtrW(hwnd, GWLP_USERDATA) as *mut HudState;
             if !state.is_null() {
                 let st = &mut *state;
-                st.anim_cancel.store(true, Ordering::Relaxed);
+                st.anim_ctrl.cancel.store(true, Ordering::Relaxed);
+                st.anim_ctrl.phase.store(PHASE_CLOSED, Ordering::Relaxed);
                 st.anim_active = false;
                 drop(Box::from_raw(state));
             }

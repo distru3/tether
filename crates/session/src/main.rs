@@ -496,10 +496,32 @@ fn main() -> anyhow::Result<()> {
                     if !allow_continuous && !peek_active {
                         // Suppress HUD overlay when continuous HUD is disabled or over full-screen games,
                         // unless temporarily revealed via peek shortcut or milestone alert.
+                        #[cfg(windows)]
+                        {
+                            if let Some((_, ref run)) = active_hud {
+                                if !run.is_exiting() {
+                                    run.start_exit();
+                                }
+                            }
+                            if let Some((_, ref run)) = active_hud {
+                                if !run.is_alive() {
+                                    if let Some((_, run)) = active_hud.take() {
+                                        run.dismiss();
+                                    }
+                                }
+                            }
+                        }
+                        #[cfg(not(windows))]
                         if let Some((_, run)) = active_hud.take() {
                             run.dismiss();
                         }
                     } else if snap.rect.2 > 0 && snap.rect.3 > 0 && current_key == Some(&snap.key) {
+                        #[cfg(windows)]
+                        let should_respawn = active_hud
+                            .as_ref()
+                            .map(|(hwnd, run)| *hwnd != snap.hwnd || !run.is_alive())
+                            .unwrap_or(true);
+                        #[cfg(not(windows))]
                         let should_respawn = active_hud
                             .as_ref()
                             .map(|(hwnd, _)| *hwnd != snap.hwnd)
@@ -511,6 +533,12 @@ fn main() -> anyhow::Result<()> {
                             }
                             active_hud =
                                 Some((snap.hwnd, hud::spawn_hud_overlay(snap.hwnd, snap.rect)));
+                        } else if let Some((_, ref run)) = active_hud {
+                            #[cfg(windows)]
+                            if run.is_exiting() {
+                                // Hotkey pressed during exit animation: smoothly reverse back to entrance!
+                                run.reverse_to_enter();
+                            }
                         }
 
                         if let Some((_, ref run)) = active_hud {
@@ -530,8 +558,24 @@ fn main() -> anyhow::Result<()> {
 
         // Hold the cadence even when a cycle's work took real time.
         let spent = tick.elapsed();
-        if spent < POLL {
-            std::thread::sleep(POLL - spent);
+        let mut sleep_dur = POLL.saturating_sub(spent);
+        #[cfg(windows)]
+        {
+            if let Some((_, ref run)) = active_hud {
+                if run.is_exiting() {
+                    // Poll at high frequency (50ms) during exit animation to catch hotkey interruption immediately
+                    sleep_dur = sleep_dur.min(Duration::from_millis(50));
+                } else if !sess.show_hud_overlay {
+                    if let Some(rem_ms) = hotkey_mgr.peek_remaining_ms(4000) {
+                        if rem_ms > 0 {
+                            sleep_dur = sleep_dur.min(Duration::from_millis(rem_ms.max(20)));
+                        }
+                    }
+                }
+            }
+        }
+        if !sleep_dur.is_zero() {
+            std::thread::sleep(sleep_dur);
         }
     }
 }
@@ -1280,6 +1324,23 @@ impl HotkeyManager {
             .as_millis() as u64;
         now.saturating_sub(last) <= within_ms
     }
+
+    fn peek_remaining_ms(&self, duration_ms: u64) -> Option<u64> {
+        let last = self.last_pressed.load(std::sync::atomic::Ordering::Relaxed);
+        if last == 0 {
+            return None;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let elapsed = now.saturating_sub(last);
+        if elapsed < duration_ms {
+            Some(duration_ms - elapsed)
+        } else {
+            None
+        }
+    }
 }
 
 #[cfg(not(windows))]
@@ -1289,6 +1350,10 @@ struct HotkeyManager;
 impl HotkeyManager {
     fn was_pressed_recently(&self, _within_ms: u64) -> bool {
         false
+    }
+
+    fn peek_remaining_ms(&self, _duration_ms: u64) -> Option<u64> {
+        None
     }
 }
 

@@ -437,250 +437,247 @@ function MainDashboard() {
                   <p>Shape how Tether tracks, protects, and presents your day.</p>
                 </div>
 
-                <div className="settings-columns">
-                  {/* Column 1: General Preferences, HUD Controls, and Application Directory */}
-                  <div className="settings-column">
-                    {/* General & Appearance */}
-                    <section className="card settings-card settings-card--general">
-                      <header className="card-header">
-                        <h2>{t("settings.general", "General & Appearance")}</h2>
-                        <div className="card-subtitle">{t("settings.generalDesc", "Language and visual theme preferences.")}</div>
-                      </header>
-                      <div className="card-body">
-                        {/* Language */}
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                          <div>
-                            <div className="form-label">{t("settings.language")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {t("settings.languageDesc")}
-                            </div>
-                          </div>
-                          <div className="language-selector-group">
-                            <button
-                              type="button"
-                              className={`lang-btn ${i18n.language?.startsWith("en") ? "lang-btn--active" : ""}`}
-                              onClick={() => applyLanguage("en")}
-                            >
-                              {t("settings.english")}
-                            </button>
-                            <button
-                              type="button"
-                              className={`lang-btn ${i18n.language?.startsWith("ar") ? "lang-btn--active" : ""}`}
-                              onClick={() => applyLanguage("ar")}
-                            >
-                              {t("settings.arabic")}
-                            </button>
+                <div className="settings-workspace">
+                  {/* General & Appearance */}
+                  <section className="settings-section settings-section--general">
+                    <header className="settings-section-header">
+                      <h2>{t("settings.general", "General & Appearance")}</h2>
+                      <div className="section-desc">{t("settings.generalDesc", "Language and visual theme preferences.")}</div>
+                    </header>
+                    <div className="settings-section-body">
+                      {/* Language */}
+                      <div className="settings-row">
+                        <div>
+                          <div className="form-label">{t("settings.language")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {t("settings.languageDesc")}
                           </div>
                         </div>
-
-                        {/* Theme selector */}
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-                          <div style={{ minWidth: '180px' }}>
-                            <div className="form-label">{t("settings.theme", "Color Theme")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {t("settings.themeDesc", "Choose your preferred color scheme or follow your system settings.")}
-                            </div>
-                          </div>
-                          <div className="theme-selector-group">
-                            <button
-                              type="button"
-                              className={`theme-btn ${theme === "horizon-dark" ? "theme-btn--active" : ""}`}
-                              onClick={() => setTheme("horizon-dark")}
-                            >
-                              <span className="theme-swatch-dot theme-swatch-dot--horizon-dark" />
-                              {t("settings.themeHorizonDark", "Obsidian Onyx")}
-                            </button>
-                            <button
-                              type="button"
-                              className={`theme-btn ${theme === "horizon-light" ? "theme-btn--active" : ""}`}
-                              onClick={() => setTheme("horizon-light")}
-                            >
-                              <span className="theme-swatch-dot theme-swatch-dot--horizon-light" />
-                              {t("settings.themeHorizonLight", "Warm Sandstone")}
-                            </button>
-                            <button
-                              type="button"
-                              className={`theme-btn ${theme === "classic-dark" ? "theme-btn--active" : ""}`}
-                              onClick={() => setTheme("classic-dark")}
-                            >
-                              <span className="theme-swatch-dot theme-swatch-dot--classic-dark" />
-                              {t("settings.themeClassicDark", "Classic Dark")}
-                            </button>
-                            <button
-                              type="button"
-                              className={`theme-btn ${theme === "classic-light" ? "theme-btn--active" : ""}`}
-                              onClick={() => setTheme("classic-light")}
-                            >
-                              <span className="theme-swatch-dot theme-swatch-dot--classic-light" />
-                              {t("settings.themeClassicLight", "Classic Light")}
-                            </button>
-                            <button
-                              type="button"
-                              className={`theme-btn ${theme === "system" ? "theme-btn--active" : ""}`}
-                              onClick={() => setTheme("system")}
-                            >
-                              <span className="theme-swatch-dot theme-swatch-dot--system" />
-                              {t("settings.themeSystem", "System")}
-                            </button>
-                          </div>
+                        <div className="language-selector-group">
+                          <button
+                            type="button"
+                            className={`lang-btn ${i18n.language?.startsWith("en") ? "lang-btn--active" : ""}`}
+                            onClick={() => applyLanguage("en")}
+                          >
+                            {t("settings.english")}
+                          </button>
+                          <button
+                            type="button"
+                            className={`lang-btn ${i18n.language?.startsWith("ar") ? "lang-btn--active" : ""}`}
+                            onClick={() => applyLanguage("ar")}
+                          >
+                            {t("settings.arabic")}
+                          </button>
                         </div>
                       </div>
-                    </section>
 
-                    {/* Timer HUD & Overlay */}
-                    <section className="card settings-card settings-card--hud">
-                      <header className="card-header">
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                          <h2 style={{ margin: 0 }}>{t("settings.hudTitle", "Timer HUD & Overlay")}</h2>
-                          <span className="badge badge-sm badge--warning">{t("common.beta", "Beta")}</span>
-                        </div>
-                        <div className="card-subtitle">{t("settings.hudSubtitle", "Floating indicator and in-game timer controls.")}</div>
-                      </header>
-                      <div className="card-body">
-                        {/* HUD overlay */}
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div className="form-label">{t("settings.showHud")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {t("settings.showHudDesc")}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            {pendingSettings["show_hud_overlay"] && <LoadingSpinner size="sm" />}
-                            <input
-                              type="checkbox"
-                              className="toggle-switch"
-                              checked={statusInfo?.show_hud_overlay ?? true}
-                              disabled={pendingSettings["show_hud_overlay"]}
-                              onChange={(e) => {
-                                void handleUpdateSetting("show_hud_overlay", e.target.checked.toString());
-                              }}
-                            />
+                      {/* Theme selector */}
+                      <div className="settings-row" style={{ flexWrap: 'wrap', gap: '12px' }}>
+                        <div style={{ minWidth: '180px' }}>
+                          <div className="form-label">{t("settings.theme", "Color Theme")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {t("settings.themeDesc", "Choose your preferred color scheme or follow your system settings.")}
                           </div>
                         </div>
+                        <div className="theme-selector-group">
+                          <button
+                            type="button"
+                            className={`theme-btn ${theme === "midnight-cobalt" ? "theme-btn--active" : ""}`}
+                            onClick={() => setTheme("midnight-cobalt")}
+                          >
+                            <span className="theme-swatch-dot theme-swatch-dot--midnight-cobalt" />
+                            {t("settings.themeMidnightCobalt", "Midnight Cobalt")}
+                          </button>
+                          <button
+                            type="button"
+                            className={`theme-btn ${theme === "cyber-emerald" ? "theme-btn--active" : ""}`}
+                            onClick={() => setTheme("cyber-emerald")}
+                          >
+                            <span className="theme-swatch-dot theme-swatch-dot--cyber-emerald" />
+                            {t("settings.themeCyberEmerald", "Cyber Emerald")}
+                          </button>
+                          <button
+                            type="button"
+                            className={`theme-btn ${theme === "clean-titanium" ? "theme-btn--active" : ""}`}
+                            onClick={() => setTheme("clean-titanium")}
+                          >
+                            <span className="theme-swatch-dot theme-swatch-dot--clean-titanium" />
+                            {t("settings.themeCleanTitanium", "Clean Titanium")}
+                          </button>
+                          <button
+                            type="button"
+                            className={`theme-btn ${theme === "nordic-frost" ? "theme-btn--active" : ""}`}
+                            onClick={() => setTheme("nordic-frost")}
+                          >
+                            <span className="theme-swatch-dot theme-swatch-dot--nordic-frost" />
+                            {t("settings.themeNordicFrost", "Nordic Frost")}
+                          </button>
+                          <button
+                            type="button"
+                            className={`theme-btn ${theme === "system" ? "theme-btn--active" : ""}`}
+                            onClick={() => setTheme("system")}
+                          >
+                            <span className="theme-swatch-dot theme-swatch-dot--system" />
+                            {t("settings.themeSystem", "System")}
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
 
-                        {/* Floating HUD in Full-Screen Games */}
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16 }}>
-                          <div className="form-group" style={{ marginBottom: 0, flex: 1, paddingRight: '16px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <div className="form-label">{t("settings.showHudInFullscreen")}</div>
-                              <span className="badge badge-sm badge--warning">{t("common.beta", "Beta")}</span>
-                            </div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {t("settings.showHudInFullscreenDesc")}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            {pendingSettings["show_hud_in_fullscreen"] && <LoadingSpinner size="sm" />}
-                            <input
-                              type="checkbox"
-                              className="toggle-switch"
-                              checked={statusInfo?.show_hud_in_fullscreen ?? false}
-                              disabled={pendingSettings["show_hud_in_fullscreen"] || !(statusInfo?.show_hud_overlay ?? true)}
-                              onChange={(e) => {
-                                void handleUpdateSetting("show_hud_in_fullscreen", e.target.checked.toString());
-                              }}
-                            />
+                  {/* Timer HUD & Overlay */}
+                  <section className="settings-section settings-section--hud">
+                    <header className="settings-section-header">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <h2>{t("settings.hudTitle", "Timer HUD & Overlay")}</h2>
+                        <span className="badge badge-sm badge--warning">{t("common.beta", "Beta")}</span>
+                      </div>
+                      <div className="section-desc">{t("settings.hudSubtitle", "Floating indicator and in-game timer controls.")}</div>
+                    </header>
+                    <div className="settings-section-body">
+                      {/* HUD overlay */}
+                      <div className="settings-row">
+                        <div>
+                          <div className="form-label">{t("settings.showHud")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {t("settings.showHudDesc")}
                           </div>
                         </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {pendingSettings["show_hud_overlay"] && <LoadingSpinner size="sm" />}
+                          <input
+                            type="checkbox"
+                            className="toggle-switch"
+                            checked={statusInfo?.show_hud_overlay ?? true}
+                            disabled={pendingSettings["show_hud_overlay"]}
+                            onChange={(e) => {
+                              void handleUpdateSetting("show_hud_overlay", e.target.checked.toString());
+                            }}
+                          />
+                        </div>
+                      </div>
 
-                        {/* Game HUD Peek Shortcut */}
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
-                          <div className="form-group" style={{ marginBottom: 0, flex: 1, paddingRight: '16px' }}>
-                            <div className="form-label">{t("settings.hudPeekShortcut")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {t("settings.hudPeekShortcutDesc")}
-                            </div>
-                          </div>
+                      {/* Floating HUD in Full-Screen Games */}
+                      <div className="settings-row">
+                        <div className="form-group" style={{ marginBottom: 0, flex: 1, paddingRight: '16px' }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {pendingSettings["hud_peek_hotkey"] && <LoadingSpinner size="sm" />}
-                            <button
-                              type="button"
-                              className={`btn ${isRecordingHotkey ? 'btn-primary' : 'btn-secondary'}`}
-                              style={{ minWidth: 110, fontFamily: 'var(--font-mono)', fontSize: 13, padding: '6px 12px' }}
-                              onClick={() => setIsRecordingHotkey((prev) => !prev)}
-                              onKeyDown={handleHotkeyKeyDown}
-                              onBlur={() => setIsRecordingHotkey(false)}
-                            >
-                              {isRecordingHotkey ? t("settings.pressKeys") : (statusInfo?.hud_peek_hotkey || "Ctrl+Alt+T")}
-                            </button>
-                            {(statusInfo?.hud_peek_hotkey && statusInfo.hud_peek_hotkey !== "Ctrl+Alt+T") && (
-                              <button
-                                type="button"
-                                className="btn btn-ghost"
-                                style={{ padding: '6px 8px', fontSize: 12 }}
-                                title={t("settings.resetDefault")}
-                                onClick={() => void handleUpdateSetting("hud_peek_hotkey", "Ctrl+Alt+T")}
-                              >
-                                {t("common.reset")}
-                              </button>
-                            )}
+                            <div className="form-label">{t("settings.showHudInFullscreen")}</div>
+                            <span className="badge badge-sm badge--warning">{t("common.beta", "Beta")}</span>
                           </div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {t("settings.showHudInFullscreenDesc")}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {pendingSettings["show_hud_in_fullscreen"] && <LoadingSpinner size="sm" />}
+                          <input
+                            type="checkbox"
+                            className="toggle-switch"
+                            checked={statusInfo?.show_hud_in_fullscreen ?? false}
+                            disabled={pendingSettings["show_hud_in_fullscreen"] || !(statusInfo?.show_hud_overlay ?? true)}
+                            onChange={(e) => {
+                              void handleUpdateSetting("show_hud_in_fullscreen", e.target.checked.toString());
+                            }}
+                          />
                         </div>
                       </div>
-                    </section>
 
-                    {/* Alert Sounds & Milestone Chimes */}
-                    <section className="card settings-card settings-card--alerts">
-                      <header className="card-header">
-                        <h2>{t("settings.alertsTitle", "Alert Sounds & Milestone Chimes")}</h2>
-                        <div className="card-subtitle">{t("settings.alertsSubtitle", "Studio-grade audio chimes and milestone notifications as limits approach.")}</div>
-                      </header>
-                      <div className="card-body">
-                        {/* Countdown Milestones */}
-                        <div className="form-row" style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 16 }}>
-                          <div>
-                            <div className="form-label">{t("settings.milestones", "Milestone Countdown Alerts")}</div>
-                            <div className="form-hint" style={{ marginTop: 2 }}>
-                              {t("settings.milestonesDesc", "Tether automatically plays a soothing harmonic chime and surfaces a 4-second timer peek when remaining screen time reaches key thresholds: 15m, 10m, 5m, and 1m, and when a limit is reached.")}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: 4 }}>
-                            {[
-                              { label: "15 min", color: "var(--accent-indigo)", bg: "rgba(99, 102, 241, 0.10)", border: "rgba(99, 102, 241, 0.25)" },
-                              { label: "10 min", color: "var(--accent-indigo)", bg: "rgba(99, 102, 241, 0.10)", border: "rgba(99, 102, 241, 0.25)" },
-                              { label: "5 min", color: "var(--accent-amber)", bg: "rgba(245, 158, 11, 0.10)", border: "rgba(245, 158, 11, 0.25)" },
-                              { label: "1 min", color: "var(--accent-rose)", bg: "rgba(244, 63, 94, 0.10)", border: "rgba(244, 63, 94, 0.25)" },
-                              { label: t("common.blocked", "Limit Reached"), color: "var(--accent-rose)", bg: "rgba(244, 63, 94, 0.15)", border: "rgba(244, 63, 94, 0.35)" }
-                            ].map((m) => (
-                              <span
-                                key={m.label}
-                                style={{
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '6px',
-                                  padding: '4px 10px',
-                                  borderRadius: '6px',
-                                  fontSize: '12px',
-                                  fontWeight: 500,
-                                  fontFamily: 'var(--font-mono)',
-                                  backgroundColor: m.bg,
-                                  color: m.color,
-                                  border: `1px solid ${m.border}`,
-                                }}
-                              >
-                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: m.color }} />
-                                {m.label}
-                              </span>
-                            ))}
+                      {/* Game HUD Peek Shortcut */}
+                      <div className="settings-row">
+                        <div className="form-group" style={{ marginBottom: 0, flex: 1, paddingRight: '16px' }}>
+                          <div className="form-label">{t("settings.hudPeekShortcut")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {t("settings.hudPeekShortcutDesc")}
                           </div>
                         </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {pendingSettings["hud_peek_hotkey"] && <LoadingSpinner size="sm" />}
+                          <button
+                            type="button"
+                            className={`btn ${isRecordingHotkey ? 'btn-primary' : 'btn-secondary'}`}
+                            style={{ minWidth: 110, fontFamily: 'var(--font-mono)', fontSize: 13, padding: '6px 12px' }}
+                            onClick={() => setIsRecordingHotkey((prev) => !prev)}
+                            onKeyDown={handleHotkeyKeyDown}
+                            onBlur={() => setIsRecordingHotkey(false)}
+                          >
+                            {isRecordingHotkey ? t("settings.pressKeys") : (statusInfo?.hud_peek_hotkey || "Ctrl+Alt+T")}
+                          </button>
+                          {(statusInfo?.hud_peek_hotkey && statusInfo.hud_peek_hotkey !== "Ctrl+Alt+T") && (
+                            <button
+                              type="button"
+                              className="btn btn-ghost"
+                              style={{ padding: '6px 8px', fontSize: 12 }}
+                              title={t("settings.resetDefault")}
+                              onClick={() => void handleUpdateSetting("hud_peek_hotkey", "Ctrl+Alt+T")}
+                            >
+                              {t("common.reset")}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </section>
 
-                        {/* Alert Volume Slider */}
-                        <div className="form-row" style={{ marginTop: 12, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                            <div>
-                              <div className="form-label">{t("settings.alertVolume", "Alert Volume")}</div>
-                              <div className="form-hint" style={{ marginTop: 2 }}>
-                                {t("settings.alertVolumeDesc", "Adjust the volume level of milestone warnings and overlay chimes.")}
-                              </div>
-                            </div>
+                  {/* Alert Sounds & Milestone Chimes */}
+                  <section className="settings-section settings-section--alerts">
+                    <header className="settings-section-header">
+                      <h2>{t("settings.alertsTitle", "Alert Sounds & Milestone Chimes")}</h2>
+                      <div className="section-desc">{t("settings.alertsSubtitle", "Studio-grade audio chimes and milestone notifications as limits approach.")}</div>
+                    </header>
+                    <div className="settings-section-body">
+                      {/* Countdown Milestones */}
+                      <div className="settings-row" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: '8px' }}>
+                        <div>
+                          <div className="form-label">{t("settings.milestones", "Milestone Countdown Alerts")}</div>
+                          <div className="form-hint" style={{ marginTop: 2 }}>
+                            {t("settings.milestonesDesc", "Tether automatically plays a soothing harmonic chime and surfaces a 4-second timer peek when remaining screen time reaches key thresholds: 15m, 10m, 5m, and 1m, and when a limit is reached.")}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: 4 }}>
+                          {[
+                            { label: "15 min", color: "var(--accent-indigo)", bg: "rgba(99, 102, 241, 0.10)", border: "rgba(99, 102, 241, 0.25)" },
+                            { label: "10 min", color: "var(--accent-indigo)", bg: "rgba(99, 102, 241, 0.10)", border: "rgba(99, 102, 241, 0.25)" },
+                            { label: "5 min", color: "var(--accent-amber)", bg: "rgba(245, 158, 11, 0.10)", border: "rgba(245, 158, 11, 0.25)" },
+                            { label: "1 min", color: "var(--accent-rose)", bg: "rgba(244, 63, 94, 0.10)", border: "rgba(244, 63, 94, 0.25)" },
+                            { label: t("common.blocked", "Limit Reached"), color: "var(--accent-rose)", bg: "rgba(244, 63, 94, 0.15)", border: "rgba(244, 63, 94, 0.35)" }
+                          ].map((m) => (
+                            <span
+                              key={m.label}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '6px',
+                                padding: '4px 10px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: 500,
+                                fontFamily: 'var(--font-mono)',
+                                backgroundColor: m.bg,
+                                color: m.color,
+                                border: `1px solid ${m.border}`,
+                              }}
+                            >
+                              <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: m.color }} />
+                              {m.label}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Alert Volume Slider */}
+                      <div className="settings-row">
+                        <div style={{ flex: 1, paddingRight: '24px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                            <div className="form-label">{t("settings.alertVolume", "Alert Volume")}</div>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               {pendingSettings["alert_volume"] && <LoadingSpinner size="xs" />}
                               <span className="font-mono" style={{ fontSize: '13px', fontWeight: 600, color: 'var(--text-primary)', minWidth: '42px', textAlign: 'right' }}>
                                 {currentVolume}%
                               </span>
                             </div>
+                          </div>
+                          <div className="form-hint" style={{ marginTop: 0, marginBottom: 8 }}>
+                            {t("settings.alertVolumeDesc", "Adjust the volume level of milestone warnings and overlay chimes.")}
                           </div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', width: '100%' }}>
                             <VolumeIcon size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
@@ -712,273 +709,277 @@ function MainDashboard() {
                             />
                           </div>
                         </div>
-
-                        {/* Auditory Chime Preview */}
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12, paddingTop: 14, borderTop: '1px solid var(--border-subtle)' }}>
-                          <div style={{ flex: 1, paddingRight: '16px' }}>
-                            <div className="form-label">{t("settings.previewChime", "Preview Chime Sound")}</div>
-                            <div className="form-hint" style={{ marginTop: 2 }}>
-                              {t("settings.chimeDesignNote", "Gentle, non-intrusive harmonic chime designed to never startle or clash with game audio.")}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '8px',
-                              padding: '7px 16px',
-                              minWidth: '140px',
-                              justifyContent: 'center',
-                              transition: 'all 0.15s ease'
-                            }}
-                            disabled={isPlayingChime}
-                            onClick={() => void handlePreviewChime()}
-                          >
-                            <VolumeIcon size={16} color={isPlayingChime ? "var(--accent-indigo)" : "currentColor"} />
-                            {isPlayingChime ? t("settings.previewChimePlaying", "Playing…") : t("settings.previewChime", "Preview Chime")}
-                          </button>
-                        </div>
                       </div>
-                    </section>
-                  </div>
 
-                  {/* Column 2: Security & Protection, Timing & Thresholds */}
-                  <div className="settings-column">
-                    {/* Security */}
-                    <section className="card settings-card settings-card--security">
-                      <header className="card-header">
-                        <h2>{t("settings.security")}</h2>
-                        <div className="card-subtitle">{t("settings.securityDesc")}</div>
-                      </header>
-                      <div className="card-body">
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                          <div>
-                            <div className="form-label">{t("settings.adminPin")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {statusInfo?.pin_configured ? t("settings.pinSet") : t("settings.pinNotSet")}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={actions.openPinSetup}
-                          >
-                            {statusInfo?.pin_configured ? t("settings.changePin") : t("settings.setPin")}
-                          </button>
-                        </div>
-
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                          <div>
-                            <div className="form-label">{t("settings.strictMode", "Strict Mode")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {t("settings.strictModeDesc", "Prevents circumvention by blocking task manager and registry edits while limits are active.")}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            {pendingSettings["strict_mode"] && <LoadingSpinner size="sm" />}
-                            <input
-                              type="checkbox"
-                              className="toggle-switch"
-                              checked={statusInfo?.strict_mode ?? false}
-                              disabled={pendingSettings["strict_mode"]}
-                              onChange={(e) => {
-                                void handleUpdateSetting("strict_mode", e.target.checked.toString());
-                              }}
-                            />
+                      {/* Auditory Chime Preview */}
+                      <div className="settings-row">
+                        <div style={{ flex: 1, paddingRight: '16px' }}>
+                          <div className="form-label">{t("settings.previewChime", "Preview Chime Sound")}</div>
+                          <div className="form-hint" style={{ marginTop: 2 }}>
+                            {t("settings.chimeDesignNote", "Gentle, non-intrusive harmonic chime designed to never startle or clash with game audio.")}
                           </div>
                         </div>
-
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div style={{ flex: 1, paddingRight: '16px' }}>
-                            <div className="form-label">{t("settings.familyDns", "Family DNS Protection")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {t("settings.familyDnsDesc", "Filter adult and malicious domains system-wide using Cloudflare Family DNS. Your original network DNS settings are automatically preserved and restored when disabled.")}
-                            </div>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', fontSize: '12px' }}>
-                              <span
-                                style={{
-                                  width: 8,
-                                  height: 8,
-                                  borderRadius: '50%',
-                                  backgroundColor: statusInfo?.family_dns_enabled ? '#10b981' : 'var(--text-muted)',
-                                  boxShadow: statusInfo?.family_dns_enabled ? '0 0 6px rgba(16, 185, 129, 0.6)' : 'none',
-                                  display: 'inline-block',
-                                }}
-                              />
-                              <span style={{ color: 'var(--text-secondary)' }}>
-                                {statusInfo?.family_dns_enabled
-                                  ? t("settings.familyDnsActive", "Protected (Cloudflare Family)")
-                                  : t("settings.familyDnsInactive", "Disabled (Original DNS)")}
-                              </span>
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            {pendingSettings["family_dns"] && <LoadingSpinner size="sm" />}
-                            <input
-                              type="checkbox"
-                              className="toggle-switch"
-                              checked={statusInfo?.family_dns_enabled ?? false}
-                              disabled={pendingSettings["family_dns"]}
-                              onChange={(e) => {
-                                void handleUpdateSetting("family_dns", e.target.checked.toString());
-                              }}
-                            />
-                          </div>
-                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '8px',
+                            padding: '7px 16px',
+                            minWidth: '140px',
+                            justifyContent: 'center',
+                            transition: 'all 0.15s ease'
+                          }}
+                          disabled={isPlayingChime}
+                          onClick={() => void handlePreviewChime()}
+                        >
+                          <VolumeIcon size={16} color={isPlayingChime ? "var(--accent-indigo)" : "currentColor"} />
+                          {isPlayingChime ? t("settings.previewChimePlaying", "Playing…") : t("settings.previewChime", "Preview Chime")}
+                        </button>
                       </div>
-                    </section>
-
-                    {/* Advanced Parameters */}
-                    <section className="card settings-card settings-card--advanced">
-                      <header className="card-header">
-                        <h2>{t("settings.advanced", "Advanced Parameters")}</h2>
-                        <div className="card-subtitle">{t("settings.advancedDesc", "Fine-tune system thresholds and enforcement behaviour.")}</div>
-                      </header>
-                      <div className="card-body">
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                          <div>
-                            <div className="form-label">{t("settings.cooldown", "Anti-impulse Cooldown")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {t("settings.cooldownDesc", "Time delay before a relaxed limit takes effect. Tightening applies instantly.")}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {pendingSettings["limit_cooldown_hours"] && <LoadingSpinner size="xs" />}
-                            <div className="input-with-suffix">
-                              <input
-                                type="number"
-                                className="input"
-                                style={{ width: '60px' }}
-                                key={`cooldown_${statusInfo?.limit_cooldown_hours}`}
-                                defaultValue={statusInfo?.limit_cooldown_hours?.toString() ?? "24"}
-                                disabled={pendingSettings["limit_cooldown_hours"]}
-                                onBlur={(e) => {
-                                  if (e.target.value !== statusInfo?.limit_cooldown_hours?.toString()) {
-                                    void handleUpdateSetting("limit_cooldown_hours", e.target.value);
-                                  }
-                                }}
-                              />
-                              <span className="input-suffix">hrs</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-                          <div>
-                            <div className="form-label">{t("settings.idleThreshold", "Idle Threshold")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {t("settings.idleThresholdDesc", "Seconds without input before usage stops accruing.")}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {pendingSettings["idle_threshold_secs"] && <LoadingSpinner size="xs" />}
-                            <div className="input-with-suffix">
-                              <input
-                                type="number"
-                                className="input"
-                                style={{ width: '60px' }}
-                                key={`idle_${statusInfo?.idle_threshold_secs}`}
-                                defaultValue={statusInfo?.idle_threshold_secs?.toString() ?? "60"}
-                                disabled={pendingSettings["idle_threshold_secs"]}
-                                onBlur={(e) => {
-                                  if (e.target.value !== statusInfo?.idle_threshold_secs?.toString()) {
-                                    void handleUpdateSetting("idle_threshold_secs", e.target.value);
-                                  }
-                                }}
-                              />
-                              <span className="input-suffix">sec</span>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div className="form-label">{t("settings.dayReset", "Day Start Offset")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {t("settings.dayResetDesc", "Minutes after local midnight at which daily budgets reset (0 = midnight).")}
-                            </div>
-                          </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                            {pendingSettings["day_start_minutes"] && <LoadingSpinner size="xs" />}
-                            <div className="input-with-suffix">
-                              <input
-                                type="number"
-                                className="input"
-                                style={{ width: '60px' }}
-                                key={`day_start_${statusInfo?.day_start_minutes}`}
-                                defaultValue={statusInfo?.day_start_minutes?.toString() ?? "0"}
-                                disabled={pendingSettings["day_start_minutes"]}
-                                onBlur={(e) => {
-                                  if (e.target.value !== statusInfo?.day_start_minutes?.toString()) {
-                                    void handleUpdateSetting("day_start_minutes", e.target.value);
-                                  }
-                                }}
-                              />
-                              <span className="input-suffix">min</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </section>
-
-                    {/* Application Categories */}
-                    <section className="card settings-card settings-card--categories">
-                      <header className="card-header">
-                        <h2>{t("settings.categoriesTitle", "Application Categories")}</h2>
-                        <div className="card-subtitle">{t("settings.categoriesDesc", "Manage how Tether classifies and groups applications on your device.")}</div>
-                      </header>
-                      <div className="card-body">
-                        <div className="form-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div className="form-label">{t("categorize.appDirectory", "Application Directory")}</div>
-                            <div className="form-hint" style={{ marginTop: 0 }}>
-                              {catalog?.apps.length
-                                ? t("categorize.appsDetected", { count: catalog.apps.length })
-                                : t("settings.appDirectoryDesc", "Browse all detected applications on this PC and customize their categories.")}
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            className="btn btn-secondary"
-                            onClick={() => setAppDirectoryOpen(true)}
-                          >
-                            {t("categorize.manageApps", "Manage Applications")}
-                          </button>
-                        </div>
-                      </div>
-                    </section>
-                  </div>
-                </div>
-
-                {/* How to Use (collapsible) */}
-                <section className="card settings-card settings-card--tutorial" style={{ marginTop: 16 }}>
-                  <header className="card-header" style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} onClick={() => setTutorialOpen(!tutorialOpen)}>
-                    <h2>{t("tutorial.title")}</h2>
-                    <ChevronDown
-                      size={18}
-                      style={{
-                        transform: tutorialOpen ? 'rotate(180deg)' : 'rotate(0deg)',
-                        transition: 'transform 0.2s ease',
-                        color: 'var(--text-muted)'
-                      }}
-                    />
-                  </header>
-                  <div style={{ maxHeight: tutorialOpen ? '2000px' : '0', opacity: tutorialOpen ? 1 : 0, overflow: 'hidden', transition: 'all 0.4s ease-in-out' }}>
-                    <div className="card-body">
-                      <TutorialContent />
                     </div>
-                  </div>
-                </section>
+                  </section>
 
-                {/* About */}
-                <section className="card settings-card settings-card--about" style={{ marginTop: 16 }}>
-                  <header className="card-header">
-                    <h2>{t("settings.about")}</h2>
-                  </header>
-                  <div className="card-body">
-                    <p className="form-hint">{t("settings.aboutVersion")}</p>
-                  </div>
-                </section>
+                  {/* Security & Protection */}
+                  <section className="settings-section settings-section--security">
+                    <header className="settings-section-header">
+                      <h2>{t("settings.security")}</h2>
+                      <div className="section-desc">{t("settings.securityDesc")}</div>
+                    </header>
+                    <div className="settings-section-body">
+                      <div className="settings-row">
+                        <div>
+                          <div className="form-label">{t("settings.adminPin")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {statusInfo?.pin_configured ? t("settings.pinSet") : t("settings.pinNotSet")}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={actions.openPinSetup}
+                        >
+                          {statusInfo?.pin_configured ? t("settings.changePin") : t("settings.setPin")}
+                        </button>
+                      </div>
+
+                      <div className="settings-row">
+                        <div>
+                          <div className="form-label">{t("settings.strictMode", "Strict Mode")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {t("settings.strictModeDesc", "Prevents circumvention by blocking task manager and registry edits while limits are active.")}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {pendingSettings["strict_mode"] && <LoadingSpinner size="sm" />}
+                          <input
+                            type="checkbox"
+                            className="toggle-switch"
+                            checked={statusInfo?.strict_mode ?? false}
+                            disabled={pendingSettings["strict_mode"]}
+                            onChange={(e) => {
+                              void handleUpdateSetting("strict_mode", e.target.checked.toString());
+                            }}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="settings-row">
+                        <div style={{ flex: 1, paddingRight: '16px' }}>
+                          <div className="form-label">{t("settings.familyDns", "Family DNS Protection")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {t("settings.familyDnsDesc", "Filter adult and malicious domains system-wide using Cloudflare Family DNS. Your original network DNS settings are automatically preserved and restored when disabled.")}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginTop: '6px', fontSize: '12px' }}>
+                            <span
+                              style={{
+                                width: 8,
+                                height: 8,
+                                borderRadius: '50%',
+                                backgroundColor: statusInfo?.family_dns_enabled ? '#10b981' : 'var(--text-muted)',
+                                boxShadow: statusInfo?.family_dns_enabled ? '0 0 6px rgba(16, 185, 129, 0.6)' : 'none',
+                                display: 'inline-block',
+                              }}
+                            />
+                            <span style={{ color: 'var(--text-secondary)' }}>
+                              {statusInfo?.family_dns_enabled
+                                ? t("settings.familyDnsActive", "Protected (Cloudflare Family)")
+                                : t("settings.familyDnsInactive", "Disabled (Original DNS)")}
+                            </span>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {pendingSettings["family_dns"] && <LoadingSpinner size="sm" />}
+                          <input
+                            type="checkbox"
+                            className="toggle-switch"
+                            checked={statusInfo?.family_dns_enabled ?? false}
+                            disabled={pendingSettings["family_dns"]}
+                            onChange={(e) => {
+                              void handleUpdateSetting("family_dns", e.target.checked.toString());
+                            }}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* System Parameters */}
+                  <section className="settings-section settings-section--advanced">
+                    <header className="settings-section-header">
+                      <h2>{t("settings.advanced", "Advanced Parameters")}</h2>
+                      <div className="section-desc">{t("settings.advancedDesc", "Fine-tune system thresholds and enforcement behaviour.")}</div>
+                    </header>
+                    <div className="settings-section-body">
+                      <div className="settings-row">
+                        <div>
+                          <div className="form-label">{t("settings.cooldown", "Anti-impulse Cooldown")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {t("settings.cooldownDesc", "Time delay before a relaxed limit takes effect. Tightening applies instantly.")}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {pendingSettings["limit_cooldown_hours"] && <LoadingSpinner size="xs" />}
+                          <div className="input-with-suffix">
+                            <input
+                              type="number"
+                              className="input"
+                              style={{ width: '60px' }}
+                              key={`cooldown_${statusInfo?.limit_cooldown_hours}`}
+                              defaultValue={statusInfo?.limit_cooldown_hours?.toString() ?? "24"}
+                              disabled={pendingSettings["limit_cooldown_hours"]}
+                              onBlur={(e) => {
+                                if (e.target.value !== statusInfo?.limit_cooldown_hours?.toString()) {
+                                  void handleUpdateSetting("limit_cooldown_hours", e.target.value);
+                                }
+                              }}
+                            />
+                            <span className="input-suffix">hrs</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="settings-row">
+                        <div>
+                          <div className="form-label">{t("settings.idleThreshold", "Idle Threshold")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {t("settings.idleThresholdDesc", "Seconds without input before usage stops accruing.")}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {pendingSettings["idle_threshold_secs"] && <LoadingSpinner size="xs" />}
+                          <div className="input-with-suffix">
+                            <input
+                              type="number"
+                              className="input"
+                              style={{ width: '60px' }}
+                              key={`idle_${statusInfo?.idle_threshold_secs}`}
+                              defaultValue={statusInfo?.idle_threshold_secs?.toString() ?? "60"}
+                              disabled={pendingSettings["idle_threshold_secs"]}
+                              onBlur={(e) => {
+                                if (e.target.value !== statusInfo?.idle_threshold_secs?.toString()) {
+                                  void handleUpdateSetting("idle_threshold_secs", e.target.value);
+                                }
+                              }}
+                            />
+                            <span className="input-suffix">sec</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="settings-row">
+                        <div>
+                          <div className="form-label">{t("settings.dayReset", "Day Start Offset")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {t("settings.dayResetDesc", "Minutes after local midnight at which daily budgets reset (0 = midnight).")}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          {pendingSettings["day_start_minutes"] && <LoadingSpinner size="xs" />}
+                          <div className="input-with-suffix">
+                            <input
+                              type="number"
+                              className="input"
+                              style={{ width: '60px' }}
+                              key={`day_start_${statusInfo?.day_start_minutes}`}
+                              defaultValue={statusInfo?.day_start_minutes?.toString() ?? "0"}
+                              disabled={pendingSettings["day_start_minutes"]}
+                              onBlur={(e) => {
+                                if (e.target.value !== statusInfo?.day_start_minutes?.toString()) {
+                                  void handleUpdateSetting("day_start_minutes", e.target.value);
+                                }
+                              }}
+                            />
+                            <span className="input-suffix">min</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Application Categories */}
+                  <section className="settings-section settings-section--categories">
+                    <header className="settings-section-header">
+                      <h2>{t("settings.categoriesTitle", "Application Categories")}</h2>
+                      <div className="section-desc">{t("settings.categoriesDesc", "Manage how Tether classifies and groups applications on your device.")}</div>
+                    </header>
+                    <div className="settings-section-body">
+                      <div className="settings-row">
+                        <div>
+                          <div className="form-label">{t("categorize.appDirectory", "Application Directory")}</div>
+                          <div className="form-hint" style={{ marginTop: 0 }}>
+                            {catalog?.apps.length
+                              ? t("categorize.appsDetected", { count: catalog.apps.length })
+                              : t("settings.appDirectoryDesc", "Browse all detected applications on this PC and customize their categories.")}
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-secondary"
+                          onClick={() => setAppDirectoryOpen(true)}
+                        >
+                          {t("categorize.manageApps", "Manage Applications")}
+                        </button>
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* Guide & Shortcuts */}
+                  <section className="settings-section settings-section--tutorial">
+                    <header
+                      className="settings-section-header"
+                      style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tutorialOpen ? 18 : 0 }}
+                      onClick={() => setTutorialOpen(!tutorialOpen)}
+                    >
+                      <div>
+                        <h2 style={{ margin: 0 }}>{t("tutorial.title")}</h2>
+                        <div className="section-desc">Quick guide to shortcuts, hotkeys, and app controls.</div>
+                      </div>
+                      <ChevronDown
+                        size={18}
+                        style={{
+                          transform: tutorialOpen ? 'rotate(180deg)' : 'rotate(0deg)',
+                          transition: 'transform 0.2s ease',
+                          color: 'var(--text-muted)'
+                        }}
+                      />
+                    </header>
+                    <div style={{ maxHeight: tutorialOpen ? '2000px' : '0', opacity: tutorialOpen ? 1 : 0, overflow: 'hidden', transition: 'all 0.4s ease-in-out' }}>
+                      <div style={{ paddingTop: 12 }}>
+                        <TutorialContent />
+                      </div>
+                    </div>
+                  </section>
+
+                  {/* About */}
+                  <section className="settings-section settings-section--about">
+                    <header className="settings-section-header" style={{ marginBottom: 8 }}>
+                      <h2>{t("settings.about")}</h2>
+                    </header>
+                    <p className="form-hint" style={{ margin: 0 }}>{t("settings.aboutVersion")}</p>
+                  </section>
+                </div>
               </div>
             )}
 

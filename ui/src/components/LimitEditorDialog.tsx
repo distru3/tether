@@ -1,5 +1,6 @@
 import { useMemo, useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
+import { Smartphone, Layers, LayoutGrid, Clock, Calendar } from "lucide-react";
 import type { WeekdayMinutes } from "../api";
 import { targetLabel, WEEKDAY_SHORT } from "../format";
 import { colorForCategory } from "../categoryColors";
@@ -7,7 +8,7 @@ import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
 import { Dialog } from "./Dialog";
-import { ChevronDownIcon, ChevronRightIcon } from "./icons/Icons";
+import { ChevronDownIcon } from "./icons/Icons";
 import { LoadingSpinner } from "./LoadingSpinner";
 
 interface LimitEditorDialogProps {
@@ -52,8 +53,7 @@ function decodeTarget(value: string): LimitTargetDto | null {
 }
 
 // ---------------------------------------------------------------------------
-// Custom searchable app picker - replaces the native <select> whose OS popup
-// renders white and ignores all CSS.
+// Searchable App/Category Picker
 // ---------------------------------------------------------------------------
 interface AppPickerProps {
     options: PickerOption[];
@@ -78,17 +78,14 @@ function AppPicker({ options, value, disabled, placeholder, onChange }: AppPicke
         return options.filter((o) => o.label.toLowerCase().includes(q));
     }, [options, query]);
 
-    // Reset active index when filter changes
     useEffect(() => { setActiveIdx(0); }, [query]);
 
-    // Scroll active item into view
     useEffect(() => {
         if (!open) return;
         const el = listRef.current?.children[activeIdx] as HTMLElement | undefined;
         el?.scrollIntoView({ block: "nearest" });
     }, [activeIdx, open]);
 
-    // Close on outside click
     useEffect(() => {
         if (!open) return;
         const handler = (e: MouseEvent) => {
@@ -124,8 +121,7 @@ function AppPicker({ options, value, disabled, placeholder, onChange }: AppPicke
             setActiveIdx((i) => Math.max(i - 1, 0));
         } else if (e.key === "Enter") {
             e.preventDefault();
-            const opt = filtered[activeIdx];
-            if (opt) select(opt);
+            if (filtered[activeIdx]) select(filtered[activeIdx]);
         } else if (e.key === "Escape") {
             setOpen(false);
             setQuery("");
@@ -133,84 +129,84 @@ function AppPicker({ options, value, disabled, placeholder, onChange }: AppPicke
     };
 
     return (
-        <div ref={containerRef} className="app-picker" style={{ position: "relative" }}>
-            {/* Trigger button */}
+        <div className="custom-app-picker" ref={containerRef}>
             <button
                 type="button"
-                className="app-picker__trigger"
+                className={`picker-trigger ${open ? "picker-trigger--open" : ""} ${disabled ? "picker-trigger--disabled" : ""}`}
+                onClick={open ? () => setOpen(false) : openPicker}
                 disabled={disabled}
-                onClick={openPicker}
                 aria-haspopup="listbox"
                 aria-expanded={open}
             >
-                <span className={value ? "app-picker__label" : "app-picker__placeholder"}>
-                    {value ? selectedLabel : placeholder}
+                <span className={selectedLabel ? "picker-value" : "picker-placeholder"}>
+                    {selectedLabel || placeholder}
                 </span>
-                <ChevronDownIcon size={14} />
+                <span className="picker-chevron">
+                    <ChevronDownIcon size={14} />
+                </span>
             </button>
 
-            {/* Dropdown */}
             {open && (
-                <div className="app-picker__dropdown">
-                    <div className="app-picker__search-wrap">
+                <div className="picker-popover">
+                    <div className="picker-search-wrap">
                         <input
                             ref={inputRef}
-                            className="app-picker__search"
                             type="text"
-                            placeholder="Search..."
+                            className="picker-search-input"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             onKeyDown={onKeyDown}
+                            placeholder="Search..."
                         />
                     </div>
-                    {filtered.length === 0 ? (
-                        <p className="app-picker__empty">No matches</p>
-                    ) : (
-                        <ul ref={listRef} className="app-picker__list" role="listbox">
-                            {filtered.map((opt, i) => (
+                    <ul className="picker-list" ref={listRef} role="listbox">
+                        {filtered.length === 0 ? (
+                            <li className="picker-empty">No matches found</li>
+                        ) : (
+                            filtered.map((opt, i) => (
                                 <li
                                     key={opt.value}
                                     role="option"
                                     aria-selected={opt.value === value}
-                                    className={[
-                                        "app-picker__item",
-                                        opt.value === value ? "app-picker__item--selected" : "",
-                                        i === activeIdx ? "app-picker__item--active" : "",
-                                        opt.group === "special" ? "app-picker__item--special" : "",
-                                        opt.group === "category" ? "app-picker__item--category" : "",
-                                    ].filter(Boolean).join(" ")}
+                                    className={`picker-item ${opt.value === value ? "picker-item--selected" : ""} ${i === activeIdx ? "picker-item--active" : ""}`}
+                                    onMouseDown={(e) => {
+                                        e.preventDefault();
+                                        select(opt);
+                                    }}
                                     onMouseEnter={() => setActiveIdx(i)}
-                                    onMouseDown={(e) => { e.preventDefault(); select(opt); }}
                                 >
-                                    {opt.label}
+                                    <span className="picker-item-label">{opt.label}</span>
                                 </li>
-                            ))}
-                        </ul>
-                    )}
+                            ))
+                        )}
+                    </ul>
                 </div>
             )}
         </div>
     );
 }
 
-export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onClose, onCategorize }: LimitEditorDialogProps) {
+// ---------------------------------------------------------------------------
+// LimitEditorDialog Component
+// ---------------------------------------------------------------------------
+export function LimitEditorDialog({
+    catalog,
+    target,
+    limit,
+    busy,
+    onSubmit,
+    onClose,
+    onCategorize,
+}: LimitEditorDialogProps) {
     const { t } = useTranslation();
+
     const limitableCategories = useMemo(
-        () => (catalog?.categories ?? []).filter((category) => category.kind === "limitable"),
+        () => (catalog?.categories ?? []).filter((cat) => cat.id > 0),
         [catalog],
     );
 
-    // Build flat option list for the picker
-    const pickerOptions = useMemo((): PickerOption[] => {
+    const appOptions = useMemo((): PickerOption[] => {
         const opts: PickerOption[] = [];
-        if (!catalog?.limits.some((l) => l.target.kind === "total")) {
-            opts.push({ value: "total", label: t("limitEditor.totalScreenTime"), group: "special" });
-        }
-        for (const cat of limitableCategories) {
-            if (!catalog?.limits.some((l) => l.target.kind === "category" && l.target.id === cat.id)) {
-                opts.push({ value: `category:${cat.id}`, label: cat.name, group: "category" });
-            }
-        }
         for (const app of (catalog?.apps ?? [])) {
             if (!catalog?.limits.some((l) => l.target.kind === "app" && l.target.id === app.id)) {
                 const cat = catalog?.categories.find((c) => c.id === app.primary_category);
@@ -219,26 +215,149 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
             }
         }
         return opts;
-    }, [catalog, limitableCategories, t]);
+    }, [catalog]);
 
-    const [chosen, setChosen] = useState(() => encodeTarget(target));
+    const categoryOptions = useMemo((): PickerOption[] => {
+        const opts: PickerOption[] = [];
+        for (const cat of limitableCategories) {
+            if (!catalog?.limits.some((l) => l.target.kind === "category" && l.target.id === cat.id)) {
+                opts.push({ value: `category:${cat.id}`, label: cat.name, group: "category" });
+            }
+        }
+        return opts;
+    }, [catalog, limitableCategories]);
+
+    const locked = target !== null;
+
+    const [targetKind, setTargetKind] = useState<"app" | "category" | "total">(() => {
+        if (target) return target.kind;
+        return "app";
+    });
+
+    const [chosen, setChosen] = useState(() => {
+        if (target) return encodeTarget(target);
+        return appOptions[0]?.value ?? categoryOptions[0]?.value ?? "total";
+    });
+
     const [minutes, setMinutes] = useState(() => String(limit?.default_minutes ?? 60));
     const [enabled, setEnabled] = useState(() => limit?.enabled ?? true);
     const [dayOverrides, setDayOverrides] = useState<DayOverrideState[]>(() => initDayOverrides(limit));
-    const [weekOpen, setWeekOpen] = useState(() => (limit?.weekday_minutes ?? []).some((m) => m !== null));
     const [error, setError] = useState<string | null>(null);
 
-    const locked = target !== null;
     const overrideCount = dayOverrides.filter((day) => day.override).length;
-
     const currentTarget = locked ? target : decodeTarget(chosen);
     const currentApp = currentTarget?.kind === "app" ? catalog?.apps.find((a) => a.id === currentTarget.id) : null;
     const currentCat = currentApp ? catalog?.categories.find((c) => c.id === currentApp.primary_category) : null;
     const currentCatName = currentCat?.name ?? "Uncategorized";
     const currentCatColor = colorForCategory(currentCatName, currentCat?.color);
 
-    const updateDay = (day: number, patch: Partial<DayOverrideState>) => {
-        setDayOverrides((prev) => prev.map((entry, i) => (i === day ? { ...entry, ...patch } : entry)));
+    // Synchronize target kind switcher
+    const handleSegmentChange = (kind: "app" | "category" | "total") => {
+        setTargetKind(kind);
+        setError(null);
+        if (kind === "total") {
+            setChosen("total");
+        } else if (kind === "category") {
+            if (!chosen.startsWith("category:") && categoryOptions[0]) {
+                setChosen(categoryOptions[0].value);
+            }
+        } else {
+            if (!chosen.startsWith("app:") && appOptions[0]) {
+                setChosen(appOptions[0].value);
+            }
+        }
+    };
+
+    // Duration dual hours / minutes numeric input math
+    const totalMinutesVal = Math.max(0, Math.min(1440, Number.parseInt(minutes, 10) || 0));
+    const hoursVal = Math.floor(totalMinutesVal / 60);
+    const minsVal = totalMinutesVal % 60;
+
+    const setHours = (h: number) => {
+        const clampedH = Math.max(0, Math.min(24, h));
+        const newTotal = clampedH * 60 + minsVal;
+        setMinutes(String(Math.min(1440, newTotal)));
+        setError(null);
+    };
+
+    const setMins = (m: number) => {
+        const clampedM = Math.max(0, Math.min(59, m));
+        const newTotal = hoursVal * 60 + clampedM;
+        setMinutes(String(Math.min(1440, newTotal)));
+        setError(null);
+    };
+
+    const DURATION_PRESETS = [
+        { label: "15m", val: 15 },
+        { label: "30m", val: 30 },
+        { label: "1h", val: 60 },
+        { label: "2h", val: 120 },
+        { label: "3h", val: 180 },
+        { label: "4h", val: 240 },
+    ];
+
+    // Weekday schedule quick helpers
+    const toggleAllDays = () => {
+        const allActive = dayOverrides.every((d) => d.override);
+        setDayOverrides((prev) =>
+            prev.map((d) => ({
+                override: !allActive,
+                minutes: !allActive ? (d.minutes || minutes || "60") : "",
+            }))
+        );
+        setError(null);
+    };
+
+    const toggleWeekdaysOnly = () => {
+        const weekdaysActive = dayOverrides.slice(0, 5).every((d) => d.override);
+        setDayOverrides((prev) =>
+            prev.map((d, idx) => {
+                if (idx < 5) {
+                    return {
+                        override: !weekdaysActive,
+                        minutes: !weekdaysActive ? (d.minutes || minutes || "60") : "",
+                    };
+                }
+                return d;
+            })
+        );
+        setError(null);
+    };
+
+    const toggleWeekendsOnly = () => {
+        const weekendsActive = dayOverrides.slice(5, 7).every((d) => d.override);
+        setDayOverrides((prev) =>
+            prev.map((d, idx) => {
+                if (idx >= 5) {
+                    return {
+                        override: !weekendsActive,
+                        minutes: !weekendsActive ? (d.minutes || minutes || "60") : "",
+                    };
+                }
+                return d;
+            })
+        );
+        setError(null);
+    };
+
+    const toggleSingleDay = (dayIdx: number) => {
+        setDayOverrides((prev) =>
+            prev.map((d, i) =>
+                i === dayIdx
+                    ? {
+                          override: !d.override,
+                          minutes: !d.override ? (d.minutes || minutes || "60") : "",
+                      }
+                    : d
+            )
+        );
+        setError(null);
+    };
+
+    const updateDayMinutes = (dayIdx: number, val: string) => {
+        setDayOverrides((prev) =>
+            prev.map((d, i) => (i === dayIdx ? { ...d, minutes: val } : d))
+        );
         setError(null);
     };
 
@@ -247,15 +366,14 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
         if (busy) return;
         const parsed = Number.parseInt(minutes, 10);
         if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1440) {
-            setError(t("limitEditor.errMinutes"));
+            setError(t("limitEditor.errMinutes", "Please enter a valid duration (0-1440 minutes)."));
             return;
         }
         for (const day of dayOverrides) {
             if (!day.override) continue;
             const dayMinutes = Number.parseInt(day.minutes, 10);
             if (!Number.isFinite(dayMinutes) || dayMinutes < 0 || dayMinutes > 1440) {
-                setError(t("limitEditor.errOverrideMinutes"));
-                setWeekOpen(true);
+                setError(t("limitEditor.errOverrideMinutes", "Please check weekday override values."));
                 return;
             }
         }
@@ -264,7 +382,7 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
         ) as WeekdayMinutes;
         const finalTarget = locked ? target : decodeTarget(chosen);
         if (finalTarget === null) {
-            setError(t("limitEditor.errPick"));
+            setError(t("limitEditor.errPick", "Please select a target application or category."));
             return;
         }
         onSubmit(finalTarget, parsed, weekdayMinutes, enabled);
@@ -272,30 +390,85 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
 
     return (
         <Dialog
-            label={locked ? t("limitEditor.editOrder") : t("limitEditor.newOrder")}
+            label={locked ? t("limitEditor.editOrder", "Edit Limit") : t("limitEditor.newOrder", "New Limit")}
             onClose={() => {
                 if (!busy) onClose();
             }}
         >
-            <form onSubmit={submit}>
-                <p className="dialog-eyebrow">{locked ? t("limitEditor.editEyebrow") : t("limitEditor.newEyebrow")}</p>
-                <h2 className="dialog-title">
-                    {locked && target !== null ? targetLabel(target, catalog) : t("limitEditor.chooseTarget")}
-                </h2>
+            <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
+                <div>
+                    <p className="dialog-eyebrow" style={{ margin: "0 0 4px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-primary)", fontWeight: 700 }}>
+                        {locked ? t("limitEditor.editEyebrow", "MODIFY LIMIT") : t("limitEditor.newEyebrow", "NEW LIMIT")}
+                    </p>
+                    <h2 className="dialog-title" style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "var(--text-primary)" }}>
+                        {locked && target !== null ? targetLabel(target, catalog) : t("limitEditor.chooseTarget", "Configure Allowance")}
+                    </h2>
+                </div>
+
+                {/* 1. Target Picker Segmented Control */}
                 {!locked && (
-                    <label className="field">
-                        <span className="field-label">{t("limitEditor.appliesTo")}</span>
-                        <AppPicker
-                            options={pickerOptions}
-                            value={chosen}
-                            disabled={busy}
-                            placeholder={t("limitEditor.choose")}
-                            onChange={(v) => { setChosen(v); setError(null); }}
-                        />
-                    </label>
+                    <div>
+                        <div className="target-segmented-control">
+                            <button
+                                type="button"
+                                className={`target-segment-btn ${targetKind === "app" ? "target-segment-btn--active" : ""}`}
+                                onClick={() => handleSegmentChange("app")}
+                            >
+                                <Smartphone size={13} />
+                                <span>App</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={`target-segment-btn ${targetKind === "category" ? "target-segment-btn--active" : ""}`}
+                                onClick={() => handleSegmentChange("category")}
+                            >
+                                <Layers size={13} />
+                                <span>Category</span>
+                            </button>
+                            <button
+                                type="button"
+                                className={`target-segment-btn ${targetKind === "total" ? "target-segment-btn--active" : ""}`}
+                                onClick={() => handleSegmentChange("total")}
+                            >
+                                <LayoutGrid size={13} />
+                                <span>Total Device</span>
+                            </button>
+                        </div>
+
+                        {targetKind === "app" && (
+                            <AppPicker
+                                options={appOptions}
+                                value={chosen}
+                                disabled={busy}
+                                placeholder={t("limitEditor.choose", "Select an application...")}
+                                onChange={(v) => { setChosen(v); setError(null); }}
+                            />
+                        )}
+
+                        {targetKind === "category" && (
+                            <AppPicker
+                                options={categoryOptions}
+                                value={chosen}
+                                disabled={busy}
+                                placeholder="Select a category..."
+                                onChange={(v) => { setChosen(v); setError(null); }}
+                            />
+                        )}
+
+                        {targetKind === "total" && (
+                            <div className="total-device-info-card">
+                                <LayoutGrid size={18} color="var(--color-primary)" style={{ flexShrink: 0 }} />
+                                <div>
+                                    <strong>Overall Device Limit:</strong> Enforces a single consolidated daily usage budget across all applications on this machine.
+                                </div>
+                            </div>
+                        )}
+                    </div>
                 )}
+
+                {/* Primary Category Tag for Selected App */}
                 {currentApp && (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginTop: 8, padding: "8px 12px", background: "var(--bg-surface)", borderRadius: "6px", border: "1px solid var(--border-subtle)" }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--bg-surface)", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                             <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{t("categorize.primary", "Category")}:</span>
                             <span
@@ -321,100 +494,175 @@ export function LimitEditorDialog({ catalog, target, limit, busy, onSubmit, onCl
                         )}
                     </div>
                 )}
-                <label className="field">
-                    <span className="field-label">{t("limitEditor.minutesPerDay")}</span>
-                    <input
-                        type="number"
-                        min={0}
-                        max={1440}
-                        step={1}
-                        value={minutes}
-                        disabled={busy}
-                        onChange={(event) => {
-                            setMinutes(event.target.value);
-                            setError(null);
-                        }}
-                    />
-                </label>
-                <button
-                    type="button"
-                    className="weekday-toggle"
-                    disabled={busy}
-                    onClick={() => setWeekOpen((open) => !open)}
-                >
-                    <span className="weekday-chevron">{weekOpen ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}</span>
-                    {t("limitEditor.perDayOverrides")}
-                    {overrideCount > 0 && <span className="weekday-count">({overrideCount} active)</span>}
-                </button>
-                {weekOpen && (
-                    <div className="weekday-grid">
-                        {dayOverrides.map((day, index) => (
-                            <div
-                                key={WEEKDAY_SHORT[index]}
-                                className={`weekday-row ${day.override ? "weekday-row--active" : ""}`}
-                            >
-                                <label className="weekday-label">
-                                    <input
-                                        type="checkbox"
-                                        className="check-input"
-                                        checked={day.override}
-                                        disabled={busy}
-                                        aria-label={`Override ${WEEKDAY_SHORT[index]}`}
-                                        onChange={(event) =>
-                                            updateDay(index, { override: event.target.checked })
-                                        }
-                                    />
-                                    <span className="weekday-name">
-                                        {t(`weeklyChart.${WEEKDAY_SHORT[index]!.toLowerCase()}`)}
-                                    </span>
-                                </label>
-                                <div className="weekday-input-wrap">
-                                    <input
-                                        type="number"
-                                        className="weekday-input"
-                                        min={0}
-                                        max={1440}
-                                        step={1}
-                                        placeholder={minutes ? `${minutes}` : "60"}
-                                        value={day.minutes}
-                                        disabled={busy || !day.override}
-                                        aria-label={`${WEEKDAY_SHORT[index]} minutes`}
-                                        onChange={(event) => updateDay(index, { minutes: event.target.value })}
-                                    />
-                                    <span className="weekday-unit">min</span>
-                                </div>
+
+                {/* 2. Duration Controls (Dual Numeric Inputs, Presets, and Slider) */}
+                <div style={{ padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                            <Clock size={13} color="var(--color-primary)" />
+                            <span>{t("limitEditor.minutesPerDay", "Daily Allowance")}</span>
+                        </div>
+                        <div className="duration-dual-inputs">
+                            <div className="duration-input-group">
+                                <input
+                                    type="number"
+                                    className="duration-num-input"
+                                    min={0}
+                                    max={24}
+                                    value={hoursVal}
+                                    disabled={busy}
+                                    onChange={(e) => setHours(Number.parseInt(e.target.value, 10) || 0)}
+                                />
+                                <span>h</span>
                             </div>
+                            <div className="duration-input-group">
+                                <input
+                                    type="number"
+                                    className="duration-num-input"
+                                    min={0}
+                                    max={59}
+                                    value={minsVal}
+                                    disabled={busy}
+                                    onChange={(e) => setMins(Number.parseInt(e.target.value, 10) || 0)}
+                                />
+                                <span>m</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Quick Preset Pills */}
+                    <div className="duration-presets">
+                        {DURATION_PRESETS.map((preset) => (
+                            <button
+                                key={preset.val}
+                                type="button"
+                                className={`preset-pill ${totalMinutesVal === preset.val ? "preset-pill--active" : ""}`}
+                                onClick={() => { setMinutes(String(preset.val)); setError(null); }}
+                            >
+                                {preset.label}
+                            </button>
                         ))}
                     </div>
-                )}
-                <label className="field field--inline">
+
+                    {/* Smooth Duration Slider */}
+                    <div className="duration-slider-wrap">
+                        <input
+                            type="range"
+                            className="duration-slider"
+                            min={5}
+                            max={480}
+                            step={5}
+                            value={Math.min(totalMinutesVal, 480)}
+                            disabled={busy}
+                            onChange={(e) => { setMinutes(e.target.value); setError(null); }}
+                        />
+                        <div className="duration-slider-labels">
+                            <span>5m</span>
+                            <span>2h</span>
+                            <span>4h</span>
+                            <span>8h+</span>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. Interactive Weekday Schedule Bar */}
+                <div className="weekday-schedule-box">
+                    <div className="weekday-header-row">
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <Calendar size={13} color="var(--color-primary)" />
+                            <span className="weekday-schedule-title">{t("limitEditor.perDayOverrides", "Weekday Schedule")}</span>
+                            {overrideCount > 0 && (
+                                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-primary)", marginLeft: "4px" }}>
+                                    ({overrideCount} active)
+                                </span>
+                            )}
+                        </div>
+                        <div className="weekday-helpers">
+                            <button type="button" className="weekday-helper-btn" onClick={toggleAllDays}>All</button>
+                            <button type="button" className="weekday-helper-btn" onClick={toggleWeekdaysOnly}>Weekdays</button>
+                            <button type="button" className="weekday-helper-btn" onClick={toggleWeekendsOnly}>Weekends</button>
+                        </div>
+                    </div>
+
+                    {/* Weekday 7-Pill Bar */}
+                    <div className="weekday-pill-bar">
+                        {WEEKDAY_SHORT.map((dayName, idx) => {
+                            const isOverridden = dayOverrides[idx]?.override;
+                            return (
+                                <button
+                                    key={dayName}
+                                    type="button"
+                                    className={`weekday-day-pill ${isOverridden ? "weekday-day-pill--active" : ""}`}
+                                    onClick={() => toggleSingleDay(idx)}
+                                    title={`Toggle ${dayName}`}
+                                >
+                                    <span>{dayName.slice(0, 1)}</span>
+                                </button>
+                            );
+                        })}
+                    </div>
+
+                    {/* Overridden Days Fine-Tuning List */}
+                    {overrideCount > 0 && (
+                        <div className="weekday-overrides-list">
+                            {dayOverrides.map((day, idx) => {
+                                if (!day.override) return null;
+                                const dayName = WEEKDAY_SHORT[idx]!;
+                                return (
+                                    <div key={dayName} className="weekday-override-item">
+                                        <div className="weekday-override-item-left">
+                                            <span>{dayName}</span>
+                                        </div>
+                                        <div className="weekday-override-item-input">
+                                            <input
+                                                type="number"
+                                                className="duration-num-input"
+                                                style={{ width: "56px", padding: "3px 6px", fontSize: "12px" }}
+                                                min={0}
+                                                max={1440}
+                                                step={5}
+                                                value={day.minutes}
+                                                onChange={(e) => updateDayMinutes(idx, e.target.value)}
+                                            />
+                                            <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>min</span>
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+
+                {/* In Force Checkbox */}
+                <label className="field field--inline" style={{ display: "flex", alignItems: "center", gap: "8px", margin: "4px 0", cursor: "pointer" }}>
                     <input
                         type="checkbox"
                         checked={enabled}
                         disabled={busy}
                         onChange={(event) => setEnabled(event.target.checked)}
+                        style={{ accentColor: "var(--color-primary)", cursor: "pointer" }}
                     />
-                    <span>{t("limitEditor.inForce")}</span>
+                    <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-primary)" }}>{t("limitEditor.inForce", "Enable limit enforcement")}</span>
                 </label>
-                {error !== null && <p className="dialog-error">{error}</p>}
-                <div className="dialog-actions">
-                    <button type="submit" className="btn btn--primary" disabled={busy}>
-                        {busy && <LoadingSpinner size="xs" />}
-                        {busy ? t("limitEditor.setting") : t("limitEditor.saveOrder")}
-                    </button>
+
+                {error !== null && <p className="dialog-error" style={{ color: "var(--color-danger)", fontSize: "12px", margin: "0" }}>{error}</p>}
+
+                {/* Dialog Actions */}
+                <div className="dialog-actions" style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "8px" }}>
                     <button
                         type="button"
                         className="btn btn--secondary"
-                        onClick={() => {
-                            if (!busy) onClose();
-                        }}
+                        onClick={() => { if (!busy) onClose(); }}
                         disabled={busy}
                     >
-                        {t("common.cancel")}
+                        {t("common.cancel", "Cancel")}
+                    </button>
+                    <button type="submit" className="btn btn--primary" disabled={busy}>
+                        {busy && <LoadingSpinner size="xs" />}
+                        {busy ? t("limitEditor.setting", "Saving...") : t("limitEditor.saveOrder", "Save Limit")}
                     </button>
                 </div>
             </form>
         </Dialog>
     );
 }
-

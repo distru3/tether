@@ -48,11 +48,12 @@ Most screen-time tools either upload your browsing history to cloud servers for 
 
 ### 🎨 4 Distinct Solid Modern Themes
 - **Lightweight Desktop Shell**: Built with Tauri 2 and React 18, consuming less than 40 MB of RAM.
-- **Obsidian Onyx**: Pure pitch carbon base (`#090A0F`), warm carbon panels (`#12141A`), and radiant amber gold accents (`#F59E0B`).
-- **Warm Sandstone**: Non-glare warm sand / parchment canvas (`#F5F2EB`), pure alabaster cards, artisan terracotta accents (`#C2410C`), and deep espresso typography (`#1C1917`).
-- **Classic Dark & Classic Light**: Cool neutral slate + electric indigo, and pure crisp white + royal blue.
+- **Midnight Cobalt**: Deep carbon canvas (`#0B0E17`), sleek dark navy panels (`#121724`), and electric cobalt (`#4F46E5`) / indigo (`#6366F1`) accents.
+- **Cyber Emerald**: High-contrast tactical carbon-forest base (`#090D0B`), graphite panels (`#111915`), and cyber emerald (`#10B981`) / cyber mint (`#34D399`) accents.
+- **Clean Titanium**: Soft porcelain canvas (`#F8FAFC`), pure white panels (`#FFFFFF`), and royal cobalt (`#4338CA`) accent.
+- **Nordic Frost**: Icy slate canvas (`#F0F4F8`), crisp white panels (`#FFFFFF`), and arctic cyan (`#0284C7`) / teal (`#0D9488`) accents.
 - **Zero Glassmorphism**: 100% solid, opaque tactile surfaces with crisp 1px border contrast.
-- **Synchronized Overlays**: Overlays dynamically match your active theme preference in real-time.
+- **Synchronized Overlays**: Overlays dynamically match your active theme preference in real-time across both native Direct2D/GDI and Tauri webview windows.
 - **English & Arabic Localization**: Full bilingual support with right-to-left (RTL) layout switching.
 
 ---
@@ -93,14 +94,18 @@ Most screen-time tools either upload your browsing history to cloud servers for 
 
 ## What’s New in v0.2.0-beta
 
+- **Smooth 120 FPS HUD Entrance & Exit Animations**: Floating timer slides into view and accelerates smoothly off-screen with a buttery 120 FPS cubic curve. If `Ctrl + Alt + T` is triggered while the HUD is sliding away, trajectory reverses instantly back into view with zero stutter.
+- **RivaTuner (RTSS) Exclusion Protection**: Integrated official `RTSSHooksCompatibility` export and profile flags so RivaTuner Statistics Server / MSI Afterburner hooks will never obscure or distort the floating timer HUD.
+- **Graceful Hardware-Accelerated Block Overlay**: Replaced jarring unmounts with a 250ms hardware-composited fade and slide transition (`translateZ(0)`), complete with unmount race-condition guards.
+- **Instant Cross-Window Theme Synchronization**: Theme switches in the main workspace broadcast immediately to secondary windows, eliminating dark-mode mismatches and hardcoded hex fallbacks.
+- **4 Distinct Solid Modern Themes**: Hand-crafted palettes tailored for focus and clarity—**Midnight Cobalt** (electric cobalt dark), **Cyber Emerald** (tactical carbon-forest dark), **Clean Titanium** (soft porcelain light), and **Nordic Frost** (icy slate light).
+- **UI De-Cardenisation Overhaul**: Replaced excessive card boxes with unified, purpose-built components—including a streamlined horizontal metrics telemetry bar with hairline dividers and a clean macOS/Linear-style grouped settings layout.
+- **Redesigned Limit Creation & Input Workflow**: Added tactile target segment switcher (`[ App ] | [ Category ] | [ Total Device ]`), quick duration pills (`15m`, `30m`, `1h`, `2h`, `3h`, `4h`), smooth range slider + dual numeric steppers, and interactive 7-day pill schedule strip with helper presets.
 - **Autostart & Instant Tracking on Install**: `screentime-session.exe` registers in Windows HKLM and HKCU Run keys and launches immediately post-install so tracking begins right away without requiring a system reboot.
 - **Pre-Install Process & Service Clean Lock**: The installer cleanly stops background services and terminates running helper instances before copying binaries, preventing file-in-use errors during upgrades.
 - **Discovered Apps Path Canonicalization & Basename Matching**: Resolved 8.3 short paths (`PROGRA~1`) and linked running executables to existing discovered shortcut rows, ensuring user limits apply reliably without duplicate database entries.
-- **Solid Modern Design (Zero Glassmorphism)**: Completely eliminated all glassmorphic blur and muddy purple colors in favor of crisp, solid **Obsidian Dark** and **Titanium Light** themes with high-contrast borders.
+- **Solid Modern Design (Zero Glassmorphism)**: Completely eliminated all glassmorphic blur and muddy colors in favor of crisp, solid, high-contrast surfaces.
 - **Draggable Timer HUD**: Freely move the timer overlay across the screen without stealing focus from games or typing applications (`WS_EX_NOACTIVATE`). Your custom position is saved to `%LOCALAPPDATA%\screentime\hud_pos.json` and remembered across restarts.
-- **Windows Volume Flyout-Style Entrance Animation**: The timer HUD smoothly slides down from the top (or slides up from the bottom) using a 240 ms cubic deceleration curve when applications become active.
-- **Theme-Synchronized Overlays**: Both the hardware MPO HUD and the React secondary block overlay dynamically adapt to the active theme preference.
-- **Solid Tactile Block Overlay**: Redesigned block screen with solid card surfaces, tactile numeric keypad, and crisp 1px borders.
 - **Hardware Multiplane Overlay (MPO) Gaming HUD**: DirectComposition flip swapchain eliminates DWM composition drops in full-screen games, keeping FreeSync/G-Sync and driver frame limiters (Radeon Chill / Nvidia Max Frame Rate) active.
 - **Universal Timer Peek (`Ctrl + Alt + T`)**: On-demand 4-second peek mode works even with the continuous floating overlay disabled.
 - **Harmonic Audio Alerts**: High-fidelity sound chimes at 15m, 10m, 5m, and 1m intervals.

@@ -1,43 +1,43 @@
 /* ==========================================================================
    tokens.css - Screentime Design Tokens
    Supports 4 distinct theme palettes:
-   - Obsidian Onyx: Signature deep carbon & radiant amber gold
-   - Warm Sandstone: Signature warm parchment, terracotta & espresso ink
-   - Classic Dark: Clean neutral slate & indigo
-   - Classic Light: Clean neutral white, slate & royal blue
+   1. Midnight Cobalt: Deep carbon & electric cobalt
+   2. Cyber Emerald: Tactical carbon-forest & cyber mint
+   3. Clean Titanium: Pure white surfaces, soft porcelain & royal cobalt
+   4. Nordic Frost: Icy slate canvas & arctic cyan/teal
    ========================================================================== */
 
 :root {
     color-scheme: dark;
 
-    /* Surfaces: Solid, crisp, modern opaque surfaces (no glassmorphism) */
-    --bg-app: #090A0F;           /* Solid Pitch Carbon Base */
-    --bg-panel: #12141A;         /* Solid Surface Panel */
-    --bg-card: #12141A;          /* Solid Surface Level 1 */
-    --bg-card-elevated: #181B24; /* Solid Elevated */
-    --bg-card-hover: #1D212D;
-    --bg-surface: #12141A;
-    --bg-surface-hover: #181B24;
-    --bg-surface-raised: #181B24;
-    --bg-input: #0C0E14;
-    --bg-modal-backdrop: rgba(0, 0, 0, 0.85);
-    --bg-recessed: #0C0E14;      /* Surface Recessed */
+    /* Surfaces: Solid, crisp, modern opaque surfaces */
+    --bg-app: #0B0E17;           /* Deep carbon base */
+    --bg-panel: #121724;         /* Sleek surface panel */
+    --bg-card: #121724;          /* Surface Level 1 */
+    --bg-card-elevated: #182030; /* Elevated surface */
+    --bg-card-hover: #1E283C;
+    --bg-surface: #121724;
+    --bg-surface-hover: #182030;
+    --bg-surface-raised: #182030;
+    --bg-input: #0E121D;
+    --bg-modal-backdrop: rgba(11, 14, 23, 0.88);
+    --bg-recessed: #0E121D;      /* Surface Recessed */
     
     /* Borders */
-    --border-subtle: #1C202C;
-    --border-card: #222736;
-    --border-strong: #2E354A;
-    --border-hover: #454F6B;
+    --border-subtle: #161D2B;
+    --border-card: #1E2638;
+    --border-strong: #2A364F;
+    --border-hover: #405175;
     
     /* Ink (Text) */
-    --text-primary: #F4F5F7;     /* Crisp Titanium Cream */
-    --text-secondary: #9EA3B0;   /* Muted Graphite */
-    --text-muted: #636979;       /* Column headers, units */
+    --text-primary: #F8FAFC;     /* Crisp slate white */
+    --text-secondary: #94A3B8;   /* Muted slate */
+    --text-muted: #64748B;       /* Column headers, units */
 
     /* Semantic / Telemetry Colors */
-    --color-primary: #F59E0B;    /* Signature Amber Gold */
-    --color-primary-hover: #FBBF24;
-    --color-primary-active: #D97706;
+    --color-primary: #4F46E5;    /* Electric Cobalt */
+    --color-primary-hover: #6366F1;
+    --color-primary-active: #4338CA;
     
     /* Success / Live */
     --color-success: #10B981;
@@ -55,7 +55,7 @@
     --border-danger: rgba(244, 63, 94, 0.28);
     
     /* Info / Focus */
-    --color-focus: #F59E0B;
+    --color-focus: #4F46E5;
 
     /* Distinct Accents & Subtle Tones */
     --accent-indigo: #818CF8;

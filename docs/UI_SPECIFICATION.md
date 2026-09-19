@@ -10,37 +10,45 @@ The application is branded as **Tether**, featuring an official brand mark depic
 
 The UI utilizes a crisp, solid, high-contrast modern aesthetic (Obsidian Dark & Titanium Light) defined in `ui/src/styles/tokens.css`, `ui/src/styles/redesign.css`, and `ui/src/styles/app.css`. All glassmorphism (`backdrop-filter: blur`, semi-transparent frosted cards) has been completely eliminated in favor of opaque, tactile surfaces with 1px border contrast:
 
-### Core Palettes (4 Distinct Signatures)
+### Core Palettes (4 Modern Cohesive Palettes)
 
-#### A. Obsidian Onyx (Signature Solid Dark Theme)
-- **Base Canvas**: `#090A0F` (`--bg-app`, `--redesign-bg`) — Solid pitch carbon base.
-- **Solid Surfaces**: `#12141A` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Warm carbon panel level 1.
-- **Elevated Surfaces**: `#181B24` (`--bg-card-elevated`, `--redesign-panel-strong`) — Elevated carbon dialogs and cards.
-- **Recessed / Inputs**: `#0C0E14` (`--bg-input`, `--bg-recessed`, `--redesign-panel-muted`) — Recessed carbon inputs.
-- **Borders**: `#222736` (`--border-card`, `--redesign-line`), `#1C202C` (`--border-subtle`), `#2E354A` (`--border-strong`).
-- **Typography**: `#F4F5F7` primary text (crisp titanium cream), `#9EA3B0` secondary graphite, `#636979` muted text.
-- **Accents**: Radiant Amber Gold `#F59E0B` (`--color-primary`, `--redesign-orange`), Citrine Gold `#FBBF24`, Emerald `#10B981`, Coral Red `#F43F5E`.
-- **Character**: Deep dark luxury watch / obsidian carbon workspace.
+#### A. Midnight Cobalt (Signature Modern Dark Theme)
+- **Base Canvas**: `#0B0E17` (`--bg-app`, `--redesign-bg`) — Deep carbon base.
+- **Solid Surfaces**: `#121724` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Sleek carbon panel level 1.
+- **Elevated Surfaces**: `#182030` (`--bg-card-elevated`, `--redesign-panel-strong`) — Elevated carbon dialogs and cards.
+- **Recessed / Inputs**: `#0E121D` (`--bg-input`, `--bg-recessed`) — Recessed carbon inputs.
+- **Borders**: `#1E2638` (`--border-card`), `#161D2B` (`--border-subtle`), `#2A364F` (`--border-strong`).
+- **Typography**: `#F8FAFC` primary text (crisp slate white), `#94A3B8` secondary slate, `#64748B` muted text.
+- **Accents**: Electric Cobalt `#4F46E5` (`--color-primary`), Indigo `#6366F1`, Emerald `#10B981`, Rose `#F43F5E`.
+- **Character**: Precision dark cockpit / technical analytics workspace.
 
-#### B. Warm Sandstone (Signature Solid Light Theme)
-- **Base Canvas**: `#F5F2EB` (`--bg-app`, `--redesign-bg`) — Soft warm sand / parchment canvas, gentle on eyes.
-- **Solid Surfaces**: `#FFFFFF` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Crisp porcelain / alabaster cards.
-- **Elevated Surfaces**: `#FFFFFF` with warm elevated shadow.
-- **Recessed / Inputs**: `#ECE7DC` (`--bg-input`, `--bg-recessed`) — Warm recessed sand.
-- **Borders**: `#DDD7CC` (`--border-card`), `#EAE5DC` (`--border-subtle`), `#CCC5B8` (`--border-strong`).
-- **Typography**: `#1C1917` primary text (deep rich espresso), `#57534E` secondary roasted walnut, `#78716C` muted clay.
-- **Accents**: Artisan Terracotta / Burnt Sienna `#C2410C` (`--color-primary`, `--redesign-orange`), Flame `#EA580C`, Pine Green `#047857`, Crimson `#BE123C`.
-- **Character**: Tactile, editorial notebook / architectural workspace.
+#### B. Cyber Emerald (Tactical Carbon-Forest & Cyber Mint)
+- **Base Canvas**: `#090D0B` (`--bg-app`, `--redesign-bg`) — Tactical carbon-forest base.
+- **Solid Surfaces**: `#111915` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Dark graphite panels.
+- **Elevated Surfaces**: `#16221C` (`--bg-card-elevated`, `--redesign-panel-strong`).
+- **Recessed / Inputs**: `#0C130F` (`--bg-input`, `--bg-recessed`).
+- **Borders**: `#1B2922` (`--border-card`), `#131F19` (`--border-subtle`), `#263A30` (`--border-strong`).
+- **Typography**: `#ECFDF5` primary text (crisp mint cream), `#9CA3AF` secondary graphite, `#6B7280` muted text.
+- **Accents**: Cyber Emerald `#10B981` (`--color-primary`), Cyber Mint `#34D399`, Cyan `#06B6D4`, Rose Red `#F43F5E`.
+- **Character**: High-contrast tactical night-vision and terminal aesthetic.
 
-#### C. Classic Dark (Cool Slate & Indigo)
-- **Base Canvas**: `#0B0F17` — Deep neutral slate.
-- **Solid Surfaces**: `#141A26` — Deep navy-slate panels.
-- **Accents**: Electric Indigo `#6366F1`, Cyan `#38BDF8`.
+#### C. Clean Titanium (Pure White Surfaces & Soft Porcelain)
+- **Base Canvas**: `#F8FAFC` (`--bg-app`, `--redesign-bg`) — Soft porcelain canvas, easy on eyes.
+- **Solid Surfaces**: `#FFFFFF` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Pure white cards.
+- **Elevated Surfaces**: `#FFFFFF` with soft elevation.
+- **Recessed / Inputs**: `#F1F5F9` (`--bg-input`, `--bg-recessed`).
+- **Borders**: `#E2E8F0` (`--border-card`), `#EEF2F6` (`--border-subtle`), `#CBD5E1` (`--border-strong`).
+- **Character**: Pure architectural minimalism / macOS studio workspace.
 
-#### D. Classic Light (Crisp White & Royal Blue)
-- **Base Canvas**: `#F8FAFC` — Crisp clean neutral slate light.
-- **Solid Surfaces**: `#FFFFFF` — Pure white cards.
-- **Accents**: Royal Blue `#2563EB`, Emerald `#059669`.
+#### D. Nordic Frost (Icy Slate Canvas & Arctic Cyan/Teal Theme)
+- **Base Canvas**: `#F0F4F8` (`--bg-app`) — Icy slate canvas.
+- **Solid Surfaces**: `#FFFFFF` (`--bg-panel`, `--bg-card`) — Crisp frosted white panels.
+- **Elevated Surfaces**: `#FFFFFF` with subtle frosty shadow.
+- **Recessed / Inputs**: `#FFFFFF`.
+- **Borders**: `#D0DEEB` (`--border-card`), `#DFE8F1` (`--border-subtle`), `#B8CDE0` (`--border-strong`).
+- **Typography**: `#0C1A24` primary text, `#304856` secondary text, `#5C7688` muted text.
+- **Accents**: Arctic Cyan `#0284C7` (`--color-primary`), Arctic Teal `#0D9488`.
+- **Character**: Crisp Nordic clarity / glacial precision workspace.
 
 ---
 
@@ -376,15 +384,14 @@ When running full-screen or borderless 3D games with driver-level frame rate lim
 ## 10. Multi-Theme Architecture & Semantic Token Alignment
 
 The application supports four distinct, beautifully tuned visual themes plus OS automatic matching:
-1. **Horizon Dark** (`horizon-dark`): Signature warm obsidian base (`#210F37`), deep purple cards (`#4F1C51`), terracotta primary buttons (`#A55B4B`), and amber gold accents (`#DCA06D`).
-2. **Horizon Light** (`horizon-light`): Signature warm cream parchment base (`#F5EDE8`), elevated paper cards (`#FFFAF7`), dark espresso ink (`#1E0A05`), and warm terracotta accents (`#A55B4B`).
-3. **Classic Dark** (`classic-dark`): Neutral slate canvas (`#0B0F17`), deep charcoal cards (`rgba(20, 26, 38, 0.75)`), crisp slate ink (`#F1F5F9`), and modern indigo & cyan accents (`#6366F1`, `#38BDF8`).
-4. **Classic Light** (`classic-light`): Neutral slate light canvas (`#F8FAFC`), pure white cards (`#FFFFFF`), dark slate ink (`#0F172A`), and vibrant royal blue & emerald accents (`#2563EB`, `#059669`).
+1. **Midnight Cobalt** (`midnight-cobalt`): Deep carbon base (`#0B0E17`), sleek steel borders (`#1E2638`), crisp titanium text (`#F1F5F9`), and electric cobalt/indigo accents (`#4F46E5`, `#6366F1`).
+2. **Cyber Emerald** (`cyber-emerald`): Tactical carbon-forest base (`#090D0B`), dark graphite panels (`#111915`), phosphor text (`#F0FDF4`), and cyber mint/emerald accents (`#10B981`, `#34D399`).
+3. **Clean Titanium** (`clean-titanium`): Soft porcelain canvas (`#F8FAFC`), pure white surfaces (`#FFFFFF`), deep slate text (`#0F172A`), and royal cobalt accents (`#4338CA`, `#4F46E5`).
+4. **Nordic Frost** (`nordic-frost`): Icy slate canvas (`#F0F4F8`), crisp white panels (`#FFFFFF`), deep fjord navy text (`#0C1929`), and arctic cyan/teal accents (`#0284C7`, `#0D9488`).
 
 ### A. Semantic Surface Hierarchy & Theme Selectors
 - **Unified Dual-Selector Syntax**:
-  - To maintain backward compatibility with legacy `"light"` while supporting explicit `"horizon-light"`, all light theme component rules in `redesign.css` utilize `:is([data-theme="light"], [data-theme="horizon-light"])`.
-  - Classic Dark uses `[data-theme="classic-dark"]` and Classic Light uses `[data-theme="classic-light"]`.
+  - To maintain backward compatibility with legacy preferences while supporting new themes, all component rules in `redesign.css` support both new IDs (`midnight-cobalt`, `cyber-emerald`, `clean-titanium`, `nordic-frost`) and aliases (`dark`, `light`, `horizon-dark`, `horizon-light`, `classic-dark`, `classic-light`).
 - **Top Navigation Bar & App Bar Theming**:
   - The top App Bar (`.titlebar`) dynamically inherits `var(--bg-app)` and `var(--border-subtle)` with high-contrast text and control buttons across all 4 themes.
   - The sticky Navigation Bar (`.app-sidebar`), segmented button capsule (`.sidebar-nav`, `.nav-item`), and day stepper (`.day-stepper`, `.stepper-btn`) adapt seamlessly with warm parchment surfaces and espresso ink in Horizon Light, crisp slate in Classic Dark, and clean neutral slate in Classic Light.
@@ -420,4 +427,54 @@ The application supports four distinct, beautifully tuned visual themes plus OS 
     ```
   - At `volume_pct == 0`, audio playback is completely muted.
   - Zero disk I/O, zero external audio crate dependencies, zero audio latency.
+
+---
+
+## 12. HUD Timer Overlay Exit Animation & Hotkey Interruption
+
+### A. 120 FPS Exit Animation Pipeline
+- **Problem**: Previously, when the 4-second peek duration expired or HUD was dismissed, `run.dismiss()` called `WM_CLOSE` immediately, causing the overlay to vanish instantly with an abrupt cutout.
+- **Solution**:
+  - In `crates/session/src/hud.rs`, the HUD lifecycle is managed by an atomic phase controller (`HudAnimShared`): `Entering` (0), `Settled` (1), `Exiting` (2), `Closed` (3).
+  - When peek duration runs out, `trigger_exit()` is invoked instead of immediate window destruction.
+  - The exit animation runs at 120 FPS (~8.33 ms frame interval) over a 240 ms window using a cubic ease-in curve (`t^3`):
+    ```rust
+    let ease = t * t * t;
+    let y = (start_y as f32 + (target_y - start_y) as f32 * ease).round() as i32;
+    ```
+  - The overlay glides smoothly off-screen back in the exact vertical direction it arrived from (e.g. retreating +24px off bottom or -24px off top).
+  - Upon completion of the exit curve, the phase transitions to `Closed` and `WM_CLOSE` is dispatched cleanly.
+
+### B. Hotkey Interruption & Dynamic Reversal
+- If the user re-triggers the hotkey (`Ctrl+Alt+T`) while the HUD is in mid-exit:
+  - `reverse_to_enter()` dynamically snapshots the current `cur_y` coordinate and reverses the trajectory towards `final_y` without resetting or jumping frames.
+  - In `crates/session/src/main.rs`, during `is_exiting()` the main loop sleep relaxes from 1000 ms to 50 ms polling intervals, ensuring near-instant (<50 ms) responsiveness to hotkey presses during departure.
+
+---
+
+## 13. UI De-Cardenisation Architecture
+
+### A. Unified Telemetry Bar (`MetricCards.tsx` & `MetricCards.css`)
+- Replaces disjointed floating card boxes with a cohesive horizontal telemetry bar:
+  - Enclosed in a single unified panel (`.metric-cards-grid`) with subtle 1px border (`var(--border-subtle)`).
+  - Individual metric segments (`.metric-card-link`) are separated by vertical hairline dividers (`border-right: 1px solid var(--border-subtle)`).
+  - Hover states apply clean surface tinting (`var(--bg-card-hover)`) without shifting surrounding geometry.
+
+### B. Linear-Style Unified Settings Sections (`redesign.css`)
+- Replaces 8 detached floating settings cards with unified grouped panels:
+  - Settings controls are housed within cohesive panels with clean uppercase category headers and subtle hairline dividers between options.
+  - Eliminates visual clutter while retaining tactile contrast and legible spacing.
+
+---
+
+## 14. Modernized Limit Creation & Block Overlay Experience
+
+### A. Redesigned Limit Creation Dialog (`LimitEditorDialog.tsx`)
+- Segmented target picker (`[ App ]` | `[ Category ]` | `[ Total Device ]`) with iconography.
+- Direct-access duration slider coupled with dual hour/minute numerical inputs and rapid preset pills (`15m`, `30m`, `45m`, `1h`, `1.5h`, `2h`, `3h`, `4h`).
+- Compact single-row weekday pill selector (`[M] [T] [W] [T] [F] [S] [S]`) replacing previous multi-row card stacks.
+
+### B. Limit Block Overlay Animation & Cross-Window Theme Sync (`BlockOverlay.tsx`, `overlay_bridge.rs`)
+- **Graceful Dismissal**: When limits thaw or are granted overrides, `overlay_bridge.rs` invokes `hide_overlay_gracefully` to trigger CSS exit animations (`overlay-exit-scale` & `backdrop-exit-fade`) before calling native `window.hide()`.
+- **Theme Synchronization**: Listens for the `theme_changed` Tauri event to synchronize theme tokens across all windows in real time, eliminating hardcoded dark fallbacks and ensuring seamless visual consistency across light and dark modes.
 

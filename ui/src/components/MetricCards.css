@@ -1,52 +1,88 @@
+/* ==========================================================================
+   MetricCards.css - Sleek Horizontal Telemetry Bar with Hairline Dividers
+   ========================================================================== */
+
+.metric-telemetry-bar,
 .metric-cards-grid {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
-    gap: 16px;
+    display: flex;
+    align-items: stretch;
+    background-color: var(--bg-card);
+    border: 1px solid var(--border-card);
+    border-radius: var(--radius-xl, 14px);
     margin-bottom: 24px;
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+    gap: 0;
 }
 
+.metric-telemetry-item,
 .metric-card {
-    background-color: var(--bg-card);
-    border: 1px solid var(--border-subtle);
-    border-radius: var(--radius-lg);
-    padding: 16px;
+    flex: 1;
+    min-width: 0;
+    background: transparent !important;
+    border: none !important;
+    border-inline-end: 1px solid var(--border-subtle) !important;
+    border-radius: 0 !important;
+    padding: 16px 20px;
     display: flex;
     flex-direction: column;
-    box-shadow: var(--shadow-sm);
+    justify-content: center;
+    box-shadow: none !important;
+    transition: background-color 0.15s ease;
 }
 
+.metric-telemetry-item:last-child,
+.metric-card:last-child {
+    border-inline-end: none !important;
+}
+
+.metric-telemetry-item:hover,
+.metric-card:hover {
+    background-color: var(--bg-surface-hover) !important;
+}
+
+.metric-telemetry-top,
 .metric-card-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
+    margin-bottom: 6px;
 }
 
+.metric-telemetry-label,
 .metric-label {
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 10.5px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--text-muted);
+    font-weight: 600;
 }
 
+.metric-telemetry-icon,
 .metric-icon {
-    color: var(--text-muted);
+    color: var(--color-primary);
     display: flex;
+    opacity: 0.85;
 }
 
+.metric-telemetry-val-row,
 .metric-value-row {
     display: flex;
     align-items: baseline;
     gap: 8px;
 }
 
+.metric-telemetry-value,
 .metric-value {
-    font-size: 24px;
+    font-size: 22px;
     font-weight: 700;
     color: var(--text-primary);
+    font-family: var(--font-mono);
+    letter-spacing: -0.02em;
 }
 
+.metric-telemetry-badge,
 .metric-badge {
     font-size: 11px;
     padding: 2px 6px;
@@ -56,19 +92,32 @@
     border: 1px solid var(--border-subtle);
 }
 
-.metric-footer {
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid var(--border-subtle);
-}
-
+.metric-telemetry-trend,
+.metric-footer,
 .metric-trend {
-    font-size: 12px;
+    margin-top: 6px;
+    padding-top: 0;
+    border-top: none;
+    font-size: 11.5px;
     color: var(--text-secondary);
 }
 
-@media (max-width: 1024px) {
+@media (max-width: 900px) {
+    .metric-telemetry-bar,
     .metric-cards-grid {
+        display: grid;
         grid-template-columns: repeat(2, 1fr);
+    }
+
+    .metric-telemetry-item:nth-child(2),
+    .metric-card:nth-child(2) {
+        border-inline-end: none !important;
+    }
+
+    .metric-telemetry-item:nth-child(1),
+    .metric-telemetry-item:nth-child(2),
+    .metric-card:nth-child(1),
+    .metric-card:nth-child(2) {
+        border-bottom: 1px solid var(--border-subtle) !important;
     }
 }

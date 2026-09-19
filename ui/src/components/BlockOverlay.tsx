@@ -1,8 +1,10 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { Clock, ShieldAlert, Power, Delete, Check, Lock } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { useTheme } from "../hooks/useTheme";
+import "./BlockOverlay.css";
 import {
   getOverlayState,
   overlayExtend,
@@ -14,21 +16,16 @@ import type { OverlayActiveStateDto } from "../api";
 
 export function BlockOverlay() {
   const { t, i18n } = useTranslation();
+  // Ensure theme sync across windows
+  useTheme();
+
   const [state, setState] = useState<OverlayActiveStateDto | null>(null);
   const [pin, setPin] = useState("");
   const [wrongPin, setWrongPin] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
-
-  // Trigger entrance transition shortly after mount
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setVisible(true);
-    }, 20);
-    return () => clearTimeout(timer);
-  }, []);
+  const exitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Set document title and body/document transparency on mount
   useEffect(() => {
@@ -77,7 +74,15 @@ export function BlockOverlay() {
   useEffect(() => {
     refreshState();
 
+    const clearExitTimeout = () => {
+      if (exitTimeoutRef.current) {
+        clearTimeout(exitTimeoutRef.current);
+        exitTimeoutRef.current = null;
+      }
+    };
+
     const handleUpdate = (payload: OverlayActiveStateDto) => {
+      clearExitTimeout();
       setState((prev) => {
         if (prev?.app_id !== payload.app_id) {
           setPin("");
@@ -87,21 +92,19 @@ export function BlockOverlay() {
         return payload;
       });
       setExiting(false);
-      requestAnimationFrame(() => {
-        setVisible(true);
-      });
     };
 
     const handleHide = () => {
+      clearExitTimeout();
       setExiting(true);
-      setTimeout(() => {
+      exitTimeoutRef.current = setTimeout(() => {
         setState(null);
         setPin("");
         setWrongPin(false);
         setErrorMsg(null);
-        setVisible(false);
         setExiting(false);
-      }, 220);
+        exitTimeoutRef.current = null;
+      }, 240);
     };
 
     // 1. Listen via global Tauri event emitter
@@ -113,15 +116,23 @@ export function BlockOverlay() {
       handleHide();
     });
 
+    const unlistenGracefulExitGlobal = listen("overlay_graceful_exit", () => {
+      handleHide();
+    });
+
     // 2. Listen via window-scoped event emitter
     let unlistenUpdateWin: Promise<() => void> | null = null;
     let unlistenHideWin: Promise<() => void> | null = null;
+    let unlistenGracefulExitWin: Promise<() => void> | null = null;
     try {
       const win = getCurrentWindow();
       unlistenUpdateWin = win.listen<OverlayActiveStateDto>("overlay_update", (event) => {
         handleUpdate(event.payload);
       });
       unlistenHideWin = win.listen("overlay_hide", () => {
+        handleHide();
+      });
+      unlistenGracefulExitWin = win.listen("overlay_graceful_exit", () => {
         handleHide();
       });
     } catch {
@@ -136,10 +147,13 @@ export function BlockOverlay() {
     document.addEventListener("visibilitychange", handleFocus);
 
     return () => {
+      clearExitTimeout();
       unlistenUpdateGlobal.then((f) => f());
       unlistenHideGlobal.then((f) => f());
+      unlistenGracefulExitGlobal.then((f) => f());
       if (unlistenUpdateWin) unlistenUpdateWin.then((f) => f());
       if (unlistenHideWin) unlistenHideWin.then((f) => f());
+      if (unlistenGracefulExitWin) unlistenGracefulExitWin.then((f) => f());
       window.removeEventListener("focus", handleFocus);
       document.removeEventListener("visibilitychange", handleFocus);
     };
@@ -239,46 +253,10 @@ export function BlockOverlay() {
     <div
       id="tether-block-overlay"
       dir={isRtl ? "rtl" : "ltr"}
-      style={{
-        position: "fixed",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        background: "var(--bg-modal-backdrop, rgba(11, 13, 19, 0.92))",
-        opacity: visible && !exiting ? 1 : 0,
-        transition: "opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1)",
-        margin: 0,
-        padding: 24,
-        boxSizing: "border-box",
-        userSelect: "none",
-        zIndex: 999999,
-      }}
+      className={`tether-overlay-backdrop ${exiting ? "tether-overlay-backdrop--exiting" : ""}`}
     >
       <div
-        className="solid-card"
-        style={{
-          width: "480px",
-          maxWidth: "92vw",
-          background: "var(--bg-card, #131620)",
-          border: "1px solid var(--border-card, #202534)",
-          borderRadius: "16px",
-          boxShadow: "0 24px 64px rgba(0, 0, 0, 0.6)",
-          padding: "32px 28px",
-          display: "flex",
-          flexDirection: "column",
-          gap: "20px",
-          opacity: visible && !exiting ? 1 : 0,
-          transform:
-            visible && !exiting
-              ? "scale(1) translateY(0)"
-              : "scale(0.96) translateY(12px)",
-          transition:
-            "opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1), transform 0.24s cubic-bezier(0.16, 1, 0.3, 1)",
-          willChange: "opacity, transform",
-        }}
+        className={`tether-overlay-card solid-card ${exiting ? "tether-overlay-card--exiting" : ""}`}
       >
         {/* Top Header Row */}
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -288,7 +266,7 @@ export function BlockOverlay() {
                 width: "28px",
                 height: "28px",
                 borderRadius: "6px",
-                background: "var(--color-primary, #3B82F6)",
+                background: "var(--color-primary)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -303,7 +281,7 @@ export function BlockOverlay() {
                 fontWeight: 700,
                 letterSpacing: "0.1em",
                 textTransform: "uppercase",
-                color: "var(--text-muted, #6B7280)",
+                color: "var(--text-muted)",
                 fontFamily: "var(--font-mono, monospace)",
               }}
             >
@@ -318,9 +296,9 @@ export function BlockOverlay() {
               gap: "6px",
               padding: "4px 10px",
               borderRadius: "20px",
-              background: "var(--bg-danger, rgba(244, 63, 94, 0.12))",
-              border: "1px solid var(--border-danger, rgba(244, 63, 94, 0.28))",
-              color: "var(--color-danger, #F43F5E)",
+              background: "var(--bg-danger)",
+              border: "1px solid var(--border-danger)",
+              color: "var(--color-danger)",
               fontSize: "11px",
               fontWeight: 700,
               letterSpacing: "0.06em",
@@ -338,7 +316,7 @@ export function BlockOverlay() {
             style={{
               fontSize: "24px",
               fontWeight: 700,
-              color: "var(--text-primary, #F3F4F6)",
+              color: "var(--text-primary)",
               margin: "0 0 8px",
               letterSpacing: "-0.01em",
               display: "flex",
@@ -352,7 +330,7 @@ export function BlockOverlay() {
                 width: "10px",
                 height: "10px",
                 borderRadius: "50%",
-                background: "var(--color-danger, #F43F5E)",
+                background: "var(--color-danger)",
                 display: "inline-block",
                 flexShrink: 0,
               }}
@@ -362,7 +340,7 @@ export function BlockOverlay() {
           <p
             style={{
               fontSize: "13.5px",
-              color: "var(--text-secondary, #9CA3AF)",
+              color: "var(--text-secondary)",
               margin: 0,
               lineHeight: 1.5,
             }}
@@ -386,7 +364,7 @@ export function BlockOverlay() {
               style={{
                 fontSize: "12px",
                 fontWeight: 600,
-                color: "var(--text-muted, #6B7280)",
+                color: "var(--text-muted)",
                 textTransform: "uppercase",
                 letterSpacing: "0.05em",
               }}
@@ -401,10 +379,10 @@ export function BlockOverlay() {
                 gap: "12px",
                 padding: "10px 20px",
                 borderRadius: "10px",
-                background: "var(--bg-recessed, #0E1017)",
+                background: "var(--bg-recessed)",
                 border: wrongPin
-                  ? "1px solid var(--color-danger, #F43F5E)"
-                  : "1px solid var(--border-subtle, #1C202E)",
+                  ? "1px solid var(--color-danger)"
+                  : "1px solid var(--border-subtle)",
                 transition: "border-color 0.2s ease",
               }}
             >
@@ -418,10 +396,10 @@ export function BlockOverlay() {
                       height: "14px",
                       borderRadius: "50%",
                       border: filled
-                        ? "2px solid var(--color-primary, #3B82F6)"
-                        : "2px solid var(--border-strong, #2D3447)",
-                      background: filled ? "var(--color-primary, #3B82F6)" : "transparent",
-                      boxShadow: filled ? "0 0 8px rgba(59, 130, 246, 0.5)" : "none",
+                        ? "2px solid var(--color-primary)"
+                        : "2px solid var(--border-strong)",
+                      background: filled ? "var(--color-primary)" : "transparent",
+                      boxShadow: filled ? "0 0 8px var(--color-primary-subtle)" : "none",
                       transition: "all 0.15s ease",
                     }}
                   />
@@ -434,7 +412,7 @@ export function BlockOverlay() {
               <span
                 style={{
                   fontSize: "12px",
-                  color: "var(--color-danger, #F43F5E)",
+                  color: "var(--color-danger)",
                   fontWeight: 600,
                 }}
               >
@@ -463,17 +441,17 @@ export function BlockOverlay() {
                     style={{
                       height: "44px",
                       borderRadius: "8px",
-                      border: "1px solid var(--border-card, #202534)",
+                      border: "1px solid var(--border-card)",
                       background: isAction
                         ? key === "OK"
-                          ? "var(--color-primary, #3B82F6)"
-                          : "var(--bg-danger, rgba(244, 63, 94, 0.15))"
-                        : "var(--bg-recessed, #0E1017)",
+                          ? "var(--color-primary)"
+                          : "var(--bg-danger)"
+                        : "var(--bg-recessed)",
                       color: isAction
                         ? key === "OK"
                           ? "#FFFFFF"
-                          : "var(--color-danger, #F43F5E)"
-                        : "var(--text-primary, #F3F4F6)",
+                          : "var(--color-danger)"
+                        : "var(--text-primary)",
                       fontSize: isAction ? "13px" : "18px",
                       fontWeight: 700,
                       fontFamily: isAction ? "inherit" : "var(--font-mono, monospace)",
@@ -484,20 +462,20 @@ export function BlockOverlay() {
                       transition: "all 0.12s ease",
                     }}
                     onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = "var(--border-hover, #3E4760)";
+                      e.currentTarget.style.borderColor = "var(--border-hover)";
                       e.currentTarget.style.background = isAction
                         ? key === "OK"
-                          ? "var(--color-primary-hover, #60A5FA)"
-                          : "rgba(244, 63, 94, 0.25)"
-                        : "var(--bg-surface-hover, #1A1E2B)";
+                          ? "var(--color-primary-hover)"
+                          : "var(--bg-danger)"
+                        : "var(--bg-surface-hover)";
                     }}
                     onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = "var(--border-card, #202534)";
+                      e.currentTarget.style.borderColor = "var(--border-card)";
                       e.currentTarget.style.background = isAction
                         ? key === "OK"
-                          ? "var(--color-primary, #3B82F6)"
-                          : "var(--bg-danger, rgba(244, 63, 94, 0.15))"
-                        : "var(--bg-recessed, #0E1017)";
+                          ? "var(--color-primary)"
+                          : "var(--bg-danger)"
+                        : "var(--bg-recessed)";
                     }}
                     onMouseDown={(e) => {
                       e.currentTarget.style.transform = "scale(0.96)";
@@ -515,7 +493,7 @@ export function BlockOverlay() {
             <span
               style={{
                 fontSize: "11px",
-                color: "var(--text-muted, #6B7280)",
+                color: "var(--text-muted)",
                 marginTop: "2px",
               }}
             >
@@ -562,8 +540,8 @@ export function BlockOverlay() {
               alignItems: "center",
               justifyContent: "center",
               gap: "8px",
-              borderColor: "var(--border-danger, rgba(244, 63, 94, 0.35))",
-              color: "var(--color-danger, #F43F5E)",
+              borderColor: "var(--border-danger)",
+              color: "var(--color-danger)",
             }}
           >
             <Power size={16} />

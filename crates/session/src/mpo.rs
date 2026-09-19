@@ -52,49 +52,49 @@ use windows::Win32::Graphics::Dxgi::{
 pub const HUD_W: u32 = 92;
 pub const HUD_H: u32 = 28;
 
-// Solid modern tokens in linear sRGB for Direct2D (Obsidian Onyx & Warm Sandstone)
+// Modern color tokens for Direct2D (Midnight Cobalt, Cyber Emerald, Clean Titanium, Nordic Frost)
 const COLOR_BG_DARK: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 9.0 / 255.0,
-    g: 10.0 / 255.0,
-    b: 15.0 / 255.0,
+    r: 11.0 / 255.0,
+    g: 14.0 / 255.0,
+    b: 23.0 / 255.0,
     a: 1.0,
 };
 const COLOR_BORDER_DARK: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 34.0 / 255.0,
-    g: 39.0 / 255.0,
-    b: 54.0 / 255.0,
+    r: 30.0 / 255.0,
+    g: 38.0 / 255.0,
+    b: 56.0 / 255.0,
     a: 1.0,
 };
 const COLOR_TEXT_DARK: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 244.0 / 255.0,
-    g: 245.0 / 255.0,
-    b: 247.0 / 255.0,
+    r: 248.0 / 255.0,
+    g: 250.0 / 255.0,
+    b: 252.0 / 255.0,
     a: 1.0,
 };
 
 const COLOR_BG_LIGHT: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 245.0 / 255.0,
-    g: 242.0 / 255.0,
-    b: 235.0 / 255.0,
+    r: 248.0 / 255.0,
+    g: 250.0 / 255.0,
+    b: 252.0 / 255.0,
     a: 1.0,
 };
 const COLOR_BORDER_LIGHT: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 221.0 / 255.0,
-    g: 215.0 / 255.0,
-    b: 204.0 / 255.0,
+    r: 226.0 / 255.0,
+    g: 232.0 / 255.0,
+    b: 240.0 / 255.0,
     a: 1.0,
 };
 const COLOR_TEXT_LIGHT: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 28.0 / 255.0,
-    g: 25.0 / 255.0,
-    b: 23.0 / 255.0,
+    r: 15.0 / 255.0,
+    g: 23.0 / 255.0,
+    b: 42.0 / 255.0,
     a: 1.0,
 };
 
 const COLOR_COBALT: D2D1_COLOR_F = D2D1_COLOR_F {
-    r: 59.0 / 255.0,
-    g: 130.0 / 255.0,
-    b: 246.0 / 255.0,
+    r: 79.0 / 255.0,
+    g: 70.0 / 255.0,
+    b: 229.0 / 255.0,
     a: 1.0,
 };
 const COLOR_AMBER: D2D1_COLOR_F = D2D1_COLOR_F {

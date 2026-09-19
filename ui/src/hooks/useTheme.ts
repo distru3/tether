@@ -1,17 +1,19 @@
-﻿import { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 
 export type ThemePreference =
-  | "horizon-dark"
-  | "horizon-light"
-  | "classic-dark"
-  | "classic-light"
+  | "midnight-cobalt"
+  | "cyber-emerald"
+  | "clean-titanium"
+  | "nordic-frost"
   | "system";
 
 export type EffectiveTheme =
-  | "horizon-dark"
-  | "horizon-light"
-  | "classic-dark"
-  | "classic-light";
+  | "midnight-cobalt"
+  | "cyber-emerald"
+  | "clean-titanium"
+  | "nordic-frost";
 
 const STORAGE_KEY = "tether_theme";
 const DEFAULT: ThemePreference = "system";
@@ -27,14 +29,25 @@ function isTauriAvailable(): boolean {
   );
 }
 
-function isValidPref(v: string | null | undefined): v is ThemePreference {
-  return (
-    v === "horizon-dark" ||
-    v === "horizon-light" ||
-    v === "classic-dark" ||
-    v === "classic-light" ||
+function normalizePref(v: string | null | undefined): ThemePreference | null {
+  if (!v) return null;
+  if (
+    v === "midnight-cobalt" ||
+    v === "cyber-emerald" ||
+    v === "clean-titanium" ||
+    v === "nordic-frost" ||
     v === "system"
-  );
+  ) {
+    return v;
+  }
+  // Backward compatibility for legacy values
+  if (v === "horizon-dark" || v === "classic-dark" || v === "dark") return "midnight-cobalt";
+  if (v === "horizon-light" || v === "classic-light" || v === "light") return "clean-titanium";
+  return null;
+}
+
+function isValidPref(v: string | null | undefined): v is ThemePreference {
+  return normalizePref(v) !== null;
 }
 
 /** Read the saved theme synchronously from localStorage — used for the initial
@@ -42,10 +55,8 @@ function isValidPref(v: string | null | undefined): v is ThemePreference {
 function getStoredSync(): ThemePreference {
   try {
     const v = localStorage.getItem(STORAGE_KEY);
-    if (isValidPref(v)) return v;
-    // Backward compat for legacy "dark" / "light" values
-    if (v === "dark") return "horizon-dark";
-    if (v === "light") return "horizon-light";
+    const normalized = normalizePref(v);
+    if (normalized) return normalized;
   } catch {
     // ignore
   }
@@ -57,9 +68,9 @@ function getStoredSync(): ThemePreference {
 async function getStoredAsync(): Promise<ThemePreference> {
   if (!isTauriAvailable()) return getStoredSync();
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
     const v = await invoke<string>("get_theme");
-    if (isValidPref(v)) return v;
+    const normalized = normalizePref(v);
+    if (normalized) return normalized;
   } catch {
     // fall back to localStorage
   }
@@ -77,7 +88,6 @@ async function persistTheme(theme: ThemePreference): Promise<void> {
   }
   if (!isTauriAvailable()) return;
   try {
-    const { invoke } = await import("@tauri-apps/api/core");
     await invoke("set_theme", { theme });
   } catch {
     // ignore — localStorage already updated
@@ -89,22 +99,22 @@ async function persistTheme(theme: ThemePreference): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function resolveEffective(pref: ThemePreference): EffectiveTheme {
-  if (pref === "horizon-dark") return "horizon-dark";
-  if (pref === "horizon-light") return "horizon-light";
-  if (pref === "classic-dark") return "classic-dark";
-  if (pref === "classic-light") return "classic-light";
+  if (pref === "midnight-cobalt") return "midnight-cobalt";
+  if (pref === "cyber-emerald") return "cyber-emerald";
+  if (pref === "clean-titanium") return "clean-titanium";
+  if (pref === "nordic-frost") return "nordic-frost";
   // "system": follow the OS dark/light mode preference
   try {
     const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    return isDark ? "horizon-dark" : "horizon-light";
+    return isDark ? "midnight-cobalt" : "clean-titanium";
   } catch {
-    return "horizon-dark";
+    return "midnight-cobalt";
   }
 }
 
-function applyTheme(effective: EffectiveTheme) {
+export function applyTheme(effective: EffectiveTheme) {
   document.documentElement.setAttribute("data-theme", effective);
-  const mode = effective.includes("light") ? "light" : "dark";
+  const mode = effective === "clean-titanium" || effective === "nordic-frost" ? "light" : "dark";
   document.documentElement.setAttribute("data-theme-mode", mode);
 }
 
@@ -119,8 +129,6 @@ export function useTheme() {
   );
 
   // On mount: load the authoritative value from the Tauri file store.
-  // This corrects any mismatch between localStorage (which may be stale after
-  // a forced kill in dev) and the file-backed store.
   useEffect(() => {
     getStoredAsync().then((saved) => {
       if (saved !== theme) {
@@ -128,7 +136,27 @@ export function useTheme() {
       }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // intentionally runs only once on mount
+  }, []);
+
+  // Listen for broadcasted theme changes across all Tauri windows (main, overlay, etc.)
+  useEffect(() => {
+    let unlisten: Promise<() => void> | null = null;
+    try {
+      if (isTauriAvailable()) {
+        unlisten = listen<string>("theme_changed", (event) => {
+          const next = normalizePref(event.payload);
+          if (next && next !== theme) {
+            setThemeState(next);
+          }
+        });
+      }
+    } catch {
+      // ignore
+    }
+    return () => {
+      if (unlisten) unlisten.then((f) => f());
+    };
+  }, [theme]);
 
   // Apply and persist whenever the preference changes.
   useEffect(() => {
@@ -144,7 +172,7 @@ export function useTheme() {
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = (e: MediaQueryListEvent) => {
-      const effective: EffectiveTheme = e.matches ? "horizon-dark" : "horizon-light";
+      const effective: EffectiveTheme = e.matches ? "midnight-cobalt" : "clean-titanium";
       setEffectiveTheme(effective);
       applyTheme(effective);
     };

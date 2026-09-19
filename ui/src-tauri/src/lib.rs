@@ -47,7 +47,7 @@ mod corners {
 
 use serde::Serialize;
 use st_ipc::{ErrorCode, Response};
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 
 /// Everything the header needs, plus one host-owned fact: whether the IPC
 /// round trip succeeded at all. `StatusDto` describes the agent's own state;
@@ -495,16 +495,28 @@ fn stop_all_services(app: tauri::AppHandle) -> CmdResult<()> {
 
 /// Returns the user's saved theme preference from `{app_data_dir}/theme.txt`.
 /// Returns `"system"` if the file doesn't exist or can't be read.
+fn is_valid_theme(t: &str) -> bool {
+    matches!(
+        t,
+        "midnight-cobalt"
+            | "cyber-emerald"
+            | "clean-titanium"
+            | "nordic-frost"
+            | "horizon-dark"
+            | "horizon-light"
+            | "classic-dark"
+            | "classic-light"
+            | "system"
+    )
+}
+
 #[tauri::command]
 fn get_theme(app: tauri::AppHandle) -> String {
     let path = app.path().app_data_dir().map(|d| d.join("theme.txt")).ok();
     if let Some(p) = path {
         if let Ok(s) = std::fs::read_to_string(&p) {
             let s = s.trim().to_string();
-            if matches!(
-                s.as_str(),
-                "horizon-dark" | "horizon-light" | "classic-dark" | "classic-light" | "system"
-            ) {
+            if is_valid_theme(&s) {
                 return s;
             }
         }
@@ -512,12 +524,21 @@ fn get_theme(app: tauri::AppHandle) -> String {
     "system".into()
 }
 
-/// Persists the user's theme preference to `{app_data_dir}/theme.txt`.
+/// Persists the user's theme preference to `{app_data_dir}/theme.txt` and broadcasts
+/// `theme_changed` across all windows (main and overlay).
 #[tauri::command]
 fn set_theme(app: tauri::AppHandle, theme: String) -> CmdResult<()> {
     if !matches!(
         theme.as_str(),
-        "horizon-dark" | "horizon-light" | "classic-dark" | "classic-light" | "system"
+        "midnight-cobalt"
+            | "cyber-emerald"
+            | "clean-titanium"
+            | "nordic-frost"
+            | "horizon-dark"
+            | "horizon-light"
+            | "classic-dark"
+            | "classic-light"
+            | "system"
     ) {
         return Err(CommandError {
             code: "invalid_theme".into(),
@@ -551,6 +572,10 @@ fn set_theme(app: tauri::AppHandle, theme: String) -> CmdResult<()> {
         }
         let _ = std::fs::write(&p, theme.as_bytes());
     }
+
+    // Broadcast theme update across all windows
+    let _ = app.emit("theme_changed", &theme);
+
     Ok(())
 }
 
