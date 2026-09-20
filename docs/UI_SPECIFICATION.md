@@ -22,15 +22,15 @@ The UI utilizes a crisp, solid, high-contrast modern aesthetic (Obsidian Dark & 
 - **Accents**: Electric Cobalt `#4F46E5` (`--color-primary`), Indigo `#6366F1`, Emerald `#10B981`, Rose `#F43F5E`.
 - **Character**: Precision dark cockpit / technical analytics workspace.
 
-#### B. Cyber Emerald (Tactical Carbon-Forest & Cyber Mint)
-- **Base Canvas**: `#090D0B` (`--bg-app`, `--redesign-bg`) — Tactical carbon-forest base.
-- **Solid Surfaces**: `#111915` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Dark graphite panels.
-- **Elevated Surfaces**: `#16221C` (`--bg-card-elevated`, `--redesign-panel-strong`).
-- **Recessed / Inputs**: `#0C130F` (`--bg-input`, `--bg-recessed`).
-- **Borders**: `#1B2922` (`--border-card`), `#131F19` (`--border-subtle`), `#263A30` (`--border-strong`).
-- **Typography**: `#ECFDF5` primary text (crisp mint cream), `#9CA3AF` secondary graphite, `#6B7280` muted text.
-- **Accents**: Cyber Emerald `#10B981` (`--color-primary`), Cyber Mint `#34D399`, Cyan `#06B6D4`, Rose Red `#F43F5E`.
-- **Character**: High-contrast tactical night-vision and terminal aesthetic.
+#### B. Slate Charcoal (Clean Neutral Dark Charcoal & Ice Cyan)
+- **Base Canvas**: `#0D1117` (`--bg-app`, `--redesign-bg`) — Clean dark charcoal base.
+- **Solid Surfaces**: `#161B22` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Dark graphite panels.
+- **Elevated Surfaces**: `#21262D` (`--bg-card-elevated`, `--redesign-panel-strong`).
+- **Recessed / Inputs**: `#090D12` (`--bg-input`, `--bg-recessed`).
+- **Borders**: `#30363D` (`--border-card`), `#21262D` (`--border-subtle`), `#3D444D` (`--border-strong`).
+- **Typography**: `#F0F6FC` primary text (crisp neutral silver-white), `#8B949E` secondary graphite, `#6E7681` muted text.
+- **Accents**: Ice Cyan `#38BDF8` (`--color-primary`), Polar Blue `#0284C7`, Emerald `#3FB950`, Rose `#F85149`.
+- **Character**: Minimalist, distraction-free neutral dark workspace.
 
 #### C. Clean Titanium (Pure White Surfaces & Soft Porcelain)
 - **Base Canvas**: `#F8FAFC` (`--bg-app`, `--redesign-bg`) — Soft porcelain canvas, easy on eyes.
@@ -385,13 +385,13 @@ When running full-screen or borderless 3D games with driver-level frame rate lim
 
 The application supports four distinct, beautifully tuned visual themes plus OS automatic matching:
 1. **Midnight Cobalt** (`midnight-cobalt`): Deep carbon base (`#0B0E17`), sleek steel borders (`#1E2638`), crisp titanium text (`#F1F5F9`), and electric cobalt/indigo accents (`#4F46E5`, `#6366F1`).
-2. **Cyber Emerald** (`cyber-emerald`): Tactical carbon-forest base (`#090D0B`), dark graphite panels (`#111915`), phosphor text (`#F0FDF4`), and cyber mint/emerald accents (`#10B981`, `#34D399`).
+2. **Slate Charcoal** (`slate-charcoal`): Clean dark charcoal base (`#0D1117`), graphite panels (`#161B22`), crisp silver-white text (`#F0F6FC`), and ice cyan accents (`#38BDF8`, `#0284C7`).
 3. **Clean Titanium** (`clean-titanium`): Soft porcelain canvas (`#F8FAFC`), pure white surfaces (`#FFFFFF`), deep slate text (`#0F172A`), and royal cobalt accents (`#4338CA`, `#4F46E5`).
 4. **Nordic Frost** (`nordic-frost`): Icy slate canvas (`#F0F4F8`), crisp white panels (`#FFFFFF`), deep fjord navy text (`#0C1929`), and arctic cyan/teal accents (`#0284C7`, `#0D9488`).
 
 ### A. Semantic Surface Hierarchy & Theme Selectors
 - **Unified Dual-Selector Syntax**:
-  - To maintain backward compatibility with legacy preferences while supporting new themes, all component rules in `redesign.css` support both new IDs (`midnight-cobalt`, `cyber-emerald`, `clean-titanium`, `nordic-frost`) and aliases (`dark`, `light`, `horizon-dark`, `horizon-light`, `classic-dark`, `classic-light`).
+  - To maintain backward compatibility with legacy preferences while supporting new themes, all component rules in `redesign.css` support both new IDs (`midnight-cobalt`, `slate-charcoal`, `clean-titanium`, `nordic-frost`) and aliases (`dark`, `light`, `horizon-dark`, `horizon-light`, `classic-dark`, `classic-light`).
 - **Top Navigation Bar & App Bar Theming**:
   - The top App Bar (`.titlebar`) dynamically inherits `var(--bg-app)` and `var(--border-subtle)` with high-contrast text and control buttons across all 4 themes.
   - The sticky Navigation Bar (`.app-sidebar`), segmented button capsule (`.sidebar-nav`, `.nav-item`), and day stepper (`.day-stepper`, `.stepper-btn`) adapt seamlessly with warm parchment surfaces and espresso ink in Horizon Light, crisp slate in Classic Dark, and clean neutral slate in Classic Light.

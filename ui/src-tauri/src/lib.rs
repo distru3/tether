@@ -499,6 +499,7 @@ fn is_valid_theme(t: &str) -> bool {
     matches!(
         t,
         "midnight-cobalt"
+            | "slate-charcoal"
             | "cyber-emerald"
             | "clean-titanium"
             | "nordic-frost"
@@ -531,6 +532,7 @@ fn set_theme(app: tauri::AppHandle, theme: String) -> CmdResult<()> {
     if !matches!(
         theme.as_str(),
         "midnight-cobalt"
+            | "slate-charcoal"
             | "cyber-emerald"
             | "clean-titanium"
             | "nordic-frost"

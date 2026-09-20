@@ -52,7 +52,7 @@ use windows::Win32::Graphics::Dxgi::{
 pub const HUD_W: u32 = 92;
 pub const HUD_H: u32 = 28;
 
-// Modern color tokens for Direct2D (Midnight Cobalt, Cyber Emerald, Clean Titanium, Nordic Frost)
+// Modern color tokens for Direct2D (Midnight Cobalt, Slate Charcoal, Clean Titanium, Nordic Frost)
 const COLOR_BG_DARK: D2D1_COLOR_F = D2D1_COLOR_F {
     r: 11.0 / 255.0,
     g: 14.0 / 255.0,

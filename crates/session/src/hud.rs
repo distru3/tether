@@ -39,7 +39,7 @@ const fn rgb(r: u8, g: u8, b: u8) -> COLORREF {
     COLORREF(r as u32 | ((g as u32) << 8) | ((b as u32) << 16))
 }
 
-// Midnight Cobalt / Cyber Emerald Dark tokens
+// Midnight Cobalt / Slate Charcoal Dark tokens
 const BG_DARK: COLORREF = rgb(0x0B, 0x0E, 0x17);
 const BORDER_DARK: COLORREF = rgb(0x1E, 0x26, 0x38);
 const TEXT_DARK: COLORREF = rgb(0xF8, 0xFA, 0xFC);

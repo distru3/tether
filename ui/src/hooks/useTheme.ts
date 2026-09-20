@@ -4,14 +4,14 @@ import { listen } from "@tauri-apps/api/event";
 
 export type ThemePreference =
   | "midnight-cobalt"
-  | "cyber-emerald"
+  | "slate-charcoal"
   | "clean-titanium"
   | "nordic-frost"
   | "system";
 
 export type EffectiveTheme =
   | "midnight-cobalt"
-  | "cyber-emerald"
+  | "slate-charcoal"
   | "clean-titanium"
   | "nordic-frost";
 
@@ -33,7 +33,7 @@ function normalizePref(v: string | null | undefined): ThemePreference | null {
   if (!v) return null;
   if (
     v === "midnight-cobalt" ||
-    v === "cyber-emerald" ||
+    v === "slate-charcoal" ||
     v === "clean-titanium" ||
     v === "nordic-frost" ||
     v === "system"
@@ -41,6 +41,7 @@ function normalizePref(v: string | null | undefined): ThemePreference | null {
     return v;
   }
   // Backward compatibility for legacy values
+  if (v === "cyber-emerald") return "slate-charcoal";
   if (v === "horizon-dark" || v === "classic-dark" || v === "dark") return "midnight-cobalt";
   if (v === "horizon-light" || v === "classic-light" || v === "light") return "clean-titanium";
   return null;
@@ -100,7 +101,7 @@ async function persistTheme(theme: ThemePreference): Promise<void> {
 
 function resolveEffective(pref: ThemePreference): EffectiveTheme {
   if (pref === "midnight-cobalt") return "midnight-cobalt";
-  if (pref === "cyber-emerald") return "cyber-emerald";
+  if (pref === "slate-charcoal") return "slate-charcoal";
   if (pref === "clean-titanium") return "clean-titanium";
   if (pref === "nordic-frost") return "nordic-frost";
   // "system": follow the OS dark/light mode preference

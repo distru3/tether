@@ -4,6 +4,7 @@ import { Clock, Flame, Hourglass, ShieldCheck, ChevronDown } from "lucide-react"
 import { applyLanguage } from "./i18n";
 import { formatDayLabel, formatDuration } from "./format";
 import { MetricCards } from "./components/MetricCards";
+import { ExecutiveHeader } from "./components/ExecutiveHeader";
 import { UsageAside } from "./components/UsageAside";
 import { CategoryMix } from "./components/CategoryMix";
 
@@ -307,51 +308,26 @@ function MainDashboard() {
             )}
 
             {activeTab === "overview" && (
-              <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)", display: "flex", flexDirection: "column", gap: "24px" }}>
-                <MetricCards
-                  metrics={[
-                    {
-                      label: "SCREEN TIME TODAY",
-                      value: formatDuration(total),
-                      icon: <Clock size={18} color="var(--color-primary)" />,
-                      trend: vsAvgText,
-                      badge: total > 0 ? `${apps.length} apps` : undefined,
-                    },
-                    {
-                      label: "LONGEST FOCUS STREAK",
-                      value: maxIntervalSeconds > 0 ? formatDuration(maxIntervalSeconds) : "—",
-                      icon: <Flame size={18} color="#f59e0b" />,
-                      trend: streakSubtitle,
-                      badge: streakBadge,
-                    },
-                    {
-                      label: "REMAINING BUDGET",
-                      value: enabledLimits.length > 0 ? formatDuration(remainingBudgetSeconds) : "No limits",
-                      icon: <Hourglass size={18} color="var(--color-primary)" />,
-                      trend: enabledLimits.length > 0
-                        ? `${enabledLimits.length} active budget${enabledLimits.length === 1 ? "" : "s"}`
-                        : "Configure in App Limits",
-                      badge: enabledLimits.length > 0
-                        ? remainingBudgetSeconds === 0
-                          ? "Exhausted"
-                          : "In Budget"
-                        : undefined,
-                    },
-                    {
-                      label: "PROTECTION STATUS",
-                      value: blockedCount > 0 ? `${blockedCount} Blocked` : "Active",
-                      icon: (
-                        <ShieldCheck
-                          size={18}
-                          color={blockedCount > 0 ? "var(--color-danger)" : "var(--color-success)"}
-                        />
-                      ),
-                      trend: blockedCount > 0
-                        ? `${blocked.map((a) => a.label).join(", ")} suspended`
-                        : "Zero limit violations today",
-                      badge: blockedCount > 0 ? "Action Needed" : "Protected",
-                    },
-                  ]}
+              <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)", display: "flex", flexDirection: "column", gap: "20px" }}>
+                <ExecutiveHeader
+                  summary={summary}
+                  loading={loading}
+                  total={total}
+                  apps={apps}
+                  viewDay={viewDay}
+                  isViewingToday={isViewingToday}
+                  goPrevDay={goPrevDay}
+                  goNextDay={goNextDay}
+                  goToday={goToday}
+                  maxIntervalSeconds={maxIntervalSeconds}
+                  maxAppName={maxAppName}
+                  streakBadge={streakBadge}
+                  streakSubtitle={streakSubtitle}
+                  enabledLimits={enabledLimits}
+                  remainingBudgetSeconds={remainingBudgetSeconds}
+                  blockedCount={blockedCount}
+                  blocked={blocked}
+                  vsAvgText={vsAvgText}
                 />
 
                 {blocked.length > 0 && (
@@ -363,17 +339,17 @@ function MainDashboard() {
                   />
                 )}
                 
-                <div className="overview-activity-grid">
-                  <div className="card timeline-panel">
+                <div className="activity-ledger-container">
+                  <div className="activity-ledger-timeline">
                     <div className="timeline-panel__header">
                       <div>
                         <p className="panel-eyebrow">Today at a glance</p>
                         <h3>Daily Timeline</h3>
                       </div>
                       <div className="date-picker-placeholder">
-                        <button className="btn btn-ghost btn-sm" onClick={goPrevDay}>&lt;</button>
+                        <button className="btn btn-ghost btn-sm" onClick={goPrevDay} aria-label={t("hero.prevDay", "Previous Day")}>&lt;</button>
                         <span>{isViewingToday ? "Today" : formatDayLabel(viewDay!)}</span>
-                        <button className="btn btn-ghost btn-sm" onClick={goNextDay} disabled={isViewingToday}>&gt;</button>
+                        <button className="btn btn-ghost btn-sm" onClick={goNextDay} disabled={isViewingToday} aria-label={t("hero.nextDay", "Next Day")}>&gt;</button>
                       </div>
                     </div>
                     {pastDayEmpty ? (
@@ -382,22 +358,26 @@ function MainDashboard() {
                       <LedgerRule summary={summary} loading={loading} now={now} catalog={catalog} isToday={isViewingToday} />
                     )}
                   </div>
-                  <UsageAside
-                    entries={apps}
-                    total={total}
-                    catalog={catalog}
-                    onCategorize={actions.openCategorize}
-                    onOpenAppDirectory={() => setAppDirectoryOpen(true)}
-                  />
+                  <div className="activity-ledger-aside">
+                    <UsageAside
+                      entries={apps}
+                      total={total}
+                      catalog={catalog}
+                      onCategorize={actions.openCategorize}
+                      onOpenAppDirectory={() => setAppDirectoryOpen(true)}
+                    />
+                  </div>
                 </div>
 
-                  <div className="overview-chart-grid">
-                    <div className="card" style={{ padding: "24px" }}>
-                      <h3 style={{ fontSize: "16px", fontWeight: "600", margin: "0 0 16px 0" }}>Weekly History</h3>
-                      <WeeklyChart week={week} viewDay={viewDay} loading={weekLoading} onSelectDay={setViewDay} />
-                    </div>
+                <div className="analytics-trends-container">
+                  <div className="analytics-trends-history">
+                    <h3 className="analytics-trends-history-title">Weekly History</h3>
+                    <WeeklyChart week={week} viewDay={viewDay} loading={weekLoading} onSelectDay={setViewDay} />
+                  </div>
+                  <div className="analytics-trends-distribution">
                     <CategoryMix categories={categories} total={total} />
                   </div>
+                </div>
               </div>
             )}
 
@@ -490,11 +470,11 @@ function MainDashboard() {
                           </button>
                           <button
                             type="button"
-                            className={`theme-btn ${theme === "cyber-emerald" ? "theme-btn--active" : ""}`}
-                            onClick={() => setTheme("cyber-emerald")}
+                            className={`theme-btn ${theme === "slate-charcoal" ? "theme-btn--active" : ""}`}
+                            onClick={() => setTheme("slate-charcoal")}
                           >
-                            <span className="theme-swatch-dot theme-swatch-dot--cyber-emerald" />
-                            {t("settings.themeCyberEmerald", "Cyber Emerald")}
+                            <span className="theme-swatch-dot theme-swatch-dot--slate-charcoal" />
+                            {t("settings.themeSlateCharcoal", "Slate Charcoal")}
                           </button>
                           <button
                             type="button"

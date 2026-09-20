@@ -1,6 +1,6 @@
 import { useMemo, useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { Smartphone, Layers, LayoutGrid, Clock, Calendar } from "lucide-react";
+import { Smartphone, Layers, LayoutGrid, Clock, Calendar, Check } from "lucide-react";
 import type { WeekdayMinutes } from "../api";
 import { targetLabel, WEEKDAY_SHORT } from "../format";
 import { colorForCategory } from "../categoryColors";
@@ -50,6 +50,15 @@ function decodeTarget(value: string): LimitTargetDto | null {
     const id = Number.parseInt(rawId ?? "", 10);
     if ((kind === "app" || kind === "category") && Number.isFinite(id)) return { kind, id };
     return null;
+}
+
+function formatShortDuration(totalMins: number): string {
+    if (totalMins <= 0) return "0m";
+    const h = Math.floor(totalMins / 60);
+    const m = totalMins % 60;
+    if (h > 0 && m > 0) return `${h}h${m}m`;
+    if (h > 0) return `${h}h`;
+    return `${m}m`;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,7 +165,7 @@ function AppPicker({ options, value, disabled, placeholder, onChange }: AppPicke
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
                             onKeyDown={onKeyDown}
-                            placeholder="Search..."
+                            placeholder="Search applications or categories..."
                         />
                     </div>
                     <ul className="picker-list" ref={listRef} role="listbox">
@@ -176,6 +185,7 @@ function AppPicker({ options, value, disabled, placeholder, onChange }: AppPicke
                                     onMouseEnter={() => setActiveIdx(i)}
                                 >
                                     <span className="picker-item-label">{opt.label}</span>
+                                    {opt.value === value && <Check size={14} className="picker-item-check" />}
                                 </li>
                             ))
                         )}
@@ -242,6 +252,7 @@ export function LimitEditorDialog({
     const [minutes, setMinutes] = useState(() => String(limit?.default_minutes ?? 60));
     const [enabled, setEnabled] = useState(() => limit?.enabled ?? true);
     const [dayOverrides, setDayOverrides] = useState<DayOverrideState[]>(() => initDayOverrides(limit));
+    const [focusedDay, setFocusedDay] = useState<number>(0);
     const [error, setError] = useState<string | null>(null);
 
     const overrideCount = dayOverrides.filter((day) => day.override).length;
@@ -388,6 +399,12 @@ export function LimitEditorDialog({
         onSubmit(finalTarget, parsed, weekdayMinutes, enabled);
     };
 
+    // Active focused day inspection math
+    const activeFocusedDay = dayOverrides[focusedDay];
+    const activeFocusedMins = Number.parseInt(activeFocusedDay?.minutes ?? "", 10) || 0;
+    const activeFocusedH = Math.floor(activeFocusedMins / 60);
+    const activeFocusedM = activeFocusedMins % 60;
+
     return (
         <Dialog
             label={locked ? t("limitEditor.editOrder", "Edit Limit") : t("limitEditor.newOrder", "New Limit")}
@@ -395,26 +412,26 @@ export function LimitEditorDialog({
                 if (!busy) onClose();
             }}
         >
-            <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-                <div>
-                    <p className="dialog-eyebrow" style={{ margin: "0 0 4px", fontSize: "11px", textTransform: "uppercase", letterSpacing: "0.08em", color: "var(--color-primary)", fontWeight: 700 }}>
+            <form onSubmit={submit} className="limit-editor-form">
+                <div className="limit-editor-header">
+                    <p className="dialog-eyebrow">
                         {locked ? t("limitEditor.editEyebrow", "MODIFY LIMIT") : t("limitEditor.newEyebrow", "NEW LIMIT")}
                     </p>
-                    <h2 className="dialog-title" style={{ margin: 0, fontSize: "18px", fontWeight: 700, color: "var(--text-primary)" }}>
+                    <h2 className="dialog-title">
                         {locked && target !== null ? targetLabel(target, catalog) : t("limitEditor.chooseTarget", "Configure Allowance")}
                     </h2>
                 </div>
 
                 {/* 1. Target Picker Segmented Control */}
                 {!locked && (
-                    <div>
+                    <div className="limit-form-section">
                         <div className="target-segmented-control">
                             <button
                                 type="button"
                                 className={`target-segment-btn ${targetKind === "app" ? "target-segment-btn--active" : ""}`}
                                 onClick={() => handleSegmentChange("app")}
                             >
-                                <Smartphone size={13} />
+                                <Smartphone size={14} />
                                 <span>App</span>
                             </button>
                             <button
@@ -422,7 +439,7 @@ export function LimitEditorDialog({
                                 className={`target-segment-btn ${targetKind === "category" ? "target-segment-btn--active" : ""}`}
                                 onClick={() => handleSegmentChange("category")}
                             >
-                                <Layers size={13} />
+                                <Layers size={14} />
                                 <span>Category</span>
                             </button>
                             <button
@@ -430,7 +447,7 @@ export function LimitEditorDialog({
                                 className={`target-segment-btn ${targetKind === "total" ? "target-segment-btn--active" : ""}`}
                                 onClick={() => handleSegmentChange("total")}
                             >
-                                <LayoutGrid size={13} />
+                                <LayoutGrid size={14} />
                                 <span>Total Device</span>
                             </button>
                         </div>
@@ -456,10 +473,10 @@ export function LimitEditorDialog({
                         )}
 
                         {targetKind === "total" && (
-                            <div className="total-device-info-card">
-                                <LayoutGrid size={18} color="var(--color-primary)" style={{ flexShrink: 0 }} />
-                                <div>
-                                    <strong>Overall Device Limit:</strong> Enforces a single consolidated daily usage budget across all applications on this machine.
+                            <div className="total-device-callout">
+                                <LayoutGrid size={18} className="total-device-icon" />
+                                <div className="total-device-text">
+                                    <strong>Overall Device Limit:</strong> Enforces a unified daily usage budget across all desktop applications on this computer.
                                 </div>
                             </div>
                         )}
@@ -468,9 +485,9 @@ export function LimitEditorDialog({
 
                 {/* Primary Category Tag for Selected App */}
                 {currentApp && (
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: "var(--bg-surface)", borderRadius: "8px", border: "1px solid var(--border-subtle)" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{t("categorize.primary", "Category")}:</span>
+                    <div className="limit-app-category-bar">
+                        <div className="limit-app-category-info">
+                            <span className="limit-app-category-label">{t("categorize.primary", "Category")}:</span>
                             <span
                                 className="target-badge target-badge--category-tag"
                                 style={{
@@ -485,8 +502,7 @@ export function LimitEditorDialog({
                         {onCategorize && (
                             <button
                                 type="button"
-                                className="btn btn-ghost btn-sm"
-                                style={{ fontSize: "11px", padding: "2px 8px", height: "auto" }}
+                                className="btn btn-ghost btn-xs"
                                 onClick={() => onCategorize(currentApp.id, currentApp.display_name, currentApp.primary_category, currentApp.tags)}
                             >
                                 {t("categorize.changeCategory", "Change")}
@@ -496,10 +512,10 @@ export function LimitEditorDialog({
                 )}
 
                 {/* 2. Duration Controls (Dual Numeric Inputs, Presets, and Slider) */}
-                <div style={{ padding: "14px", background: "var(--bg-surface)", border: "1px solid var(--border-subtle)", borderRadius: "10px" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: 600, color: "var(--text-secondary)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                            <Clock size={13} color="var(--color-primary)" />
+                <div className="limit-form-section">
+                    <div className="limit-section-header">
+                        <div className="limit-section-title">
+                            <Clock size={13} className="limit-section-icon" />
                             <span>{t("limitEditor.minutesPerDay", "Daily Allowance")}</span>
                         </div>
                         <div className="duration-dual-inputs">
@@ -513,8 +529,9 @@ export function LimitEditorDialog({
                                     disabled={busy}
                                     onChange={(e) => setHours(Number.parseInt(e.target.value, 10) || 0)}
                                 />
-                                <span>h</span>
+                                <span className="duration-unit">h</span>
                             </div>
+                            <span className="duration-separator">:</span>
                             <div className="duration-input-group">
                                 <input
                                     type="number"
@@ -525,7 +542,7 @@ export function LimitEditorDialog({
                                     disabled={busy}
                                     onChange={(e) => setMins(Number.parseInt(e.target.value, 10) || 0)}
                                 />
-                                <span>m</span>
+                                <span className="duration-unit">m</span>
                             </div>
                         </div>
                     </div>
@@ -557,7 +574,8 @@ export function LimitEditorDialog({
                             onChange={(e) => { setMinutes(e.target.value); setError(null); }}
                         />
                         <div className="duration-slider-labels">
-                            <span>5m</span>
+                            <span>15m</span>
+                            <span>1h</span>
                             <span>2h</span>
                             <span>4h</span>
                             <span>8h+</span>
@@ -565,15 +583,15 @@ export function LimitEditorDialog({
                     </div>
                 </div>
 
-                {/* 3. Interactive Weekday Schedule Bar */}
-                <div className="weekday-schedule-box">
-                    <div className="weekday-header-row">
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <Calendar size={13} color="var(--color-primary)" />
-                            <span className="weekday-schedule-title">{t("limitEditor.perDayOverrides", "Weekday Schedule")}</span>
+                {/* 3. Interactive Weekday Schedule Selector */}
+                <div className="limit-form-section">
+                    <div className="limit-section-header">
+                        <div className="limit-section-title">
+                            <Calendar size={13} className="limit-section-icon" />
+                            <span>{t("limitEditor.perDayOverrides", "Weekday Schedule")}</span>
                             {overrideCount > 0 && (
-                                <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--color-primary)", marginLeft: "4px" }}>
-                                    ({overrideCount} active)
+                                <span className="weekday-active-count-badge">
+                                    {overrideCount} custom
                                 </span>
                             )}
                         </div>
@@ -584,71 +602,162 @@ export function LimitEditorDialog({
                         </div>
                     </div>
 
-                    {/* Weekday 7-Pill Bar */}
+                    {/* 7-Cell Schedule Matrix */}
                     <div className="weekday-pill-bar">
                         {WEEKDAY_SHORT.map((dayName, idx) => {
                             const isOverridden = dayOverrides[idx]?.override;
+                            const isFocused = focusedDay === idx;
+                            const dayMins = Number.parseInt(dayOverrides[idx]?.minutes || "0", 10);
                             return (
                                 <button
                                     key={dayName}
                                     type="button"
-                                    className={`weekday-day-pill ${isOverridden ? "weekday-day-pill--active" : ""}`}
-                                    onClick={() => toggleSingleDay(idx)}
-                                    title={`Toggle ${dayName}`}
+                                    className={`weekday-day-cell ${isOverridden ? "weekday-day-cell--active" : ""} ${isFocused ? "weekday-day-cell--focused" : ""}`}
+                                    onClick={() => {
+                                        setFocusedDay(idx);
+                                        if (!isOverridden) {
+                                            toggleSingleDay(idx);
+                                        }
+                                    }}
+                                    title={`${dayName}: ${isOverridden ? formatShortDuration(dayMins) : "Daily default"}`}
                                 >
-                                    <span>{dayName.slice(0, 1)}</span>
+                                    <span className="day-cell-name">{dayName}</span>
+                                    <span className="day-cell-time">
+                                        {isOverridden ? formatShortDuration(dayMins) : "Daily"}
+                                    </span>
                                 </button>
                             );
                         })}
                     </div>
 
-                    {/* Overridden Days Fine-Tuning List */}
-                    {overrideCount > 0 && (
-                        <div className="weekday-overrides-list">
-                            {dayOverrides.map((day, idx) => {
-                                if (!day.override) return null;
-                                const dayName = WEEKDAY_SHORT[idx]!;
-                                return (
-                                    <div key={dayName} className="weekday-override-item">
-                                        <div className="weekday-override-item-left">
-                                            <span>{dayName}</span>
-                                        </div>
-                                        <div className="weekday-override-item-input">
-                                            <input
-                                                type="number"
-                                                className="duration-num-input"
-                                                style={{ width: "56px", padding: "3px 6px", fontSize: "12px" }}
-                                                min={0}
-                                                max={1440}
-                                                step={5}
-                                                value={day.minutes}
-                                                onChange={(e) => updateDayMinutes(idx, e.target.value)}
-                                            />
-                                            <span style={{ fontSize: "11px", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>min</span>
-                                        </div>
-                                    </div>
-                                );
-                            })}
+                    {/* Focused Day Inline Adjuster */}
+                    <div className="weekday-focus-editor">
+                        <div className="weekday-focus-info">
+                            <span className="weekday-focus-day">{WEEKDAY_SHORT[focusedDay]}</span>
+                            <span className="weekday-focus-status">
+                                {activeFocusedDay?.override 
+                                    ? t("limitEditor.customOverride", "Custom Allowance") 
+                                    : t("limitEditor.usingDaily", "Using Daily Allowance")}
+                            </span>
                         </div>
-                    )}
+
+                        {activeFocusedDay?.override ? (
+                            <div className="weekday-focus-controls">
+                                <button
+                                    type="button"
+                                    className="weekday-step-btn"
+                                    onClick={() => {
+                                        const next = Math.max(0, activeFocusedMins - 15);
+                                        updateDayMinutes(focusedDay, String(next));
+                                    }}
+                                    title="-15 minutes"
+                                >
+                                    -15m
+                                </button>
+
+                                <div className="duration-dual-inputs duration-dual-inputs--sm">
+                                    <div className="duration-input-group">
+                                        <input
+                                            type="number"
+                                            className="duration-num-input duration-num-input--sm"
+                                            min={0}
+                                            max={24}
+                                            value={activeFocusedH}
+                                            onChange={(e) => {
+                                                const h = Math.max(0, Math.min(24, Number.parseInt(e.target.value, 10) || 0));
+                                                updateDayMinutes(focusedDay, String(h * 60 + activeFocusedM));
+                                            }}
+                                        />
+                                        <span className="duration-unit">h</span>
+                                    </div>
+                                    <span className="duration-separator">:</span>
+                                    <div className="duration-input-group">
+                                        <input
+                                            type="number"
+                                            className="duration-num-input duration-num-input--sm"
+                                            min={0}
+                                            max={59}
+                                            value={activeFocusedM}
+                                            onChange={(e) => {
+                                                const m = Math.max(0, Math.min(59, Number.parseInt(e.target.value, 10) || 0));
+                                                updateDayMinutes(focusedDay, String(activeFocusedH * 60 + m));
+                                            }}
+                                        />
+                                        <span className="duration-unit">m</span>
+                                    </div>
+                                </div>
+
+                                <button
+                                    type="button"
+                                    className="weekday-step-btn"
+                                    onClick={() => {
+                                        const next = Math.min(1440, activeFocusedMins + 15);
+                                        updateDayMinutes(focusedDay, String(next));
+                                    }}
+                                    title="+15 minutes"
+                                >
+                                    +15m
+                                </button>
+
+                                <button
+                                    type="button"
+                                    className="weekday-action-btn weekday-action-btn--reset"
+                                    onClick={() => toggleSingleDay(focusedDay)}
+                                    title={t("limitEditor.resetTitle", "Remove override and use daily default")}
+                                >
+                                    {t("limitEditor.removeOverride", "Reset to Default")}
+                                </button>
+
+                                {overrideCount > 1 && (
+                                    <button
+                                        type="button"
+                                        className="weekday-action-btn weekday-action-btn--sync"
+                                        onClick={() => {
+                                            const targetMins = activeFocusedDay.minutes;
+                                            setDayOverrides((prev) =>
+                                                prev.map((d) => (d.override ? { ...d, minutes: targetMins } : d))
+                                            );
+                                        }}
+                                        title={t("limitEditor.syncTitle", "Apply this duration to all custom days")}
+                                    >
+                                        {t("limitEditor.syncAll", "Sync All")}
+                                    </button>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="weekday-focus-inactive">
+                                <button
+                                    type="button"
+                                    className="btn btn-secondary btn-xs"
+                                    onClick={() => toggleSingleDay(focusedDay)}
+                                >
+                                    {t("limitEditor.enableForDay", "Customize {{day}}", { day: WEEKDAY_SHORT[focusedDay] })}
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
-                {/* In Force Checkbox */}
-                <label className="field field--inline" style={{ display: "flex", alignItems: "center", gap: "8px", margin: "4px 0", cursor: "pointer" }}>
+                {/* 4. In Force Checkbox */}
+                <label className="limit-enforce-toggle">
                     <input
                         type="checkbox"
                         checked={enabled}
                         disabled={busy}
                         onChange={(event) => setEnabled(event.target.checked)}
-                        style={{ accentColor: "var(--color-primary)", cursor: "pointer" }}
+                        className="limit-enforce-checkbox"
                     />
-                    <span style={{ fontSize: "13px", fontWeight: 500, color: "var(--text-primary)" }}>{t("limitEditor.inForce", "Enable limit enforcement")}</span>
+                    <span className="limit-enforce-label">{t("limitEditor.inForce", "Enable limit enforcement")}</span>
                 </label>
 
-                {error !== null && <p className="dialog-error" style={{ color: "var(--color-danger)", fontSize: "12px", margin: "0" }}>{error}</p>}
+                {error !== null && (
+                    <div className="dialog-error">
+                        {error}
+                    </div>
+                )}
 
-                {/* Dialog Actions */}
-                <div className="dialog-actions" style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "8px" }}>
+                {/* 5. Dialog Actions */}
+                <div className="dialog-actions">
                     <button
                         type="button"
                         className="btn btn--secondary"

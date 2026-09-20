@@ -1,0 +1,274 @@
+/* ==========================================================================
+   ExecutiveHeader.css - Unified Executive Summary Header (De-Cardenised)
+   ========================================================================== */
+
+.executive-header {
+  display: grid;
+  grid-template-columns: minmax(280px, 1.2fr) minmax(360px, 1.8fr);
+  gap: 0;
+  background: var(--bg-card);
+  border: 1px solid var(--border-card);
+  border-radius: var(--redesign-radius, 12px);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  transition: border-color 0.15s ease;
+}
+
+/* ---- Left: Primary Hero Cluster ---- */
+.executive-hero {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+  background: var(--bg-card);
+}
+
+.executive-hero__top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.executive-date-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-input);
+  padding: 2px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+}
+
+.exec-nav-btn {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  padding: 0;
+}
+
+.exec-nav-btn:hover:not(:disabled) {
+  color: var(--text-primary);
+  background: var(--bg-surface-hover);
+}
+
+.exec-nav-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.exec-date-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 0 4px;
+}
+
+.exec-today-pill {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--color-primary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.exec-today-pill:hover {
+  background: var(--bg-surface-hover);
+  border-color: var(--color-primary);
+}
+
+.exec-lead-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 4px;
+}
+
+.exec-lead-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.exec-lead-text {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.executive-time-readout {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.exec-time-cluster {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.exec-time-val {
+  font-size: 38px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  line-height: 1;
+  letter-spacing: -0.04em;
+}
+
+.exec-time-unit {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  margin-right: 6px;
+}
+
+.exec-trend-caption {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-muted);
+  font-family: var(--font-sans);
+  margin-left: 4px;
+}
+
+/* ---- Right: Telemetry Strip ---- */
+.executive-telemetry {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  border-left: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.exec-metric-cell {
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.exec-metric-cell + .exec-metric-cell {
+  border-left: 1px solid var(--border-subtle);
+}
+
+.exec-metric-label-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 20px;
+}
+
+.exec-metric-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.exec-metric-kicker {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.exec-metric-badge {
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 1px 5px;
+  border-radius: 3px;
+  margin-left: auto;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.exec-metric-badge--streak {
+  background: var(--bg-warning, rgba(245, 158, 11, 0.12));
+  color: var(--color-warning);
+  border: 1px solid var(--border-warning, rgba(245, 158, 11, 0.28));
+}
+
+.exec-metric-badge--budget {
+  background: var(--color-primary-subtle, rgba(79, 70, 229, 0.12));
+  color: var(--color-primary);
+  border: 1px solid rgba(79, 70, 229, 0.25);
+}
+
+.exec-metric-badge--exhausted {
+  background: var(--bg-danger, rgba(244, 63, 94, 0.12));
+  color: var(--color-danger);
+  border: 1px solid var(--border-danger, rgba(244, 63, 94, 0.28));
+}
+
+.exec-metric-badge--protected {
+  background: var(--bg-success, rgba(16, 185, 129, 0.12));
+  color: var(--color-success);
+  border: 1px solid var(--border-success, rgba(16, 185, 129, 0.28));
+}
+
+.exec-metric-badge--blocked {
+  background: var(--bg-danger, rgba(244, 63, 94, 0.12));
+  color: var(--color-danger);
+  border: 1px solid var(--border-danger, rgba(244, 63, 94, 0.28));
+}
+
+.exec-metric-value {
+  font-size: 19px;
+  font-weight: 700;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin-top: 2px;
+}
+
+.exec-metric-sub {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1040px) {
+  .executive-header {
+    grid-template-columns: 1fr;
+  }
+  .executive-telemetry {
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+  }
+}
+
+@media (max-width: 680px) {
+  .executive-telemetry {
+    grid-template-columns: 1fr;
+  }
+  .exec-metric-cell + .exec-metric-cell {
+    border-left: none;
+    border-top: 1px solid var(--border-subtle);
+  }
+}
