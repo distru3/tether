@@ -132,8 +132,8 @@
 
 /* Active 15m Extension Card Banner */
 .rich-limit-card.limit-card--extended {
-    border-color: var(--color-accent);
-    box-shadow: 0 8px 32px var(--color-warning-subtle, rgba(220, 160, 109, 0.12)), var(--shadow-card);
+    border-color: var(--color-warning);
+    box-shadow: 0 8px 32px var(--color-warning-subtle), var(--shadow-card);
 }
 
 .limit-card-extension-banner {
@@ -142,9 +142,9 @@
     justify-content: space-between;
     margin-top: 12px;
     padding: 10px 14px;
-    background: var(--bg-warning, rgba(220, 160, 109, 0.1));
-    border: 1px solid var(--border-warning, rgba(220, 160, 109, 0.3));
-    border-radius: 10px;
+    background: var(--bg-warning);
+    border: 1px solid var(--border-warning);
+    border-radius: var(--radius-sm, 8px);
 }
 
 .extension-banner-info {
@@ -157,19 +157,19 @@
     width: 7px;
     height: 7px;
     border-radius: 50%;
-    background: var(--color-accent, #DCA06D);
-    box-shadow: 0 0 8px var(--color-accent, #DCA06D);
+    background: var(--color-warning);
+    box-shadow: 0 0 8px var(--color-warning);
     animation: live-timer-pulse 1.8s ease-in-out infinite;
 }
 
 .extension-banner-icon {
-    color: var(--color-accent, #DCA06D);
+    color: var(--color-warning);
 }
 
 .extension-banner-title {
     font-size: 12.5px;
     font-weight: 600;
-    color: var(--color-accent, #DCA06D);
+    color: var(--color-warning);
     letter-spacing: 0.02em;
 }
 
@@ -178,68 +178,20 @@
     align-items: center;
 }
 
-/* ─── Theme Overrides ──────────────────────────────────────────────────────── */
-
-/* Horizon Dark */
-:is([data-theme="dark"], [data-theme="horizon-dark"]) .rich-limit-card {
-    background: rgba(79, 28, 81, 0.45);
-    border-color: rgba(220, 160, 109, 0.15);
-    box-shadow: 0 8px 24px rgba(15, 5, 25, 0.35);
-}
-
-:is([data-theme="dark"], [data-theme="horizon-dark"]) .rich-limit-card:hover {
-    border-color: rgba(220, 160, 109, 0.3);
-    box-shadow: 0 12px 32px rgba(15, 5, 25, 0.5);
-}
-
-:is([data-theme="dark"], [data-theme="horizon-dark"]) .rich-limit-progress-track {
-    background-color: rgba(33, 15, 55, 0.8);
-    border-color: rgba(220, 160, 109, 0.1);
-}
-
-:is([data-theme="dark"], [data-theme="horizon-dark"]) .banner-warning-card {
-    background: rgba(79, 28, 81, 0.35);
-    border-color: rgba(220, 160, 109, 0.25);
-    box-shadow: 0 4px 16px rgba(15, 5, 25, 0.25);
-}
-
-/* Horizon Light */
-:is([data-theme="light"], [data-theme="horizon-light"]) .rich-limit-card {
-    background: rgba(255, 250, 247, 0.95);
-    border-color: rgba(165, 91, 75, 0.20);
-    box-shadow: 0 4px 16px rgba(100, 50, 30, 0.08);
-}
-
-:is([data-theme="light"], [data-theme="horizon-light"]) .rich-limit-card:hover {
-    border-color: rgba(165, 91, 75, 0.35);
-    box-shadow: 0 8px 24px rgba(100, 50, 30, 0.12);
-}
-
-:is([data-theme="light"], [data-theme="horizon-light"]) .rich-limit-progress-track {
-    background-color: rgba(240, 228, 220, 0.80);
-    border-color: rgba(165, 91, 75, 0.14);
-}
-
-/* Classic Dark */
-[data-theme="classic-dark"] .rich-limit-card {
-    background: rgba(20, 26, 38, 0.75);
-    border-color: rgba(255, 255, 255, 0.10);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.40);
-}
-
-[data-theme="classic-dark"] .rich-limit-progress-track {
-    background-color: rgba(14, 18, 27, 0.80);
-    border-color: rgba(255, 255, 255, 0.08);
-}
-
-/* Classic Light */
-[data-theme="classic-light"] .rich-limit-card {
+/* ─── Light Mode Polish ─────────────────────────────────────────────────── */
+[data-theme-mode="light"] .rich-limit-card {
     background: #FFFFFF;
-    border-color: #E2E8F0;
-    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+    border-color: var(--border-card);
+    box-shadow: var(--shadow-card);
 }
 
-[data-theme="classic-light"] .rich-limit-progress-track {
-    background-color: #F1F5F9;
-    border-color: #E2E8F0;
+[data-theme-mode="light"] .rich-limit-progress-track {
+    background-color: var(--bg-recessed);
+    border-color: var(--border-subtle);
+}
+
+[data-theme-mode="light"] .banner-warning-card {
+    background: #FFFFFF;
+    border-color: var(--border-card);
+    border-left: 4px solid var(--color-warning);
 }

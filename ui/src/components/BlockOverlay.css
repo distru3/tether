@@ -107,3 +107,14 @@
 .block-overlay-card .pin-cell:focus {
   border-color: var(--color-primary);
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .block-overlay-container,
+  .tether-overlay-backdrop,
+  .block-overlay-card,
+  .tether-overlay-card {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+

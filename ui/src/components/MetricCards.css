@@ -121,3 +121,21 @@
         border-bottom: 1px solid var(--border-subtle) !important;
     }
 }
+
+@media (max-width: 540px) {
+    .metric-telemetry-bar,
+    .metric-cards-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .metric-telemetry-item,
+    .metric-card {
+        border-inline-end: none !important;
+        border-bottom: 1px solid var(--border-subtle) !important;
+    }
+
+    .metric-telemetry-item:last-child,
+    .metric-card:last-child {
+        border-bottom: none !important;
+    }
+}

@@ -17,7 +17,7 @@ export function CategoryMix({ categories, total }: CategoryMixProps) {
     const color = colorForCategory(row.label, row.color, index);
     return `${color} ${start}% ${cursor}%`;
   });
-  if (cursor < 100) stops.push(`rgba(255,255,255,0.10) ${cursor}% 100%`);
+  if (cursor < 100) stops.push(`var(--border-strong, rgba(128,128,128,0.2)) ${cursor}% 100%`);
 
   return (
     <section className="category-mix dashboard-panel" aria-label="Category breakdown">
