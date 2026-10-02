@@ -1,6 +1,6 @@
 # Screentime System Map & Architecture Reference
 
-This document is the authoritative on-demand reference for AI agents and human engineers working on the Screentime codebase. Verified against the codebase on **2026-09-12**.
+This document is the authoritative on-demand reference for AI agents and human engineers working on the Screentime codebase. Verified against the codebase on **2026-10-02**.
 
 ---
 
@@ -32,7 +32,7 @@ The system is partitioned into **three separate processes** due to Windows opera
 |  |  - 1 Hz Foreground Tracker  |  |  - Tauri 2 Desktop Shell               |  |
 |  |  - Idle Detection           |  |  - React 18 / TypeScript Dashboard     |  |
 |  |  - Native timer HUD         |  |  - Smoked-Glass Analytics UI           |  |
-|  |  - Low-Level Keyboard Hook  |  |  - Settings, Limits & Filtering Admin  |  |
+|  |  - Block-overlay driver     |  |  - Settings, Limits & Filtering Admin  |  |
 |  +-----------------------------+  +----------------------------------------+  |
 +-------------------------------------------------------------------------------+
 ```
@@ -50,17 +50,22 @@ The system is partitioned into **three separate processes** due to Windows opera
 crates/
 ├── core/             Pure domain logic. NO OS APIs. NO wall clock. NO SQL.
 │                     Platform traits (`WindowTracker`, `ProcessController`, etc.),
-│                     DayKey calculation, LimitEngine, Category, Schedules, Settings.
+│                     DayKey calculation, LimitEngine, Category, Schedules,
+│                     SettingKey (allowed settings + loosening rules), PinThrottle,
+│                     games (shared "is this a game?" heuristics).
 ├── storage/          SQLite migrations (0001-0004), query modules, connection handling.
 ├── ipc/              Named pipe framing, wire serialization, Request/Response enums,
 │                     ts-rs TypeScript binding generator.
-├── st-win32/         Shared Win32 helpers (process handles, image paths, wide strings).
+├── st-win32/         Shared Win32 helpers (process handles, image paths, wide strings),
+│                     in-memory WAV playback (`audio`), pipe-peer trust (`peer_is_trusted`).
 ├── tracker-win/      Win32 active window and idle tracker (used by dev fallback).
 ├── tracker-linux/    Linux window tracking stub.
 ├── enforce-win/      Process freeze/terminate and hosts-file atomic writer.
 ├── enforce-linux/    Linux cgroup and hosts writer stub.
 ├── family-dns/       Cloudflare Family DNS adapter configuration & original DNS backup/restore.
-├── agent/            Privileged daemon: IPC server, report ingestion, enforcement loop.
+├── agent/            Privileged daemon: IPC server (`ipc_server/` — `auth.rs` gate + one
+│                     module per area), report ingestion, enforcement loop, live
+│                     `policy.rs`, `family_dns.rs` (enable/disable orchestration).
 └── session/          Per-user sampling front, native timer HUD, block-overlay driver.
 
 ui/
