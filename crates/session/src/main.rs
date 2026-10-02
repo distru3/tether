@@ -551,8 +551,8 @@ fn main() -> anyhow::Result<()> {
                             if let Some((_, run)) = active_hud.take() {
                                 run.dismiss();
                             }
-                            active_hud =
-                                Some((snap.hwnd, hud::spawn_hud_overlay(snap.hwnd, snap.rect)));
+                            active_hud = hud::spawn_hud_overlay(snap.hwnd, snap.rect)
+                                .map(|run| (snap.hwnd, run));
                         } else if let Some((_, ref run)) = active_hud {
                             #[cfg(windows)]
                             if run.is_exiting() {

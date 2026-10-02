@@ -162,7 +162,7 @@ impl MpoHudRenderer {
             )
             .context("D3D11CreateDevice failed for MPO")?;
 
-            let d3d11_device = d3d11_device.unwrap();
+            let d3d11_device = d3d11_device.context("D3D11CreateDevice returned no device")?;
             let dxgi_device: IDXGIDevice = d3d11_device
                 .cast()
                 .context("Failed to cast D3D11 device to IDXGIDevice")?;
