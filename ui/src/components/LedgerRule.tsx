@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import { formatDuration } from "../format";
@@ -14,6 +15,7 @@ interface LedgerRuleProps {
 const SCALE_HOURS = ["00", "06", "12", "18", "24"] as const;
 
 export function LedgerRule({ summary, loading, now, catalog, isToday = false }: LedgerRuleProps) {
+    const { t } = useTranslation();
     const apps = summary?.apps ?? [];
     const intervals = summary?.intervals ?? [];
     const categories = summary?.categories ?? [];
@@ -26,7 +28,11 @@ export function LedgerRule({ summary, loading, now, catalog, isToday = false }: 
     const idleSeconds = Math.max(0, nowSeconds - (activeSeconds + blockedSeconds));
     
     const empty = loading || (apps.length === 0 && intervals.length === 0);
-    const description = `App Usage: ${formatDuration(activeSeconds)}, Limited Apps: ${formatDuration(blockedSeconds)}, Idle: ${formatDuration(idleSeconds)}`;
+    const description = t("timeline.description", {
+        active: formatDuration(activeSeconds),
+        limited: formatDuration(blockedSeconds),
+        idle: formatDuration(idleSeconds),
+    });
 
     return (
         <div className="ledger">
@@ -61,7 +67,7 @@ export function LedgerRule({ summary, loading, now, catalog, isToday = false }: 
                         <span
                             key={i}
                             className="ledger-seg"
-                            title={`${app?.label ?? "Unknown"} (${formatDuration(interval.durationSeconds)})`}
+                            title={`${app?.label ?? t("timeline.unknownApp")} (${formatDuration(interval.durationSeconds)})`}
                             style={{ 
                                 position: "absolute",
                                 left: `${leftPercent}%`,

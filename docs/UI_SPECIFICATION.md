@@ -92,30 +92,41 @@ The top chrome consists of a streamlined App Bar (TitleBar) and a horizontal Top
 
 ## 3. Overview Tab Hierarchy (`overview`)
 
-The dashboard overview is structured as an interactive grid:
+The dashboard is a vertical stack. The **only** day picker is the one in the top bar; it is hidden (layout-preserving `visibility: hidden`) on every other tab.
 
 ```
 +-----------------------------------------------------------------------------------------+
-| .overview-stack                                                                         |
-|                                                                                         |
-|  [Row 1: .overview-activity-grid] (1.38fr : 0.72fr)                                     |
+| .service-alert (only while the agent is unreachable; role="alert")                      |
+|   "Tether's background service isn't responding" + what that means + raw error          |
++-----------------------------------------------------------------------------------------+
+| <ExecutiveHeader />                                                                     |
+|  +-------------------------------+---------------+----------------+------------------+  |
+|  | date eyebrow [Back to today]  | LONGEST       | CLOSEST LIMIT  | PROTECTION       |  |
+|  | 6h 11m  (display figure)      | STRETCH  39m  | 23m left       | Enforcing / Not  |  |
+|  | +7% vs 7-day average          | in Minecraft  | Games          | running          |  |
+|  | [Mostly Games · 37%]          |               | [n reached]    | 1 blocked · DNS  |  |
+|  +-------------------------------+---------------+----------------+------------------+  |
++-----------------------------------------------------------------------------------------+
+| <BlockedBanner /> (only when something is blocked)                                      |
+|   "1 app blocked until the day resets" · Resets in Xh Ym · [Allow 15 more minutes]      |
++-----------------------------------------------------------------------------------------+
+| .activity-ledger-container                                                              |
 |  +--------------------------------------------+  +-----------------------------------+  |
-|  | .timeline-panel (card)                     |  | <UsageAside />                    |  |
-|  | - Header: "Today at a glance"              |  | - "Your activity / Most used"     |  |
-|  | - Date Stepper: [<] Today [>]              |  | - Ranked list: 01, 02, 03...      |  |
-|  | - <LedgerRule />: 24h timeline band        |  | - Duration bars & percentage      |  |
-|  | - Category Color Legend (from catalog)     |  |                                   |  |
+|  | Timeline (eyebrow = viewed day)            |  | <UsageAside /> Most used (top 5)  |  |
+|  | <LedgerRule />: 24h band + legend          |  | [All apps]                        |  |
 |  +--------------------------------------------+  +-----------------------------------+  |
-|                                                                                         |
-|  [Row 2: .overview-chart-grid] (1fr : 0.8fr)                                            |
+| .analytics-trends-container                                                             |
 |  +--------------------------------------------+  +-----------------------------------+  |
-|  | .card (Weekly History)                     |  | <CategoryMix />                   |  |
-|  | - 7-day bar chart (<WeeklyChart />)        |  | - "Where time goes"               |  |
-|  | - Clickable day bars with hover tooltips   |  | - Conic-gradient donut breakdown  |  |
-|  |                                            |  | - Legend with % of total          |  |
+|  | This week: <WeeklyChart />                 |  | <CategoryMix /> Where time goes   |  |
 |  +--------------------------------------------+  +-----------------------------------+  |
 +-----------------------------------------------------------------------------------------+
 ```
+
+The header metrics are derived in `ui/src/dashboardMetrics.ts` (pure functions):
+- **Closest limit** (`limitOutlook`): uses the agent's per-row `limit_seconds`, defined so that `limit_seconds - seconds` is the time left on that row's own enabled limit. Weekday overrides are applied, and category rows count tagged apps. The total-screen-time limit is resolved from the catalog for the viewed weekday. Rows inside an active "+15 min" extension are skipped. (This replaced a "Daily allowance" figure that summed every limit's default minutes.)
+- **Longest stretch** (`longestStretch`): the longest single interval and its app.
+- **vs 7-day average** (`vsWeekAverage`): against the other active days of the week; hidden until there is a baseline.
+- **Protection** reflects *agent reachability*: when the poll fails it reads "Not running" in the danger style, never "Enforced".
 
 ### Component Details
 - **`LedgerRule.tsx`**: Visual 24-hour timeline bar (00 to 24 hours). Slices each usage interval, maps `appId` to `primary_category`, and renders each slice in its distinct category color using `categoryColors.ts`. Displays category legend at the bottom.
@@ -285,6 +296,7 @@ The dashboard overview is structured as an interactive grid:
 
 ### C. Stabilized Top Date Stepper
 - Fixed `196px` width with `justify-content: space-between` and flex `min-width: 0` ensures the date pill and central navigation tabs never shift or resize when toggling between "Today" and past date ranges.
+- Shown only on the dashboard (`showDayPicker`). Elsewhere it is `visibility: hidden` and removed from the tab order, so the bar keeps its balance without offering a control that does nothing.
 
 ---
 
@@ -477,4 +489,20 @@ The application supports four distinct, beautifully tuned visual themes plus OS 
 ### B. Limit Block Overlay Animation & Cross-Window Theme Sync (`BlockOverlay.tsx`, `overlay_bridge.rs`)
 - **Graceful Dismissal**: When limits thaw or are granted overrides, `overlay_bridge.rs` invokes `hide_overlay_gracefully` to trigger CSS exit animations (`overlay-exit-scale` & `backdrop-exit-fade`) before calling native `window.hide()`.
 - **Theme Synchronization**: Listens for the `theme_changed` Tauri event to synchronize theme tokens across all windows in real time, eliminating hardcoded dark fallbacks and ensuring seamless visual consistency across light and dark modes.
+
+---
+
+## 15. UX Consistency Pass (2026-10)
+
+Rules established by the October 2026 pass. Follow them in new UI:
+
+- **Fonts are bundled** (`@fontsource-variable/hanken-grotesk`, `@fontsource-variable/jetbrains-mono`, imported in `main.tsx`). The Tauri CSP (`default-src 'self'`) blocks Google Fonts, so the designed typography previously never rendered in the shipped app, and never offline. Do not add remote font or stylesheet links.
+- **Durations are amounts, not clocks.** `formatDuration` renders `6h 11m`, `44m`, `35s` with localized units (`time.short.*`). Only live countdowns (`LiveTimer`) use clock form. The dashboard hero renders the same parts as a large display figure with small muted units.
+- **Honest states.** Unreachable agent → `.service-alert` banner and "Protection: Not running". An unknown catalog shows "—", never "No limits".
+- **Progress carries state.** Limit cards use `rich-limit-progress-fill--ok | --warn (≥80%) | --over`. Never force a color with `!important` over a state class.
+- **Budgets come from the agent.** A card's budget is the row's `limit_seconds` (weekday-aware). Disabled limits and the total limit fall back to today's weekday-resolved minutes.
+- **Every user-visible string goes through i18n**, including `aria-label`, `title`, placeholders and toasts. Weekday names come from `Intl.DateTimeFormat` in the UI language (`weekdayShortNames()`, DowntimeSection `weekdays()`). Arabic plural forms (`_zero/_one/_two/_few/_many/_other`) are provided where counts appear. Numbers embedded in Arabic sentences are wrapped in Unicode isolates (U+2068/U+2069) so they don't reorder.
+- **Filter tabs** keep stable keys and take a `labels` map (`FilterTabs`), so translation can't break filtering. They expose `role="tablist"` / `role="tab"`.
+- **Copy**: plain verbs, sentence case, and the same name for an action through the whole flow ("Allow 15 more minutes"). The window's close button says what it does ("Close window (Tether keeps running)").
+- **Removed dead components**: `Hero`, `LedgerSection`, `FrictionBanner`, `Masthead`, `Section`, `TetherLogo`. `noUnusedLocals` is on in `tsconfig.json`.
 

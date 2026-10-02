@@ -1,4 +1,4 @@
-import React from "react";
+import { useTranslation } from "react-i18next";
 import type { ToastItem } from "../hooks/useToasts";
 import { CheckIcon, CloseIcon, WarningIcon, ShieldIcon } from "./icons/Icons";
 
@@ -8,10 +8,11 @@ interface ToastsProps {
 }
 
 export function Toasts({ toasts, dismiss }: ToastsProps) {
+    const { t } = useTranslation();
     if (toasts.length === 0) return null;
 
     return (
-        <div className="toasts" role="region" aria-live="polite" aria-label="Notices">
+        <div className="toasts" role="region" aria-live="polite" aria-label={t("toasts.region")}>
             {toasts.map((toast) => {
                 const isError = toast.kind === "error";
                 const isSuccess = toast.kind === "success";
@@ -31,7 +32,8 @@ export function Toasts({ toasts, dismiss }: ToastsProps) {
                         <button
                             type="button"
                             className="toast-dismiss-btn"
-                            title="Dismiss notification"
+                            title={t("toasts.dismiss")}
+                        aria-label={t("toasts.dismiss")}
                             onClick={() => dismiss(toast.id)}
                         >
                             <CloseIcon size={14} />

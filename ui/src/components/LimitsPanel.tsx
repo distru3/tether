@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { AppWindow, FolderTree, Calendar as CalendarLucide, Timer } from "lucide-react";
 import type { CatalogDto } from "../types/generated/CatalogDto";
@@ -6,7 +6,7 @@ import type { LimitDto } from "../types/generated/LimitDto";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
 import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import { describeWeekdayOverrides, targetLabel, formatDuration } from "../format";
-import { CalendarIcon, LimitsIcon, PlusIcon, WarningIcon } from "./icons/Icons";
+import { LimitsIcon, PlusIcon, WarningIcon } from "./icons/Icons";
 import { colorForCategory } from "../categoryColors";
 import { LiveTimer } from "./LiveTimer";
 import { ToggleSwitch } from "./ToggleSwitch";
@@ -58,36 +58,34 @@ export function LimitsPanel({
     const activeLimits = limits.filter(l => l.enabled).length;
     let limitsReached = 0;
     
-    const limitUsageMap = new Map<string, number>();
-    const limitTimerMap = new Map<string, string>();
-
-    if (summary) {
-        limits.forEach(l => {
-            if (l.target.kind === "app" || l.target.kind === "category") {
-                const arr = l.target.kind === "app" ? summary.apps : summary.categories;
-                const entry = arr.find((x: any) => x.id === (l.target as any).id);
-                if (entry) {
-                    limitUsageMap.set(`${l.target.kind}-${(l.target as any).id}`, entry.seconds);
-                    if (entry.seconds >= l.default_minutes * 60) {
-                        limitsReached++;
-                    }
-                    if (entry.timer_expires_utc) {
-                        limitTimerMap.set(`${l.target.kind}-${(l.target as any).id}`, entry.timer_expires_utc);
-                    }
-                }
-            } else if (l.target.kind === "total") {
-                limitUsageMap.set(`total-0`, summary.total_seconds);
-                if (summary.total_seconds >= l.default_minutes * 60) {
-                    limitsReached++;
-                }
-            }
-        });
+    // Today's budget and usage per limit. Rows from the summary carry the
+    // agent's effective budget (`limit_seconds - seconds` = time left, with
+    // weekday overrides applied); disabled limits and the total limit have no
+    // row budget, so they fall back to today's weekday-resolved minutes.
+    const mondayFirst = (new Date().getDay() + 6) % 7;
+    const progressFor = (l: LimitDto) => {
+        const own = l.weekday_minutes[mondayFirst] ?? l.default_minutes;
+        if (l.target.kind === "total") {
+            return { used: summary?.total_seconds ?? 0, budget: own * 60, timer: null as string | null };
+        }
+        const targetId = l.target.id;
+        const rows = l.target.kind === "app" ? summary?.apps : summary?.categories;
+        const row = rows?.find((x) => x.id === targetId);
+        return {
+            used: row?.seconds ?? 0,
+            budget: row?.limit_seconds ?? own * 60,
+            timer: row?.timer_expires_utc ?? null,
+        };
+    };
+    for (const l of limits) {
+        const p = progressFor(l);
+        if (l.enabled && p.budget > 0 && p.used >= p.budget) limitsReached++;
     }
 
     const metrics: MetricData[] = [
         { label: t("limits.totalLimits", "Total Limits"), value: limits.length, icon: <Timer size={16} /> },
         { label: t("limits.activeLimits", "Active Limits"), value: activeLimits, icon: <Timer size={16} /> },
-        { label: t("limits.limitsReached", "Limits Reached"), value: limitsReached, icon: <WarningIcon size={16} color="var(--color-danger)" />, badge: limitsReached > 0 ? "Action Needed" : undefined }
+        { label: t("limits.limitsReached", "Limits Reached"), value: limitsReached, icon: <WarningIcon size={16} color="var(--color-danger)" /> }
     ];
 
     const filteredLimits = limits.filter(l => {
@@ -158,10 +156,15 @@ export function LimitsPanel({
 
             <div className="limits-list-header">
                 <div>
-                    <span className="section-kicker">Guardrails</span>
-                    <h3 className="section-title">Your limits</h3>
+                    <h3 className="section-title">{t("limits.yourLimits")}</h3>
                 </div>
-                <FilterTabs tabs={["All", "Active", "Disabled"]} activeTab={activeTab} onChange={setActiveTab} />
+                <FilterTabs
+                    tabs={["All", "Active", "Disabled"]}
+                    labels={{ All: t("limits.filterAll"), Active: t("limits.filterActive"), Disabled: t("limits.filterDisabled") }}
+                    activeTab={activeTab}
+                    onChange={setActiveTab}
+                    ariaLabel={t("limits.yourLimits")}
+                />
             </div>
 
             <div className="rich-limits-list">
@@ -177,11 +180,13 @@ export function LimitsPanel({
                         const isCategory = limit.target.kind === "category";
                         const isApp = limit.target.kind === "app";
                         const targetId = limit.target.kind === "total" ? 0 : (limit.target as any).id;
-                        const limitSeconds = limit.default_minutes * 60;
-                        const usedSeconds = limitUsageMap.get(`${limit.target.kind}-${targetId}`) ?? 0;
-                        const activeTimerExpiresUtc = limit.timer_expires_utc || limitTimerMap.get(`${limit.target.kind}-${targetId}`) || null;
-                        const overLimit = usedSeconds >= limitSeconds;
+                        const progress = progressFor(limit);
+                        const limitSeconds = progress.budget;
+                        const usedSeconds = progress.used;
+                        const activeTimerExpiresUtc = limit.timer_expires_utc || progress.timer;
+                        const overLimit = limit.enabled && usedSeconds >= limitSeconds;
                         const progressPercent = limitSeconds > 0 ? Math.min(100, (usedSeconds / limitSeconds) * 100) : 100;
+                        const progressState = overLimit ? "over" : progressPercent >= 80 ? "warn" : "ok";
 
                         let categoryName: string | null = null;
                         let categoryColor: string = "var(--color-primary)";
@@ -193,7 +198,7 @@ export function LimitsPanel({
                         } else if (isApp) {
                             const appObj = catalog?.apps.find(a => a.id === targetId);
                             const catObj = appObj ? catalog?.categories.find(c => c.id === appObj.primary_category) : null;
-                            categoryName = catObj?.name ?? "Uncategorized";
+                            categoryName = catObj?.name ?? t("categorize.uncategorized");
                             categoryColor = colorForCategory(categoryName, catObj?.color);
                         }
 
@@ -264,7 +269,7 @@ export function LimitsPanel({
                                                     )}
                                                 </>
                                             )}
-                                            {overLimit && !activeTimerExpiresUtc && <span className="badge badge-sm badge--danger">Limit Reached</span>}
+                                            {overLimit && !activeTimerExpiresUtc && <span className="badge badge-sm badge--danger">{t("common.blocked")}</span>}
                                             {activeTimerExpiresUtc && (
                                                 <LiveTimer expiresUtc={activeTimerExpiresUtc} showLabel label="+15m" />
                                             )}
@@ -285,12 +290,14 @@ export function LimitsPanel({
                                             <span className="rich-limit-usage">{formatDuration(usedSeconds)} <span className="rich-limit-total">/ {formatDuration(limitSeconds)}</span></span>
                                         </div>
                                         <div className="rich-limit-progress-track">
-                                            <div 
-                                                className="rich-limit-progress-fill" 
-                                                style={{ 
-                                                    width: `${progressPercent}%`, 
-                                                    backgroundColor: overLimit ? 'var(--color-danger)' : categoryColor 
-                                                }}
+                                            <div
+                                                className={`rich-limit-progress-fill rich-limit-progress-fill--${progressState}`}
+                                                style={{ width: `${progressPercent}%` }}
+                                                role="progressbar"
+                                                aria-valuemin={0}
+                                                aria-valuemax={100}
+                                                aria-valuenow={Math.round(progressPercent)}
+                                                aria-label={label}
                                             />
                                         </div>
                                     </div>

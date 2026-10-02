@@ -7,12 +7,16 @@
     "overview": "Dashboard",
     "limits": "App Limits",
     "webFiltering": "Web Filtering",
-    "settings": "Settings"
+    "settings": "Settings",
+    "main": "Main navigation",
+    "sections": "Sections"
   },
   "banner": {
     "enforcementActive": "ENFORCEMENT ACTIVE ({{count}})",
     "resetsIn": "Resets in {{hours}}h {{minutes}}m",
-    "override": "+15 min Override"
+    "override": "Allow 15 more minutes",
+    "title_one": "{{count}} app blocked until the day resets",
+    "title_other": "{{count}} apps blocked until the day resets"
   },
   "hero": {
     "today": "Today",
@@ -22,7 +26,32 @@
     "nextDay": "Next day",
     "mostTimeIn": "Most time in <strong>{{label}}</strong> ({{duration}}, {{percent}}%)",
     "noUsage": "No active usage recorded yet today.",
-    "noUsageDay": "No usage recorded for this day."
+    "noUsageDay": "No usage recorded for this day.",
+    "summaryLabel": "Screen time summary",
+    "onAverage": "Right on your 7-day average",
+    "aboveAverage": "{{percent}}% above your 7-day average",
+    "belowAverage": "{{percent}}% below your 7-day average",
+    "mostlyIn": "Mostly {{label}} · {{percent}}%",
+    "longestStretch": "Longest stretch",
+    "stretchIn": "in {{app}}",
+    "noStretch": "No activity yet",
+    "closestLimit": "Closest limit",
+    "reachedCount_one": "{{count}} reached",
+    "reachedCount_other": "{{count}} reached",
+    "noLimits": "No limits",
+    "noLimitsHint": "Add one under App Limits",
+    "timeLeft": "{{duration}} left",
+    "allReached": "All reached",
+    "protection": "Protection",
+    "protectionOn": "On",
+    "protectionUnknown": "Off",
+    "enforcing": "Enforcing",
+    "notRunning": "Not running",
+    "notRunningHint": "Limits and blocks are not enforced until the Tether service is back.",
+    "blockedNow_one": "{{count}} app blocked",
+    "blockedNow_other": "{{count}} apps blocked",
+    "nothingBlocked": "Nothing blocked",
+    "familyDnsOn": "Family DNS on"
   },
   "ledger": {
     "byCategory": "By category",
@@ -50,7 +79,8 @@
     "wed": "Wed",
     "thu": "Thu",
     "fri": "Fri",
-    "sat": "Sat"
+    "sat": "Sat",
+    "historyTitle": "This week"
   },
   "limits": {
     "title": "App & Category Limits",
@@ -78,7 +108,11 @@
     "activeLimits": "Active Limits",
     "extensionActive": "Extension Active",
     "limitsReached": "Limits Reached",
-    "totalLimits": "Total Rules"
+    "totalLimits": "Total Rules",
+    "yourLimits": "Your limits",
+    "filterAll": "All",
+    "filterActive": "Active",
+    "filterDisabled": "Paused"
   },
   "downtime": {
     "tabDowntime": "Scheduled Downtime",
@@ -106,7 +140,18 @@
     "allowlistDesc": "Essential applications chosen here will never be blocked during downtime schedules (e.g. Phone, Calculator, Notes).",
     "searchAppToAllow": "Choose an app to allow...",
     "addToAllowlist": "Add to Allowlist",
-    "noAllowlist": "No apps currently allowlisted. All non-exempt apps will be locked during scheduled downtime."
+    "noAllowlist": "No apps currently allowlisted. All non-exempt apps will be locked during scheduled downtime.",
+    "schedulesHeading": "Schedules",
+    "allowAdded": "Added to the always-allowed list.",
+    "allowRemoved": "Removed from the always-allowed list.",
+    "allowRemove": "Remove from always allowed",
+    "errName": "Give the schedule a name.",
+    "errDays": "Pick at least one day.",
+    "errSave": "The schedule couldn’t be saved.",
+    "namePlaceholder": "e.g. Bedtime, Homework",
+    "created": "Schedule created.",
+    "updated": "Schedule saved.",
+    "removed": "Schedule deleted."
   },
   "settings": {
     "title": "Settings",
@@ -115,13 +160,8 @@
     "theme": "Color Theme",
     "themeMidnightCobalt": "Midnight Cobalt",
     "themeSlateCharcoal": "Slate Charcoal",
-    "themeCyberEmerald": "Slate Charcoal",
     "themeCleanTitanium": "Clean Titanium",
     "themeNordicFrost": "Nordic Frost",
-    "themeHorizonDark": "Midnight Cobalt",
-    "themeHorizonLight": "Clean Titanium",
-    "themeClassicDark": "Slate Charcoal",
-    "themeClassicLight": "Nordic Frost",
     "themeSystem": "System",
     "hudTitle": "Timer HUD & Gaming Overlay",
     "hudSubtitle": "Floating indicator, full-screen game behavior, and in-game shortcuts.",
@@ -160,7 +200,7 @@
     "advanced": "Advanced Policies",
     "advancedDesc": "Deep configuration of how limits and tracking operate.",
     "cooldown": "Anti-Impulse Cooldown",
-    "cooldownDesc": "How long before loosening or deleting a limit takes effect.",
+    "cooldownDesc": "How long a loosened limit waits before it takes effect. Tightening, pausing and removing a limit apply right away.",
     "dayReset": "Day Rollover Time",
     "dayResetDesc": "When does daily screen time reset to zero?",
     "idleThreshold": "Idle Threshold",
@@ -175,11 +215,13 @@
     "familyDnsInactive": "Disabled (Original DNS)",
     "categoriesTitle": "Application Categories",
     "categoriesDesc": "Manage how Tether classifies and groups applications on your device.",
-    "appDirectoryDesc": "Browse all detected applications on this PC and customize their categories."
+    "appDirectoryDesc": "Browse all detected applications on this PC and customize their categories.",
+    "subtitle": "How Tether tracks, protects and looks.",
+    "themeDesc": "Pick a color theme, or follow your system setting."
   },
   "tutorial": {
     "title": "How to Use",
-    "subtitle": "A quick guide to get you started with Tether.",
+    "subtitle": "Shortcuts, hotkeys and app controls.",
     "step1_title": "View Your Screen Time",
     "step1": "The Overview tab shows your daily screen time, broken down by category and application. Use the arrow buttons to browse previous days.",
     "step2_title": "Set Time Limits",
@@ -225,14 +267,18 @@
     "remove": "Remove",
     "removeDomain": "Remove {{domain}}",
     "searchPlaceholder": "Search blocked domains...",
-    "importSummary": "Imported {{added}} domains; skipped {{skipped}} that were not valid domain names."
+    "importSummary": "Imported {{added}} domains; skipped {{skipped}} that were not valid domain names.",
+    "kindAdult": "Adult content",
+    "kindCustom": "Added by you",
+    "prevPage": "Previous page",
+    "nextPage": "Next page"
   },
   "categorize": {
     "title": "Categorize app",
     "eyebrow": "App classification",
     "desc": "Choose the primary category for this app. You can also add tag categories for overlapping budgets (e.g., TikTok as both Short-Form Video and Social Media).",
     "primary": "Primary category",
-    "autoDetect": "Auto-detect",
+    "autoDetect": "Detect automatically",
     "tags": "Tag categories (optional)",
     "saving": "Saving…",
     "changeCategory": "Click to change category",
@@ -245,7 +291,9 @@
     "filterUncategorized": "Uncategorized",
     "noAppsFound": "No applications match your search.",
     "customized": "Customized",
-    "appsDetected": "{{count}} applications detected"
+    "appsDetected": "{{count}} applications detected",
+    "uncategorized": "Uncategorized",
+    "userSet": "Set by you"
   },
   "limitEditor": {
     "editOrder": "Edit standing order",
@@ -279,7 +327,16 @@
     "removeOverride": "Reset to Default",
     "resetTitle": "Remove override and use daily default",
     "syncTitle": "Apply this duration to all custom days",
-    "syncAll": "Sync All"
+    "syncAll": "Sync All",
+    "searchPlaceholder": "Search apps or categories",
+    "noMatches": "No matches",
+    "selectCategory": "Choose a category",
+    "totalHint": "one daily budget shared by every app on this computer.",
+    "everyDay": "Every day",
+    "dailyDefault": "uses the daily budget",
+    "daily": "Default",
+    "minus15": "15 minutes less",
+    "plus15": "15 minutes more"
   },
   "pinGate": {
     "title": "Administrator PIN",
@@ -310,7 +367,8 @@
     "editSchedule": "Edit the downtime schedule “{{name}}”",
     "disableSchedule": "Pause the downtime schedule “{{name}}”",
     "deleteSchedule": "Delete the downtime schedule “{{name}}”",
-    "allowApp": "Always allow {{app}} during downtime"
+    "allowApp": "Always allow {{app}} during downtime",
+    "pinLabel": "PIN"
   },
   "pinSetup": {
     "recoveryCodeTitle": "Recovery code",
@@ -348,7 +406,8 @@
     "blocked": "Limit Reached",
     "beta": "Beta",
     "offline": "Retrying the ledger",
-    "trackingUnavailable": "Tracking unavailable - the tracker cannot see focused windows on this system."
+    "trackingUnavailable": "Tracking unavailable - the tracker cannot see focused windows on this system.",
+    "clearSearch": "Clear search"
   },
   "onboarding": {
     "welcome": "Welcome to Tether",
@@ -398,7 +457,7 @@
     }
   },
   "sidebar": {
-    "statusLive": "Active",
+    "statusLive": "Live",
     "statusConnecting": "Connecting...",
     "statusOffline": "Offline",
     "systemPolicy": "System Policy",
@@ -414,7 +473,12 @@
     "minute": "minute",
     "minutes": "minutes",
     "hour": "hour",
-    "hours": "hours"
+    "hours": "hours",
+    "short": {
+      "h": "h",
+      "m": "m",
+      "s": "s"
+    }
   },
   "overlay": {
     "limitReached": "LIMIT REACHED",
@@ -428,5 +492,39 @@
     "quitApp": "Quit Application",
     "keyboardHint": "Type PIN numbers, Enter to unlock, Esc to quit",
     "clear": "Clear"
+  },
+  "timeline": {
+    "title": "Timeline",
+    "unknownApp": "Unknown app",
+    "description": "Active: {{active}}, limited apps: {{limited}}, idle: {{idle}}"
+  },
+  "offline": {
+    "title": "Tether’s background service isn’t responding",
+    "body": "Limits, downtime and blocks are not being enforced right now. It usually restarts on its own within a minute; if this stays, restart the computer or reinstall Tether."
+  },
+  "usage": {
+    "eyebrow": "Your activity",
+    "mostUsed": "Most used",
+    "allApps": "All apps",
+    "allAppsHint": "Browse and categorize every app",
+    "empty": "No app activity recorded yet.",
+    "shareOfDay": "{{percent}}% of the day",
+    "changeCategory": "Change category"
+  },
+  "mix": {
+    "eyebrow": "Categories",
+    "title": "Where time goes",
+    "tracked": "tracked",
+    "empty": "No categories yet."
+  },
+  "titlebar": {
+    "minimize": "Minimize",
+    "maximize": "Maximize",
+    "restore": "Restore",
+    "hide": "Close window (Tether keeps running)"
+  },
+  "toasts": {
+    "region": "Notifications",
+    "dismiss": "Dismiss"
   }
 }

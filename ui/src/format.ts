@@ -6,19 +6,36 @@ export function todayKey(now = new Date()): number {
     return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
 }
 
-export function formatDuration(totalSeconds: number): string {
+/**
+ * Split a duration into display parts: `[["6", "h"], ["11", "m"]]`.
+ *
+ * Durations are written as amounts ("6h 11m"), never as clock faces
+ * ("6:11:30"): a clock-style total reads like a time of day, and the old
+ * mixture of `h:mm:ss` and `mm:ss` made "39:33" ambiguous. Seconds only appear
+ * for spans under a minute. Units are localized.
+ */
+export function durationParts(totalSeconds: number): Array<[string, string]> {
     const s = Math.max(0, Math.round(totalSeconds));
     const h = Math.floor(s / 3600);
     const m = Math.floor((s % 3600) / 60);
-    const secs = s % 60;
+    const unit = (key: "h" | "m" | "s") => i18n.t(`time.short.${key}`, key);
     if (h > 0) {
-        return `${h}:${pad2(m)}:${pad2(secs)}`;
+        return m > 0 ? [[String(h), unit("h")], [String(m), unit("m")]] : [[String(h), unit("h")]];
     }
-    return `${pad2(m)}:${pad2(secs)}`;
+    if (m > 0 || s === 0) return [[String(m), unit("m")]];
+    return [[String(s), unit("s")]];
 }
 
+/** "6h 11m", "44m", "35s". See [`durationParts`]. */
+export function formatDuration(totalSeconds: number): string {
+    return durationParts(totalSeconds)
+        .map(([value, unit]) => `${value}${unit}`)
+        .join(" ");
+}
+
+/** The hero readout: the same parts, rendered with a smaller unit. */
 export function heroParts(totalSeconds: number): Array<[string, string]> {
-    return [[formatDuration(totalSeconds), ""]];
+    return durationParts(totalSeconds);
 }
 
 function pad2(n: number): string {
@@ -85,12 +102,19 @@ export function chartBarLabel(key: number): string {
 /** Short labels for the Monday-first weekday slots used by limits. */
 export const WEEKDAY_SHORT = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"] as const;
 
+/** Monday-first short weekday names in the UI language ("Mon" / "الاثنين"). */
+export function weekdayShortNames(): string[] {
+    const fmt = new Intl.DateTimeFormat(i18n.language, { weekday: "short" });
+    // 2024-01-01 was a Monday.
+    return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2024, 0, 1 + i, 12)));
+}
+
 /** e.g. "Sat 120m · Sun 45m", or null when no day overrides its default. */
 export function describeWeekdayOverrides(weekdays: readonly (number | null)[]): string | null {
     const parts: string[] = [];
     for (let i = 0; i < WEEKDAY_SHORT.length && i < weekdays.length; i += 1) {
         const minutes = weekdays[i];
-        if (minutes !== null && minutes !== undefined) parts.push(`${WEEKDAY_SHORT[i]} ${formatDuration(minutes * 60)}`);
+        if (minutes !== null && minutes !== undefined) parts.push(`${weekdayShortNames()[i]} ${formatDuration(minutes * 60)}`);
     }
     return parts.length > 0 ? parts.join(" · ") : null;
 }

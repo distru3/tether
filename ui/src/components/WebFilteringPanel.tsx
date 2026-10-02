@@ -381,7 +381,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                                                 </td>
                                                 <td className="td-category">
                                                     <span className={`domain-category-pill ${isAdult ? 'pill--adult' : 'pill--custom'}`}>
-                                                        {isAdult ? "Adult Content" : "Custom Block"}
+                                                        {isAdult ? t("webFilter.kindAdult") : t("webFilter.kindCustom")}
                                                     </span>
                                                 </td>
                                                 <td className="td-status">
@@ -434,7 +434,8 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                                             className="pagination-btn"
                                             disabled={safePage <= 1}
                                             onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                                            title="Previous page"
+                                            title={t("webFilter.prevPage")}
+                                aria-label={t("webFilter.prevPage")}
                                         >
                                             <ChevronLeft size={14} />
                                         </button>
@@ -446,7 +447,8 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                                             className="pagination-btn"
                                             disabled={safePage >= totalPages}
                                             onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                                            title="Next page"
+                                            title={t("webFilter.nextPage")}
+                                aria-label={t("webFilter.nextPage")}
                                         >
                                             <ChevronRight size={14} />
                                         </button>

@@ -202,7 +202,7 @@ export function useLedgerActions(deps: Deps) {
     const cancelPendingLimit = useCallback(
         (target: LimitTargetDto) => {
             attempt(t("pinGate.cancelPending", { target: targetLabel(target, depsRef.current.catalog) }), async (pin) => {
-                const effective = await api.cancelPendingLimit(target, pin);
+                await api.cancelPendingLimit(target, pin);
                 depsRef.current.notify("info", t("actions.pendingCancelled"));
                 depsRef.current.invalidate();
             });

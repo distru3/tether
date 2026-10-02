@@ -98,7 +98,8 @@ export function AppDirectoryDialog({
                                 type="button"
                                 className="app-directory-search-clear"
                                 onClick={() => setSearch("")}
-                                title="Clear search"
+                                title={t("common.clearSearch")}
+                                aria-label={t("common.clearSearch")}
                             >
                                 <X size={13} />
                             </button>
@@ -140,7 +141,7 @@ export function AppDirectoryDialog({
                     ) : (
                         filteredApps.map((app) => {
                             const cat = categoriesMap.get(app.primary_category);
-                            const catName = cat?.name ?? "Uncategorized";
+                            const catName = cat?.name ?? t("categorize.uncategorized");
                             const catColor = colorForCategory(catName, cat?.color);
 
                             return (
@@ -160,7 +161,7 @@ export function AppDirectoryDialog({
                                             <div className="app-directory-name-row">
                                                 <span className="app-directory-name">{app.display_name}</span>
                                                 {app.user_classified && (
-                                                    <span className="app-directory-custom-badge" title="Manually customized by user">
+                                                    <span className="app-directory-custom-badge" title={t("categorize.userSet")}>
                                                         {t("categorize.customized", "Custom")}
                                                     </span>
                                                 )}

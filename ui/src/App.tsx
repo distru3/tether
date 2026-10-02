@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Clock, Flame, Hourglass, ShieldCheck, ChevronDown } from "lucide-react";
+import { ShieldOff, ChevronDown } from "lucide-react";
 import { applyLanguage } from "./i18n";
-import { formatDayLabel, formatDuration } from "./format";
-import { MetricCards } from "./components/MetricCards";
+import { formatDayLabel } from "./format";
+import { limitOutlook, longestStretch, vsWeekAverage } from "./dashboardMetrics";
 import { ExecutiveHeader } from "./components/ExecutiveHeader";
 import { UsageAside } from "./components/UsageAside";
 import { CategoryMix } from "./components/CategoryMix";
@@ -11,7 +11,6 @@ import { CategoryMix } from "./components/CategoryMix";
 import { BlockedBanner } from "./components/BlockedBanner";
 import { CategorizeDialog } from "./components/CategorizeDialog";
 import { AppDirectoryDialog } from "./components/AppDirectoryDialog";
-import { Hero } from "./components/Hero";
 import { LedgerRule } from "./components/LedgerRule";
 import { LimitEditorDialog } from "./components/LimitEditorDialog";
 import { LimitsPanel } from "./components/LimitsPanel";
@@ -33,7 +32,6 @@ import { useLedgerActions } from "./hooks/useLedgerActions";
 import { useNowMinute } from "./hooks/useNowMinute";
 import { useTheme } from "./hooks/useTheme";
 import { useToasts } from "./hooks/useToasts";
-import type { LimitDto } from "./types/generated/LimitDto";
 
 const FIRST_RUN_KEY = "screentime_first_run_completed";
 
@@ -212,62 +210,14 @@ function MainDashboard() {
     week !== null &&
     week.days.some((day) => day.day === viewDay && day.total_seconds === 0);
 
-  function limitFor(kind: "app" | "category", id: number): LimitDto | undefined {
-    return catalog?.limits.find((limit) => limit.target.kind === kind && limit.target.id === id);
-  }
 
-  const [focusActive, setFocusActive] = useState(false);
   const [tutorialOpen, setTutorialOpen] = useState(false);
 
   const activeLimitsCount = catalog ? catalog.limits.filter(l => l.enabled).length : 0;
 
-  // Real telemetry calculations for overview metric cards
-  const intervals = summary?.intervals ?? [];
-  let maxIntervalSeconds = 0;
-  let maxIntervalAppId = 0;
-  for (const interval of intervals) {
-    if (interval.durationSeconds > maxIntervalSeconds) {
-      maxIntervalSeconds = interval.durationSeconds;
-      maxIntervalAppId = interval.appId;
-    }
-  }
-  const maxApp = apps.find((a) => a.id === maxIntervalAppId);
-  const maxAppName = maxApp?.label ?? apps[0]?.label ?? null;
-  const streakBadge = maxIntervalSeconds >= 2700 ? "Deep Focus" : maxIntervalSeconds >= 1200 ? "Steady Flow" : maxIntervalSeconds > 0 ? "Active" : undefined;
-  const streakSubtitle = maxIntervalSeconds > 0 && maxAppName
-    ? `Longest stretch in ${maxAppName}`
-    : "No focus runs recorded";
-
-  const weekDays = week?.days ?? [];
-  const validWeekDays = weekDays.filter((d) => d.total_seconds > 0);
-  const avgSeconds = validWeekDays.length > 0
-    ? Math.round(validWeekDays.reduce((acc, d) => acc + d.total_seconds, 0) / validWeekDays.length)
-    : total;
-  const deltaPercent = avgSeconds > 0 ? Math.round(((total - avgSeconds) / avgSeconds) * 100) : 0;
-  const vsAvgText = validWeekDays.length > 1
-    ? deltaPercent === 0
-      ? "Right on 7-day avg"
-      : deltaPercent > 0
-        ? `+${deltaPercent}% vs 7-day avg`
-        : `${deltaPercent}% vs 7-day avg`
-    : "Baseline day";
-
-  const enabledLimits = catalog?.limits.filter((l) => l.enabled) ?? [];
-  let totalBudgetSeconds = 0;
-  let totalUsedOnLimitsSeconds = 0;
-  for (const lim of enabledLimits) {
-    totalBudgetSeconds += lim.default_minutes * 60;
-    if (lim.target.kind === "app") {
-      const match = apps.find((a) => a.id === (lim.target as any).id);
-      if (match) totalUsedOnLimitsSeconds += match.seconds;
-    } else if (lim.target.kind === "category") {
-      const match = categories.find((c) => c.id === (lim.target as any).id);
-      if (match) totalUsedOnLimitsSeconds += match.seconds;
-    } else if (lim.target.kind === "total") {
-      totalUsedOnLimitsSeconds += total;
-    }
-  }
-  const remainingBudgetSeconds = Math.max(0, totalBudgetSeconds - totalUsedOnLimitsSeconds);
+  const outlook = limitOutlook(summary, catalog, viewDay);
+  const stretch = longestStretch(summary);
+  const vsAverage = vsWeekAverage(total, week, viewDay);
 
   // Show onboarding overlay on first run
   if (showOnboarding) {
@@ -291,6 +241,7 @@ function MainDashboard() {
           blockedCount={blockedCount}
           focusActive={false}
           activeLimitsCount={activeLimitsCount}
+          showDayPicker={activeTab === "overview"}
         />
 
         <Toasts toasts={toasts} dismiss={dismiss} />
@@ -303,31 +254,33 @@ function MainDashboard() {
                 {t("common.trackingUnavailable")}
               </p>
             )}
-            {phase === "offline" && lastError !== null && (
-              <p className="notice notice--dim">{t("common.offline")} - {lastError}</p>
+            {phase === "offline" && (
+              <div className="service-alert" role="alert">
+                <ShieldOff size={18} aria-hidden="true" className="service-alert__icon" />
+                <div>
+                  <p className="service-alert__title">{t("offline.title")}</p>
+                  <p className="service-alert__body">{t("offline.body")}</p>
+                  {lastError !== null && <p className="service-alert__detail">{lastError}</p>}
+                </div>
+              </div>
             )}
 
             {activeTab === "overview" && (
               <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)", display: "flex", flexDirection: "column", gap: "20px" }}>
                 <ExecutiveHeader
-                  summary={summary}
-                  loading={loading}
                   total={total}
-                  apps={apps}
+                  categories={categories}
                   viewDay={viewDay}
                   isViewingToday={isViewingToday}
-                  goPrevDay={goPrevDay}
-                  goNextDay={goNextDay}
                   goToday={goToday}
-                  maxIntervalSeconds={maxIntervalSeconds}
-                  maxAppName={maxAppName}
-                  streakBadge={streakBadge}
-                  streakSubtitle={streakSubtitle}
-                  enabledLimits={enabledLimits}
-                  remainingBudgetSeconds={remainingBudgetSeconds}
+                  longestStretchSeconds={stretch.seconds}
+                  longestStretchApp={stretch.app}
+                  vsAveragePercent={vsAverage}
+                  limits={outlook}
+                  hasLimits={catalog === null ? null : activeLimitsCount > 0}
+                  agentReachable={phase === "live"}
+                  familyDnsEnabled={statusInfo?.family_dns_enabled ?? false}
                   blockedCount={blockedCount}
-                  blocked={blocked}
-                  vsAvgText={vsAvgText}
                 />
 
                 {blocked.length > 0 && (
@@ -336,6 +289,8 @@ function MainDashboard() {
                     busy={actions.busy}
                     onOverride={actions.override}
                     catalog={catalog}
+                    dayStartMinutes={statusInfo?.day_start_minutes ?? 0}
+                    strictMode={statusInfo?.strict_mode ?? false}
                   />
                 )}
                 
@@ -343,13 +298,8 @@ function MainDashboard() {
                   <div className="activity-ledger-timeline">
                     <div className="timeline-panel__header">
                       <div>
-                        <p className="panel-eyebrow">Today at a glance</p>
-                        <h3>Daily Timeline</h3>
-                      </div>
-                      <div className="date-picker-placeholder">
-                        <button className="btn btn-ghost btn-sm" onClick={goPrevDay} aria-label={t("hero.prevDay", "Previous Day")}>&lt;</button>
-                        <span>{isViewingToday ? "Today" : formatDayLabel(viewDay!)}</span>
-                        <button className="btn btn-ghost btn-sm" onClick={goNextDay} disabled={isViewingToday} aria-label={t("hero.nextDay", "Next Day")}>&gt;</button>
+                        <p className="panel-eyebrow">{isViewingToday ? t("hero.today") : formatDayLabel(viewDay)}</p>
+                        <h3>{t("timeline.title")}</h3>
                       </div>
                     </div>
                     {pastDayEmpty ? (
@@ -371,7 +321,7 @@ function MainDashboard() {
 
                 <div className="analytics-trends-container">
                   <div className="analytics-trends-history">
-                    <h3 className="analytics-trends-history-title">Weekly History</h3>
+                    <h3 className="analytics-trends-history-title">{t("weeklyChart.historyTitle")}</h3>
                     <WeeklyChart week={week} viewDay={viewDay} loading={weekLoading} onSelectDay={setViewDay} />
                   </div>
                   <div className="analytics-trends-distribution">
@@ -413,9 +363,8 @@ function MainDashboard() {
               <div className="tab-page settings-page" style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
 
                 <div className="settings-page-intro">
-                  <span className="section-kicker">Workspace</span>
                   <h2>{t("settings.title")}</h2>
-                  <p>Shape how Tether tracks, protects, and presents your day.</p>
+                  <p>{t("settings.subtitle")}</p>
                 </div>
 
                 <div className="settings-workspace">
@@ -838,7 +787,7 @@ function MainDashboard() {
                                 }
                               }}
                             />
-                            <span className="input-suffix">hrs</span>
+                            <span className="input-suffix">{t("time.short.h")}</span>
                           </div>
                         </div>
                       </div>
@@ -868,7 +817,7 @@ function MainDashboard() {
                                 }
                               }}
                             />
-                            <span className="input-suffix">sec</span>
+                            <span className="input-suffix">{t("time.short.s")}</span>
                           </div>
                         </div>
                       </div>
@@ -898,7 +847,7 @@ function MainDashboard() {
                                 }
                               }}
                             />
-                            <span className="input-suffix">min</span>
+                            <span className="input-suffix">{t("time.short.m")}</span>
                           </div>
                         </div>
                       </div>
@@ -941,7 +890,7 @@ function MainDashboard() {
                     >
                       <div>
                         <h2 style={{ margin: 0 }}>{t("tutorial.title")}</h2>
-                        <div className="section-desc">Quick guide to shortcuts, hotkeys, and app controls.</div>
+                        <div className="section-desc">{t("tutorial.subtitle")}</div>
                       </div>
                       <ChevronDown
                         size={18}
