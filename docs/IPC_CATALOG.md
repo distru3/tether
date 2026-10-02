@@ -1,6 +1,6 @@
 # Screentime IPC & Command Catalog
 
-This document is the exhaustive catalog of the local named pipe IPC interface (`\\.\pipe\screentime`) and its Tauri adapter layer. Verified against the codebase on **2026-09-12**.
+This document is the exhaustive catalog of the local named pipe IPC interface (`\\.\pipe\screentime`) and its Tauri adapter layer. Verified against the codebase on **2026-10-02**.
 
 ---
 
