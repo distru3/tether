@@ -40,7 +40,7 @@ The system is partitioned into **three separate processes** due to Windows opera
 ### Why This Split Exists
 - **Session 0 Isolation**: On Windows, services running as SYSTEM cannot interact with the user desktop, cannot see the focused window, and cannot display UI. Thus, `screentime-agent` cannot sample the foreground app.
 - **Session Helper (`screentime-session`)**: Runs inside the interactive desktop session. It samples `GetForegroundWindow()` and Win32 `GetLastInputInfo()` every second, packaging observations into `ReportUsage` requests sent to the agent over `\\.\pipe\screentime`. It draws the native timer HUD, and decides when the block overlay must show. The overlay itself is rendered by the UI's `overlay` webview, which the session commands over `\\.\pipe\screentime_overlay_bridge`.
-- **The session helper is a single point of failure for enforcement.** Release builds use `panic = "abort"`, so a panic on any session thread ends the process; HUD creation is therefore fallible (`hud::spawn_hud_overlay` returns `Option`) rather than `unwrap`ping Win32 results. Nothing relaunches the helper after it exits (only the HKCU Run entry at the next login), and the helper runs unprivileged in the user's session, so the user can end it in Task Manager. While it is gone the agent receives no focus reports and enforces nothing. Open design question: a SYSTEM-side supervisor (`WTSQueryUserToken` + `CreateProcessAsUser`) and/or a fail-closed fallback when reports go stale.
+- **The service keeps the session helper running** (ADR 0003). The helper is the only source of focus reports, so while it is gone nothing is enforced. Release builds use `panic = "abort"`, so HUD creation is fallible (`hud::spawn_hud_overlay` returns `Option`) rather than `unwrap`ping Win32 results. If the helper still exits (crash, or ended in Task Manager), the service notices 15 s of report silence and relaunches it in the console user's session (`supervisor.rs` decides with startup grace and backoff; `st_win32::session_launch` uses `WTSQueryUserToken` + `CreateProcessAsUserW`). Console-mode dev agents don't supervise. Open: a fail-closed fallback while reports are stale.
 - **Tauri UI (`screentime-ui`)**: Runs the React frontend dashboard inside WebView2. It never connects to the database directly; it issues one-shot IPC requests to the agent via Tauri commands.
 
 ---
@@ -58,7 +58,8 @@ crates/
 ├── ipc/              Named pipe framing, wire serialization, Request/Response enums,
 │                     ts-rs TypeScript binding generator.
 ├── st-win32/         Shared Win32 helpers (process handles, image paths, wide strings),
-│                     in-memory WAV playback (`audio`), pipe-peer trust (`peer_is_trusted`).
+│                     in-memory WAV playback (`audio`), pipe-peer trust (`peer_is_trusted`),
+│                     user-session process launch (`session_launch`).
 ├── tracker-win/      Win32 active window and idle tracker (used by dev fallback).
 ├── tracker-linux/    Linux window tracking stub.
 ├── enforce-win/      Process freeze/terminate and hosts-file atomic writer.
@@ -66,7 +67,8 @@ crates/
 ├── family-dns/       Cloudflare Family DNS adapter configuration & original DNS backup/restore.
 ├── agent/            Privileged daemon: IPC server (`ipc_server/` — `auth.rs` gate + one
 │                     module per area), report ingestion, enforcement loop, live
-│                     `policy.rs`, `family_dns.rs` (enable/disable orchestration).
+│                     `policy.rs`, `family_dns.rs` (enable/disable orchestration),
+│                     `supervisor.rs` (relaunches a silent session helper).
 └── session/          Per-user sampling front, native timer HUD, block-overlay driver.
 
 ui/
