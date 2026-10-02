@@ -9,10 +9,7 @@
 
 /* ─── Shared Base & Theme 1: Midnight Cobalt (Default Dark) ─────────────── */
 :root,
-[data-theme="midnight-cobalt"],
-[data-theme="dark"],
-[data-theme="horizon-dark"],
-[data-theme="classic-dark"] {
+[data-theme="midnight-cobalt"] {
     color-scheme: dark;
 
     /* Surfaces */
@@ -107,8 +104,8 @@
     --redesign-ink: var(--text-primary);
     --redesign-ink-soft: var(--text-secondary);
     --redesign-muted: var(--text-muted);
-    --redesign-orange: var(--color-primary);
-    --redesign-orange-deep: var(--color-primary-active);
+    --redesign-accent: var(--color-primary);
+    --redesign-accent-deep: var(--color-primary-active);
     --redesign-green: var(--color-success);
     --redesign-violet: var(--color-accent);
     --redesign-red: var(--color-danger);
@@ -158,8 +155,7 @@
 }
 
 /* ─── Theme 2: Slate Charcoal (Neutral Dark) ────────────────────────────── */
-[data-theme="slate-charcoal"],
-[data-theme="cyber-emerald"] {
+[data-theme="slate-charcoal"] {
     color-scheme: dark;
 
     --bg-app: #0D1117;
@@ -238,9 +234,6 @@
 
 /* ─── Theme 3: Clean Titanium (Refined Light) ───────────────────────────── */
 [data-theme="clean-titanium"],
-[data-theme="light"],
-[data-theme="horizon-light"],
-[data-theme="classic-light"],
 [data-theme-mode="light"] {
     color-scheme: light;
 

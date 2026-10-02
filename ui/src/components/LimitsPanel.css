@@ -110,7 +110,6 @@
     gap: 8px;
 }
 
-.limits-grid { display: flex; flex-direction: column; gap: 16px; width: 100%; }
 .rich-limits-list { display: flex; flex-direction: column; gap: 16px; width: 100%; }
 
 .banner-warning-card {

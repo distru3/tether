@@ -2,8 +2,26 @@ import i18n from "./i18n";
 import type { CatalogDto } from "./types/generated/CatalogDto";
 import type { LimitTargetDto } from "./types/generated/LimitTargetDto";
 
+/** Calendar day of a local date as `YYYYMMDD`. */
+export function calendarKey(d: Date): number {
+    return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate();
+}
+
+/**
+ * Minutes after local midnight at which the agent rolls the day over
+ * (`day_start_minutes`). Mirrored here so "today" in the UI is the same day
+ * the agent is bucketing usage into: with a 04:00 day start, 02:00 still
+ * belongs to yesterday. Updated from every status poll.
+ */
+let dayStartMinutes = 0;
+
+export function setDayStartMinutes(minutes: number): void {
+    dayStartMinutes = Number.isFinite(minutes) ? Math.max(0, Math.min(1439, minutes)) : 0;
+}
+
+/** The agent's current day key (see [`setDayStartMinutes`]). */
 export function todayKey(now = new Date()): number {
-    return now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+    return calendarKey(new Date(now.getTime() - dayStartMinutes * 60000));
 }
 
 /**
@@ -84,7 +102,7 @@ export function dayKeyToDate(key: number): Date {
 
 /** Whole local days of ±delta from a day key. Noon-based so DST never skips it. */
 export function shiftDay(key: number, delta: number): number {
-    return todayKey(new Date(dayKeyToDate(key).getTime() + delta * 86400000));
+    return calendarKey(new Date(dayKeyToDate(key).getTime() + delta * 86400000));
 }
 
 /** Dateline above the hero when browsing history: "TUESDAY · AUG 24". */

@@ -526,5 +526,25 @@
   "toasts": {
     "region": "Notifications",
     "dismiss": "Dismiss"
+  },
+  "categoryNames": {
+    "games": "Games",
+    "social-media": "Social Media",
+    "short-form-video": "Short-Form Video",
+    "video-streaming": "Video & Streaming",
+    "music-audio": "Music & Audio",
+    "news": "News",
+    "shopping": "Shopping",
+    "communication": "Communication",
+    "productivity": "Productivity & Office",
+    "creativity": "Creativity & Design",
+    "education": "Education & Reading",
+    "finance": "Finance",
+    "ai-chatbots": "AI Assistants",
+    "uncategorized": "Uncategorized",
+    "development": "Development & Tools",
+    "utilities-system": "Utilities & System",
+    "adult-content": "Adult Content",
+    "gambling": "Gambling & Betting"
   }
 }

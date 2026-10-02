@@ -1,3 +1,6 @@
+import en from "./locales/en/translation.json";
+import ar from "./locales/ar/translation.json";
+
 const FALLBACK_PALETTE = [
   "#8B5CF6", // Purple
   "#3B82F6", // Blue
@@ -38,6 +41,18 @@ const LABEL_COLORS: Record<string, string> = {
 
 function normalize(value: string): string {
   return value.trim().toLowerCase().replace(/\s+/g, " ");
+}
+
+// Built-in category names are translated in the UI (`categoryNames.<slug>`),
+// so the same category arrives here as "Games" or "الألعاب". Register every
+// localized name against its English palette entry so colors never depend on
+// the UI language.
+for (const bundle of [ar] as Array<{ categoryNames?: Record<string, string> }>) {
+  for (const [slug, localized] of Object.entries(bundle.categoryNames ?? {})) {
+    const english = (en as { categoryNames?: Record<string, string> }).categoryNames?.[slug];
+    const color = english ? LABEL_COLORS[normalize(english)] : undefined;
+    if (color) LABEL_COLORS[normalize(localized)] = color;
+  }
 }
 
 function stableIndex(value: string): number {

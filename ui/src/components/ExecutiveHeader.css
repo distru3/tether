@@ -31,53 +31,6 @@
   flex-wrap: wrap;
 }
 
-.executive-date-stepper {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--bg-input);
-  padding: 2px 6px;
-  border-radius: 6px;
-  border: 1px solid var(--border-subtle);
-}
-
-.exec-nav-btn {
-  position: relative;
-  width: 28px;
-  height: 28px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-secondary);
-  border-radius: var(--radius-sm, 6px);
-  cursor: pointer;
-  transition: all 0.12s ease;
-  padding: 0;
-}
-
-.exec-nav-btn::before {
-  content: "";
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  min-width: 44px;
-  min-height: 44px;
-}
-
-.exec-nav-btn:hover:not(:disabled) {
-  color: var(--text-primary);
-  background: var(--bg-surface-hover);
-  border-color: var(--border-subtle);
-}
-
-.exec-nav-btn:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-
 .exec-date-label {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -241,18 +194,6 @@
   margin-left: auto;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-
-.exec-metric-badge--streak {
-  background: var(--bg-warning, rgba(245, 158, 11, 0.12));
-  color: var(--color-warning);
-  border: 1px solid var(--border-warning, rgba(245, 158, 11, 0.28));
-}
-
-.exec-metric-badge--budget {
-  background: var(--color-primary-subtle, rgba(79, 70, 229, 0.12));
-  color: var(--color-primary);
-  border: 1px solid rgba(79, 70, 229, 0.25);
 }
 
 .exec-metric-badge--exhausted {

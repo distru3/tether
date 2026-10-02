@@ -21,28 +21,11 @@
     height: 100%;
 }
 
-.titlebar-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
 .titlebar-title {
     font-size: 12px;
     font-weight: 650;
     color: var(--text-primary);
     letter-spacing: -0.01em;
-}
-
-.titlebar-version {
-    font-size: 10px;
-    font-weight: 600;
-    color: var(--text-muted);
-    background: var(--bg-surface);
-    padding: 1px 5px;
-    border-radius: 4px;
-    border: 1px solid var(--border-subtle);
-    letter-spacing: 0.02em;
 }
 
 .titlebar-controls {
