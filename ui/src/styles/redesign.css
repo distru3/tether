@@ -2211,7 +2211,16 @@ dialog::backdrop,
 
 .limits-page-shell .rich-limit-progress-fill {
   border-radius: inherit;
-  background: var(--color-accent) !important;
+  background: var(--color-accent);
+}
+
+/* Progress carries state: amber from 80%, red once the budget is spent. */
+.limits-page-shell .rich-limit-progress-fill--warn {
+  background: var(--color-warning);
+}
+
+.limits-page-shell .rich-limit-progress-fill--over {
+  background: var(--color-danger);
 }
 
 .limits-page-shell .rich-limit-card-footer {

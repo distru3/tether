@@ -1,194 +1,178 @@
-import React from "react";
 import { useTranslation } from "react-i18next";
-import { Clock, Flame, Hourglass, ShieldCheck, ChevronLeft, ChevronRight } from "lucide-react";
-import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
-import type { UsageRowDto } from "../types/generated/UsageRowDto";
-import type { LimitDto } from "../types/generated/LimitDto";
+import { Flame, Hourglass, ShieldCheck, ShieldOff } from "lucide-react";
 import { formatDayLabel, formatDuration, heroParts, sharePercent } from "../format";
+import type { UsageRowDto } from "../types/generated/UsageRowDto";
 import "./ExecutiveHeader.css";
 
+/** The limit with the least time left today, or every limit already reached. */
+export interface LimitOutlook {
+  /** Limits whose budget is used up, by display label. */
+  reached: string[];
+  /** The nearest not-yet-reached limit. */
+  closest: { label: string; remainingSeconds: number } | null;
+}
+
 interface ExecutiveHeaderProps {
-  summary: DaySummaryDto | null;
-  loading: boolean;
   total: number;
-  apps: UsageRowDto[];
-  viewDay?: number;
+  /** Primary-category rows for the viewed day, descending. */
+  categories: UsageRowDto[];
+  viewDay: number;
   isViewingToday: boolean;
-  goPrevDay: () => void;
-  goNextDay: () => void;
-  goToday?: () => void;
-  maxIntervalSeconds: number;
-  maxAppName: string | null;
-  streakBadge?: string;
-  streakSubtitle: string;
-  enabledLimits: LimitDto[];
-  remainingBudgetSeconds: number;
+  goToday: () => void;
+  longestStretchSeconds: number;
+  longestStretchApp: string | null;
+  /** Percent vs the 7-day average, or null when there is no baseline yet. */
+  vsAveragePercent: number | null;
+  limits: LimitOutlook;
+  /** Whether any limit is configured; null while the catalog is unknown. */
+  hasLimits: boolean | null;
+  /** The agent answered the last poll. Protection is unknown otherwise. */
+  agentReachable: boolean;
+  familyDnsEnabled: boolean;
   blockedCount: number;
-  blocked: UsageRowDto[];
-  vsAvgText: string;
 }
 
 export function ExecutiveHeader({
-  summary,
-  loading,
   total,
-  apps,
+  categories,
   viewDay,
   isViewingToday,
-  goPrevDay,
-  goNextDay,
   goToday,
-  maxIntervalSeconds,
-  streakBadge,
-  streakSubtitle,
-  enabledLimits,
-  remainingBudgetSeconds,
+  longestStretchSeconds,
+  longestStretchApp,
+  vsAveragePercent,
+  limits,
+  hasLimits,
+  agentReachable,
+  familyDnsEnabled,
   blockedCount,
-  blocked,
-  vsAvgText,
 }: ExecutiveHeaderProps) {
   const { t } = useTranslation();
+  const lead = categories.find((category) => category.seconds > 0);
 
-  const lead = summary?.categories?.find((category) => category.seconds > 0);
-  const parts = heroParts(total);
+  const trend =
+    vsAveragePercent === null
+      ? null
+      : vsAveragePercent === 0
+        ? t("hero.onAverage")
+        : t(vsAveragePercent > 0 ? "hero.aboveAverage" : "hero.belowAverage", {
+            percent: Math.abs(vsAveragePercent),
+          });
 
   return (
-    <section className="executive-header" aria-label="Screen time telemetry and summary">
-      {/* Primary Hero Zone */}
+    <section className="executive-header" aria-label={t("hero.summaryLabel")}>
       <div className="executive-hero">
         <div className="executive-hero__top">
-          <div className="executive-date-stepper">
-            <button
-              type="button"
-              className="exec-nav-btn"
-              onClick={goPrevDay}
-              aria-label={t("hero.prevDay", "Previous Day")}
-              title={t("hero.prevDay", "Previous Day")}
-            >
-              <ChevronLeft size={14} />
-            </button>
-            <span className="exec-date-label">
-              {isViewingToday ? t("hero.today", "Today") : viewDay ? formatDayLabel(viewDay) : ""}
-            </span>
-            <button
-              type="button"
-              className="exec-nav-btn"
-              onClick={goNextDay}
-              disabled={isViewingToday}
-              aria-label={t("hero.nextDay", "Next Day")}
-              title={t("hero.nextDay", "Next Day")}
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-
-          {!isViewingToday && goToday && (
+          <span className="exec-date-label">
+            {isViewingToday ? t("hero.today") : formatDayLabel(viewDay)}
+          </span>
+          {!isViewingToday && (
             <button type="button" className="exec-today-pill" onClick={goToday}>
-              {t("hero.backToToday", "Jump to Today")}
+              {t("hero.backToToday")}
             </button>
-          )}
-
-          {lead && total > 0 && (
-            <div className="exec-lead-chip">
-              <span
-                className="exec-lead-dot"
-                style={{ backgroundColor: lead.color || "var(--color-primary)" }}
-              />
-              <span className="exec-lead-text">
-                {lead.label} · {sharePercent(lead.seconds, total)}
-              </span>
-            </div>
           )}
         </div>
 
         <div className="executive-time-readout">
-          {parts.map(([val, unit]) => (
-            <span key={`${val}${unit}`} className="exec-time-cluster">
-              <span className="exec-time-val">{val}</span>
-              <span className="exec-time-unit">{unit}</span>
-            </span>
-          ))}
-          {vsAvgText && (
-            <span className="exec-trend-caption">{vsAvgText}</span>
-          )}
+          <span className="exec-time-figure" aria-label={formatDuration(total)}>
+            {heroParts(total).map(([value, unit]) => (
+              <span key={unit} className="exec-time-cluster" aria-hidden="true">
+                <span className="exec-time-val">{value}</span>
+                <span className="exec-time-unit">{unit}</span>
+              </span>
+            ))}
+          </span>
+          {trend && <span className="exec-trend-caption">{trend}</span>}
         </div>
+
+        {lead && total > 0 && (
+          <div className="exec-lead-chip">
+            <span className="exec-lead-dot" style={{ backgroundColor: lead.color || "var(--color-primary)" }} />
+            <span className="exec-lead-text">
+              {t("hero.mostlyIn", { label: lead.label, percent: sharePercent(lead.seconds, total) })}
+            </span>
+          </div>
+        )}
       </div>
 
-      {/* Telemetry Indicator Zone */}
       <div className="executive-telemetry">
-        {/* Metric 1: Focus Streak */}
         <div className="exec-metric-cell">
           <div className="exec-metric-label-row">
             <span className="exec-metric-icon">
-              <Flame size={14} color="var(--color-warning)" />
+              <Flame size={14} color="var(--color-warning)" aria-hidden="true" />
             </span>
-            <span className="exec-metric-kicker">LONGEST STREAK</span>
-            {streakBadge && (
-              <span className="exec-metric-badge exec-metric-badge--streak">{streakBadge}</span>
-            )}
+            <span className="exec-metric-kicker">{t("hero.longestStretch")}</span>
           </div>
           <div className="exec-metric-value">
-            {maxIntervalSeconds > 0 ? formatDuration(maxIntervalSeconds) : "—"}
+            {longestStretchSeconds > 0 ? formatDuration(longestStretchSeconds) : "—"}
           </div>
-          <div className="exec-metric-sub">{streakSubtitle}</div>
+          <div className="exec-metric-sub">
+            {longestStretchSeconds > 0 && longestStretchApp
+              ? t("hero.stretchIn", { app: longestStretchApp })
+              : t("hero.noStretch")}
+          </div>
         </div>
 
-        {/* Metric 2: Remaining Budget */}
         <div className="exec-metric-cell">
           <div className="exec-metric-label-row">
             <span className="exec-metric-icon">
-              <Hourglass size={14} color="var(--color-primary)" />
+              <Hourglass size={14} color="var(--color-primary)" aria-hidden="true" />
             </span>
-            <span className="exec-metric-kicker">DAILY ALLOWANCE</span>
-            {enabledLimits.length > 0 && (
-              <span
-                className={`exec-metric-badge ${
-                  remainingBudgetSeconds === 0
-                    ? "exec-metric-badge--exhausted"
-                    : "exec-metric-badge--budget"
-                }`}
-              >
-                {remainingBudgetSeconds === 0 ? "Exhausted" : "Active"}
+            <span className="exec-metric-kicker">{t("hero.closestLimit")}</span>
+            {limits.reached.length > 0 && (
+              <span className="exec-metric-badge exec-metric-badge--exhausted">
+                {t("hero.reachedCount", { count: limits.reached.length })}
               </span>
             )}
           </div>
           <div className="exec-metric-value">
-            {enabledLimits.length > 0 ? formatDuration(remainingBudgetSeconds) : "No limits"}
+            {hasLimits === null
+              ? "—"
+              : !hasLimits
+              ? t("hero.noLimits")
+              : limits.closest
+                ? t("hero.timeLeft", { duration: formatDuration(limits.closest.remainingSeconds) })
+                : t("hero.allReached")}
           </div>
           <div className="exec-metric-sub">
-            {enabledLimits.length > 0
-              ? `${enabledLimits.length} active limit${enabledLimits.length === 1 ? "" : "s"}`
-              : "Unrestricted today"}
+            {hasLimits === null
+              ? ""
+              : !hasLimits
+              ? t("hero.noLimitsHint")
+              : limits.closest
+                ? limits.closest.label
+                : limits.reached.join(", ")}
           </div>
         </div>
 
-        {/* Metric 3: Protection Status */}
-        <div className="exec-metric-cell">
+        <div className={`exec-metric-cell ${agentReachable ? "" : "exec-metric-cell--alert"}`}>
           <div className="exec-metric-label-row">
             <span className="exec-metric-icon">
-              <ShieldCheck
-                size={14}
-                color={blockedCount > 0 ? "var(--color-danger)" : "var(--color-success)"}
-              />
+              {agentReachable ? (
+                <ShieldCheck size={14} color="var(--color-success)" aria-hidden="true" />
+              ) : (
+                <ShieldOff size={14} color="var(--color-danger)" aria-hidden="true" />
+              )}
             </span>
-            <span className="exec-metric-kicker">PROTECTION</span>
+            <span className="exec-metric-kicker">{t("hero.protection")}</span>
             <span
-              className={`exec-metric-badge ${
-                blockedCount > 0
-                  ? "exec-metric-badge--blocked"
-                  : "exec-metric-badge--protected"
-              }`}
+              className={`exec-metric-badge ${agentReachable ? "exec-metric-badge--protected" : "exec-metric-badge--blocked"}`}
             >
-              {blockedCount > 0 ? `${blockedCount} Blocked` : "Active"}
+              {agentReachable ? t("hero.protectionOn") : t("hero.protectionUnknown")}
             </span>
           </div>
           <div className="exec-metric-value">
-            {blockedCount > 0 ? `${blockedCount} Suspended` : "Enforced"}
+            {agentReachable ? t("hero.enforcing") : t("hero.notRunning")}
           </div>
           <div className="exec-metric-sub">
-            {blockedCount > 0
-              ? `${blocked.map((a) => a.label).join(", ")} suspended`
-              : "Zero limit violations"}
+            {!agentReachable
+              ? t("hero.notRunningHint")
+              : [
+                  blockedCount > 0 ? t("hero.blockedNow", { count: blockedCount }) : t("hero.nothingBlocked"),
+                  familyDnsEnabled ? t("hero.familyDnsOn") : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
           </div>
         </div>
       </div>

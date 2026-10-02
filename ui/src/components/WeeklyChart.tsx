@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { WeeklySummaryDto } from "../types/generated/WeeklySummaryDto";
 import { chartBarLabel, dayKeyToDate, formatDayLabel, formatDuration } from "../format";

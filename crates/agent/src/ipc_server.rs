@@ -786,17 +786,25 @@ fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
         })
         .collect();
 
-    // Per-app allowed seconds from limits, for progress rings.
-    let limits = db.load_limits().unwrap_or_default();
-    let limit_secs_for = |app_id: i64| -> Option<i64> {
-        limits
-            .iter()
-            .find(|l| matches!(l.target, LimitTarget::App(id) if id == app_id))
-            .map(|l| i64::from(l.default_minutes) * 60)
-    };
-
     let now = ctx.clock.now_utc();
     let snapshot = db.day_snapshot(summary.day).ok();
+
+    // The row's budget, defined so that `limit_seconds - seconds` is exactly
+    // the time left on that limit today: the weekday-resolved allowance minus
+    // what the engine counts against it (for a category, that includes
+    // tagged apps, which the row's primary-only `seconds` does not). Disabled
+    // limits have no budget. Previously this used `default_minutes` for app
+    // rows only, ignoring weekday overrides and the enabled flag, and never
+    // filled category rows.
+    let limits = db.load_limits().unwrap_or_default();
+    let weekday = summary.day.weekday_index().unwrap_or(0);
+    let limit_secs_for = |target: LimitTarget, row_seconds: i64| -> Option<i64> {
+        let limit = limits.iter().find(|l| l.enabled && l.target == target)?;
+        let used = snapshot
+            .as_ref()
+            .map_or(row_seconds, |s| s.seconds_used(&target));
+        Some(row_seconds + limit.allowed_secs_for_weekday(weekday) - used)
+    };
     let timer_expires = |target: LimitTarget| -> Option<String> {
         snapshot
             .as_ref()
@@ -816,7 +824,7 @@ fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
                 label: a.label,
                 seconds: a.seconds,
                 color: Some(a.category_color),
-                limit_seconds: limit_secs_for(a.id),
+                limit_seconds: limit_secs_for(LimitTarget::App(a.id), a.seconds),
                 blocked: blocked_apps.contains(&a.id),
                 timer_expires_utc: timer_expires(LimitTarget::App(a.id)),
             })
@@ -829,7 +837,7 @@ fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
                 label: c.name,
                 seconds: c.seconds,
                 color: Some(c.color),
-                limit_seconds: None,
+                limit_seconds: limit_secs_for(LimitTarget::Category(c.id), c.seconds),
                 blocked: false,
                 timer_expires_utc: timer_expires(LimitTarget::Category(c.id)),
             })
@@ -2466,6 +2474,10 @@ mod tests {
         assert_eq!(dto.apps[0].id, app);
         assert_eq!(dto.apps[0].seconds, 600);
         assert_eq!(dto.apps[0].limit_seconds, Some(1800));
+        assert_eq!(
+            dto.categories[0].limit_seconds, None,
+            "no category limit configured"
+        );
         assert!(dto.apps[0].blocked, "the block must be surfaced honestly");
         assert_eq!(dto.categories.len(), 1);
         assert_eq!(dto.categories[0].seconds, 600);
@@ -3333,5 +3345,55 @@ mod tests {
         assert_eq!(error_code(&verify("")), Some(ErrorCode::BadPin));
         assert_eq!(error_code(&verify("0000")), Some(ErrorCode::BadPin));
         assert!(matches!(verify("1234"), Response::Accepted { .. }));
+    }
+
+    #[test]
+    fn day_summary_budgets_honour_weekday_overrides_disabled_limits_and_categories() {
+        let mut db = Db::open_in_memory().expect("db");
+        let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
+        let games = db.category_id("games").expect("games");
+        // 2026-08-22 is a Saturday (Monday-first index 5).
+        record_usage(&mut db, app, 600, DayKey(20260822));
+        let mut weekend = Limit::new(0, LimitTarget::App(app), 30);
+        weekend.weekday_minutes[5] = Some(90);
+        db.upsert_limit(&weekend, at("2026-08-22T09:00:00Z"))
+            .expect("app limit");
+        let mut disabled = Limit::new(0, LimitTarget::Category(games), 60);
+        disabled.enabled = false;
+        db.upsert_limit(&disabled, at("2026-08-22T09:00:00Z"))
+            .expect("category limit");
+
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-22T12:00:00Z"), 0));
+        let summary = |ctx: &Ctx| {
+            let Response::DaySummary(dto) = handle(
+                ctx,
+                Request::DaySummary {
+                    day: DayKey(20260822),
+                },
+            ) else {
+                panic!("expected DaySummary");
+            };
+            dto
+        };
+        let dto = summary(&ctx);
+        assert_eq!(
+            dto.apps[0].limit_seconds,
+            Some(90 * 60),
+            "Saturday override"
+        );
+        assert_eq!(dto.categories[0].limit_seconds, None, "disabled limit");
+
+        let mut enabled = Limit::new(0, LimitTarget::Category(games), 60);
+        enabled.enabled = true;
+        lock_db(&ctx.db)
+            .upsert_limit(&enabled, at("2026-08-22T09:00:00Z"))
+            .expect("enable");
+        let dto = summary(&ctx);
+        let row = &dto.categories[0];
+        assert_eq!(
+            row.limit_seconds.expect("budget") - row.seconds,
+            60 * 60 - 600,
+            "budget minus usage is the time left"
+        );
     }
 }

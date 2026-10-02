@@ -7,16 +7,15 @@ import {
     Trash2,
     Edit2,
     ShieldCheck,
-    Check,
     AlertCircle,
     Calendar,
     Sparkles,
     X,
-    Search,
 } from "lucide-react";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { ScheduleDto } from "../types/generated/ScheduleDto";
 import { useDowntime } from "../hooks/useDowntime";
+import i18n from "../i18n";
 import type { Guarded } from "../hooks/useLedgerActions";
 import { Dialog } from "./Dialog";
 import { ToggleSwitch } from "./ToggleSwitch";
@@ -29,15 +28,16 @@ interface DowntimeSectionProps {
     guarded?: Guarded;
 }
 
-const WEEKDAYS = [
-    { label: "M", full: "Mon", bit: 1 << 0 },
-    { label: "T", full: "Tue", bit: 1 << 1 },
-    { label: "W", full: "Wed", bit: 1 << 2 },
-    { label: "T", full: "Thu", bit: 1 << 3 },
-    { label: "F", full: "Fri", bit: 1 << 4 },
-    { label: "S", full: "Sat", bit: 1 << 5 },
-    { label: "S", full: "Sun", bit: 1 << 6 },
-];
+/** Monday-first weekday chips, named in the UI language. */
+function weekdays(): Array<{ label: string; full: string; bit: number }> {
+    const narrow = new Intl.DateTimeFormat(i18n.language, { weekday: "narrow" });
+    const long = new Intl.DateTimeFormat(i18n.language, { weekday: "long" });
+    // 2024-01-01 was a Monday.
+    return Array.from({ length: 7 }, (_, i) => {
+        const day = new Date(2024, 0, 1 + i, 12);
+        return { label: narrow.format(day), full: long.format(day), bit: 1 << i };
+    });
+}
 
 function minuteToTimeString(min: number): string {
     const h = Math.floor(min / 60);
@@ -116,7 +116,7 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
                 ? t("downtime.statusActive", "Active now")
                 : t("downtime.statusInactive", "Inactive"),
             icon: <Moon size={16} color={anyActiveNow ? "var(--accent-amber)" : "var(--text-secondary)"} />,
-            badge: anyActiveNow ? "Enforcing" : undefined,
+            badge: anyActiveNow ? t("hero.enforcing") : undefined,
         },
         {
             label: t("downtime.alwaysAllowed", "Always Allowed"),
@@ -148,7 +148,7 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
             await setAllowlist("app", Number(selectedAppId), true, name);
             setSelectedAppId("");
             setAllowlistSearch("");
-            notify("success", "App added to downtime allowlist.");
+            notify("success", t("downtime.allowAdded"));
         } catch {
             // Handled in hook
         }
@@ -157,7 +157,7 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
     const handleRemoveAllowlist = async (subjectType: string, subjectId: number) => {
         try {
             await setAllowlist(subjectType, subjectId, false);
-            notify("success", "App removed from allowlist.");
+            notify("success", t("downtime.allowRemoved"));
         } catch {
             // Handled in hook
         }
@@ -170,17 +170,11 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
             {/* Schedules List Card */}
             <div className="card glass-card" style={{ marginTop: "24px", padding: "24px" }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-                    <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                            <Moon size={18} color="var(--accent-indigo)" />
-                            <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "var(--text-primary)" }}>
-                                {t("downtime.title", "Scheduled Downtime")}
-                            </h3>
-                        </div>
-                        <p style={{ margin: "4px 0 0 0", fontSize: "13px", color: "var(--text-secondary)" }}>
-                            {t("downtime.subtitle", "Set recurring bedtime or focus windows during which non-allowlisted apps are locked.")}
-                        </p>
-                    </div>
+                    {/* The page header already titles this section; the card
+                        only names its contents. */}
+                    <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--text-primary)" }}>
+                        {t("downtime.schedulesHeading")}
+                    </h3>
                     <button
                         type="button"
                         className="btn btn-primary btn-sm"
@@ -266,7 +260,7 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
                                                 </div>
 
                                                 <div style={{ display: "flex", gap: "4px" }}>
-                                                    {WEEKDAYS.map((w, idx) => {
+                                                    {weekdays().map((w, idx) => {
                                                         const active = (schedule.weekday_mask & w.bit) !== 0;
                                                         return (
                                                             <span
@@ -391,7 +385,8 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
                                     className="btn-ghost"
                                     style={{ padding: "2px", border: "none", cursor: "pointer", display: "inline-flex", color: "var(--text-muted)" }}
                                     onClick={() => handleRemoveAllowlist(item.subject_type, item.subject_id)}
-                                    title="Remove from allowlist"
+                                    title={t("downtime.allowRemove")}
+                                    aria-label={t("downtime.allowRemove")}
                                 >
                                     <X size={12} />
                                 </button>
@@ -446,11 +441,11 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
     const handleSave = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name.trim()) {
-            setError("Schedule name cannot be empty.");
+            setError(t("downtime.errName"));
             return;
         }
         if (weekdayMask === 0) {
-            setError("Please select at least one active day.");
+            setError(t("downtime.errDays"));
             return;
         }
         try {
@@ -458,16 +453,16 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
             setError(null);
             await onSave(name.trim(), weekdayMask, startMinute, endMinute);
         } catch (err: any) {
-            setError(err?.message || "Failed to save schedule.");
+            setError(err?.message || t("downtime.errSave"));
         } finally {
             setSaving(false);
         }
     };
 
     return (
-        <Dialog label={schedule ? "Edit Schedule" : "New Schedule"} onClose={onClose}>
+        <Dialog label={schedule ? t("downtime.editSchedule", "Edit Schedule") : t("downtime.newSchedule", "New Schedule")} onClose={onClose}>
             <form onSubmit={handleSave} className="dialog-content">
-                <div className="dialog-eyebrow">Downtime & Bedtime</div>
+                <div className="dialog-eyebrow">{t("downtime.tabDowntime", "Scheduled Downtime")}</div>
                 <h3 className="dialog-title">
                     {schedule ? t("downtime.editSchedule", "Edit Schedule") : t("downtime.newSchedule", "New Schedule")}
                 </h3>
@@ -487,7 +482,7 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
                         className="form-input"
                         value={name}
                         onChange={(e) => setName(e.target.value)}
-                        placeholder="e.g. Bedtime, Deep Focus"
+                        placeholder={t("downtime.namePlaceholder")}
                         required
                     />
                 </div>
@@ -558,7 +553,7 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
                     </div>
 
                     <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
-                        {WEEKDAYS.map((w, idx) => {
+                        {weekdays().map((w, idx) => {
                             const isSelected = (weekdayMask & w.bit) !== 0;
                             return (
                                 <button

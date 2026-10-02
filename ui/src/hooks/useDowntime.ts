@@ -71,7 +71,7 @@ export function useDowntime(
     ) => {
         try {
             await apiCreateSchedule(name, weekdayMask, startMinute, endMinute);
-            if (notify) notify("success", "Schedule created successfully.");
+            if (notify) notify("success", i18n.t("downtime.created"));
             await refresh();
         } catch (e) {
             const err = describeError(e);
@@ -90,7 +90,7 @@ export function useDowntime(
         try {
             await guarded(i18n.t("pinGate.editSchedule", { name }), async (pin) => {
                 await apiUpdateSchedule(id, name, weekdayMask, startMinute, endMinute, pin);
-                if (notify) notify("success", "Schedule updated.");
+                if (notify) notify("success", i18n.t("downtime.updated"));
                 await refresh();
             });
         } catch (e) {
@@ -124,7 +124,7 @@ export function useDowntime(
         try {
             await guarded(i18n.t("pinGate.deleteSchedule", { name }), async (pin) => {
                 await apiDeleteSchedule(id, pin);
-                if (notify) notify("success", "Schedule removed.");
+                if (notify) notify("success", i18n.t("downtime.removed"));
                 await refresh();
             });
         } catch (e) {

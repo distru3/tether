@@ -49,28 +49,6 @@ use serde::Serialize;
 use st_ipc::{ErrorCode, Response};
 use tauri::{Emitter, Manager};
 
-/// Everything the header needs, plus one host-owned fact: whether the IPC
-/// round trip succeeded at all. `StatusDto` describes the agent's own state;
-/// `agent_connected` describes the *link*, which only this process knows.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub struct AgentStatus {
-    pub version: String,
-    pub agent_connected: bool,
-    pub tracker_backend: String,
-    pub filter_backend: String,
-    pub tracking_available: bool,
-    pub pin_configured: bool,
-    pub strict_mode: bool,
-    pub show_hud_overlay: bool,
-    pub show_hud_in_fullscreen: bool,
-    pub hud_peek_hotkey: String,
-    pub limit_cooldown_hours: i64,
-    pub idle_threshold_secs: i64,
-    pub day_start_minutes: i64,
-    pub family_dns_enabled: bool,
-}
-
 /// Structured failure for every fallible command.
 ///
 /// `code` mirrors [`st_ipc::ErrorCode`]'s snake_case wire tokens where the
@@ -118,56 +96,16 @@ fn serde_plain_string(code: ErrorCode) -> String {
 
 type CmdResult<T> = Result<T, CommandError>;
 
-/// Snapshot of what the UI should show in its header.
-///
-/// This is intentionally a *description* of the current situation rather than a
-/// list of individually queryable fields: the header must render a coherent
-/// state (either "connected, tracking" *or* "disconnected") and splitting it
-/// across several commands invites the two halves to disagree.
-///
-/// When the agent is not running, the command still succeeds but reports
-/// `agent_connected: false` so the frontend renders a graceful banner instead
-/// of an error state.
+/// Agent status, verbatim. When the agent is unreachable this fails with
+/// `unreachable` like every other command, and the dashboard's poll switches
+/// to its offline state.
 #[tauri::command]
-fn get_status() -> AgentStatus {
+fn get_status() -> CmdResult<st_ipc::StatusDto> {
     match ipc_client::request(st_ipc::Request::Status) {
-        Ok(Response::Status(dto)) => AgentStatus {
-            version: dto.agent_version,
-            agent_connected: true,
-            tracker_backend: dto.tracker_backend,
-            filter_backend: dto.filter_backend,
-            tracking_available: dto.tracking_available,
-            pin_configured: dto.pin_configured,
-            strict_mode: dto.strict_mode,
-            show_hud_overlay: dto.show_hud_overlay,
-            show_hud_in_fullscreen: dto.show_hud_in_fullscreen,
-            hud_peek_hotkey: dto.hud_peek_hotkey,
-            limit_cooldown_hours: dto.limit_cooldown_hours,
-            idle_threshold_secs: dto.idle_threshold_secs,
-            day_start_minutes: dto.day_start_minutes,
-            family_dns_enabled: dto.family_dns_enabled,
-        },
-        Ok(_) | Err(_) => AgentStatus {
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            agent_connected: false,
-            tracker_backend: if cfg!(windows) { "win32" } else { "x11-stub" }.into(),
-            filter_backend: if cfg!(windows) {
-                "windows-hosts"
-            } else {
-                "linux-stub"
-            }
-            .into(),
-            tracking_available: false,
-            pin_configured: false,
-            strict_mode: false,
-            show_hud_overlay: true,
-            show_hud_in_fullscreen: false,
-            hud_peek_hotkey: "Ctrl+Alt+T".to_string(),
-            limit_cooldown_hours: 24,
-            idle_threshold_secs: 60,
-            day_start_minutes: 0,
-            family_dns_enabled: false,
-        },
+        Ok(Response::Status(dto)) => Ok(dto),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
     }
 }
 

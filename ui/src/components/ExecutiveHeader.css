@@ -120,6 +120,7 @@
 }
 
 .exec-lead-chip {
+  align-self: flex-start;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -155,22 +156,31 @@
   gap: 2px;
 }
 
+/* The hero total is the dashboard's one loud element: a durable amount of
+   time, set as a large grotesque figure with quiet units ("6h 11m"), not a
+   stopwatch. */
+.exec-time-figure {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
 .exec-time-val {
-  font-size: 38px;
+  font-size: 52px;
   font-weight: 700;
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
+  font-family: var(--font-display);
+  font-variant-numeric: tabular-nums lining-nums;
   color: var(--text-primary);
-  line-height: 1;
-  letter-spacing: -0.04em;
+  line-height: 0.95;
+  letter-spacing: -0.045em;
 }
 
 .exec-time-unit {
-  font-size: 16px;
+  font-size: 20px;
   font-weight: 500;
   color: var(--text-muted);
-  font-family: var(--font-sans);
-  margin-right: 6px;
+  font-family: var(--font-display);
+  margin-left: 1px;
 }
 
 .exec-trend-caption {
@@ -266,7 +276,7 @@
 .exec-metric-value {
   font-size: 19px;
   font-weight: 700;
-  font-family: var(--font-mono);
+  font-family: var(--font-display);
   font-variant-numeric: tabular-nums;
   color: var(--text-primary);
   letter-spacing: -0.02em;
@@ -316,4 +326,13 @@
   .exec-date-label {
     font-size: 11px;
   }
+}
+
+/* Protection unknown: the agent is unreachable, so nothing is enforced. */
+.exec-metric-cell--alert {
+  background: var(--color-danger-subtle, rgba(244, 63, 94, 0.08));
+}
+
+.exec-metric-cell--alert .exec-metric-value {
+  color: var(--color-danger);
 }

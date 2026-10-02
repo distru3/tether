@@ -47,10 +47,6 @@ function normalizePref(v: string | null | undefined): ThemePreference | null {
   return null;
 }
 
-function isValidPref(v: string | null | undefined): v is ThemePreference {
-  return normalizePref(v) !== null;
-}
-
 /** Read the saved theme synchronously from localStorage — used for the initial
  *  React state to avoid a blank frame before the async Tauri call resolves. */
 function getStoredSync(): ThemePreference {

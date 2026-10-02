@@ -1,4 +1,3 @@
-import React from "react";
 import { useTranslation } from "react-i18next";
 import type { StatusDto } from "../types/generated/StatusDto";
 import {
@@ -27,6 +26,8 @@ interface SidebarProps {
     blockedCount: number;
     focusActive: boolean;
     activeLimitsCount?: number;
+    /** The day picker only means something on the dashboard. */
+    showDayPicker?: boolean;
 }
 
 export function Sidebar({
@@ -42,21 +43,22 @@ export function Sidebar({
     focusActive,
     activeLimitsCount = 0,
     statusInfo,
+    showDayPicker = true,
 }: SidebarProps) {
     const { t } = useTranslation();
     const isLive = phase === "live";
 
     return (
-        <aside className="app-sidebar" aria-label="Main Navigation">
+        <aside className="app-sidebar" aria-label={t("nav.main")}>
             <div className="sidebar-brand">
                 <span className="logo-title">Tether</span>
-                <div className={`status-pill ${isLive ? "status-pill--live" : "status-pill--offline"}`} title={`Daemon status: ${phase}`}>
-                    <span className={`status-dot ${isLive ? "status-dot--live" : "status-dot--offline"}`} />
-                    <span className="status-label">{isLive ? "Live" : phase === "connecting" ? t("sidebar.statusConnecting") : t("sidebar.statusOffline")}</span>
+                <div className={`status-pill ${isLive ? "status-pill--live" : "status-pill--offline"}`} role="status">
+                    <span className={`status-dot ${isLive ? "status-dot--live" : "status-dot--offline"}`} aria-hidden="true" />
+                    <span className="status-label">{isLive ? t("sidebar.statusLive") : phase === "connecting" ? t("sidebar.statusConnecting") : t("sidebar.statusOffline")}</span>
                 </div>
             </div>
 
-            <nav className="sidebar-nav" aria-label="Sections">
+            <nav className="sidebar-nav" aria-label={t("nav.sections")}>
                 <button
                     type="button"
                     className={`nav-item ${activeTab === "overview" ? "nav-item--active" : ""}`}
@@ -65,7 +67,7 @@ export function Sidebar({
                     <LayoutDashboard size={15} className="nav-icon" />
                     <span className="nav-text">{t("nav.overview", "Dashboard")}</span>
                     {blockedCount > 0 && (
-                        <span className="nav-badge nav-badge--danger" title={`${blockedCount} apps blocked`}>
+                        <span className="nav-badge nav-badge--danger" title={t("hero.blockedNow", { count: blockedCount })}>
                             {blockedCount}
                         </span>
                     )}
@@ -99,11 +101,16 @@ export function Sidebar({
                 </button>
             </nav>
 
-            <div className="sidebar-footer">
+            {/* Hidden rather than removed so the header keeps its balance. */}
+            <div
+                className={`sidebar-footer ${showDayPicker ? "" : "sidebar-footer--hidden"}`}
+                aria-hidden={!showDayPicker}
+            >
                 <div className="day-stepper">
                     <button
                         type="button"
                         className="stepper-btn"
+                        tabIndex={showDayPicker ? undefined : -1}
                         onClick={goPrevDay}
                         title={t("sidebar.prevDay")}
                         aria-label={t("sidebar.prevDay")}
@@ -114,7 +121,8 @@ export function Sidebar({
                         type="button"
                         className={`stepper-label-btn ${!isViewingToday ? "stepper-label-btn--past" : ""}`}
                         onClick={goToday}
-                        title={isViewingToday ? "Viewing Today" : "Click to return to Today"}
+                        title={isViewingToday ? undefined : t("hero.backToToday")}
+                        tabIndex={showDayPicker ? undefined : -1}
                     >
                         {!isViewingToday && <Calendar size={12} className="stepper-cal-icon" />}
                         <span>{isViewingToday ? t("sidebar.today", "Today") : formatDayLabel(viewDay)}</span>
@@ -122,6 +130,7 @@ export function Sidebar({
                     <button
                         type="button"
                         className="stepper-btn"
+                        tabIndex={showDayPicker ? undefined : -1}
                         onClick={goNextDay}
                         disabled={isViewingToday}
                         title={t("sidebar.nextDay")}

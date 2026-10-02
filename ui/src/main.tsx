@@ -4,6 +4,10 @@ import ReactDOM from "react-dom/client";
 import { App } from "./App";
 import "./i18n";
 import { initDirection } from "./i18n";
+// Fonts are bundled, not fetched: the app's CSP (`default-src 'self'`) blocks
+// Google Fonts, and a screen-time guard must look right offline.
+import "@fontsource-variable/hanken-grotesk";
+import "@fontsource-variable/jetbrains-mono";
 import "./styles/tokens.css";
 import "./styles/app.css";
 import "./styles/redesign.css";

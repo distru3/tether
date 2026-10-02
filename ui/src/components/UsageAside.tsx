@@ -1,5 +1,6 @@
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
 import type { CatalogDto } from "../types/generated/CatalogDto";
+import { useTranslation } from "react-i18next";
 import { formatDuration } from "../format";
 import { colorForCategory } from "../categoryColors";
 import { LiveTimer } from "./LiveTimer";
@@ -13,15 +14,16 @@ interface UsageAsideProps {
 }
 
 export function UsageAside({ entries, total, catalog, onCategorize, onOpenAppDirectory }: UsageAsideProps) {
+  const { t } = useTranslation();
   const ranked = [...entries].sort((a, b) => b.seconds - a.seconds).slice(0, 5);
   const max = Math.max(ranked[0]?.seconds ?? 0, 1);
 
   return (
-    <aside className="usage-aside dashboard-panel" aria-label="Most used applications">
+    <aside className="usage-aside dashboard-panel" aria-label={t("usage.mostUsed")}>
       <div className="panel-heading-row">
         <div>
-          <p className="panel-eyebrow">Your activity</p>
-          <h3>Most used</h3>
+          <p className="panel-eyebrow">{t("usage.eyebrow")}</p>
+          <h3>{t("usage.mostUsed")}</h3>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {onOpenAppDirectory && (
@@ -29,16 +31,15 @@ export function UsageAside({ entries, total, catalog, onCategorize, onOpenAppDir
               type="button"
               className="usage-manage-apps-btn"
               onClick={onOpenAppDirectory}
-              title="Browse and categorize all applications"
+              title={t("usage.allAppsHint")}
             >
-              All apps &rarr;
+              {t("usage.allApps")}
             </button>
           )}
-          <span className="panel-count">{ranked.length}</span>
         </div>
       </div>
       {ranked.length === 0 ? (
-        <div className="usage-empty">No application activity recorded yet.</div>
+        <div className="usage-empty">{t("usage.empty")}</div>
       ) : (
         <div className="usage-list">
           {ranked.map((entry, index) => {
@@ -46,7 +47,7 @@ export function UsageAside({ entries, total, catalog, onCategorize, onOpenAppDir
             const width = Math.max(8, Math.round((entry.seconds / max) * 100));
             const appObj = catalog?.apps.find((a) => a.id === entry.id);
             const category = appObj ? catalog?.categories.find((c) => c.id === appObj.primary_category) : null;
-            const catName = category?.name ?? "Uncategorized";
+            const catName = category?.name ?? t("categorize.uncategorized");
             const catColor = colorForCategory(catName, category?.color ?? entry.color, index);
 
             return (
@@ -66,7 +67,7 @@ export function UsageAside({ entries, total, catalog, onCategorize, onOpenAppDir
                     <span className="usage-bar-fill" style={{ width: `${width}%`, backgroundColor: catColor }} />
                   </div>
                   <div className="usage-app-subline">
-                    <small>{percent}% of today</small>
+                    <small>{t("usage.shareOfDay", { percent })}</small>
                     {onCategorize ? (
                       <button
                         type="button"
@@ -77,7 +78,7 @@ export function UsageAside({ entries, total, catalog, onCategorize, onOpenAppDir
                           borderColor: `${catColor}38`,
                         }}
                         onClick={() => onCategorize(entry.id, entry.label, appObj?.primary_category ?? null, appObj?.tags ?? [])}
-                        title="Click to change category"
+                        title={t("usage.changeCategory")}
                       >
                         {catName}
                       </button>

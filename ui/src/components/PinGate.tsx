@@ -77,7 +77,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                         placeholder="····"
                         value={pin}
                         disabled={busy}
-                        aria-label="PIN"
+                        aria-label={t("pinGate.pinLabel")}
                         onChange={(event) => setPin(event.target.value)}
                     />
                     {error !== null && <p className="dialog-error">{error}</p>}
@@ -131,7 +131,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             placeholder="XXXX-XXXX-XXXX-XXXX"
                             value={code}
                             disabled={recovering}
-                            aria-label="Recovery code"
+                            aria-label={t("pinGate.recoveryCode")}
                             onChange={(event) => {
                                 setCode(event.target.value);
                                 setLocalError(null);
@@ -146,7 +146,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             autoComplete="new-password"
                             value={newPin}
                             disabled={recovering}
-                            aria-label="New PIN"
+                            aria-label={t("pinGate.newPin")}
                             onChange={(event) => {
                                 setNewPin(event.target.value);
                                 setLocalError(null);
@@ -161,7 +161,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             autoComplete="new-password"
                             value={confirmPin}
                             disabled={recovering}
-                            aria-label="Repeat new PIN"
+                            aria-label={t("pinGate.repeatPin")}
                             onChange={(event) => {
                                 setConfirmPin(event.target.value);
                                 setLocalError(null);

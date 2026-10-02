@@ -7,12 +7,20 @@
     "overview": "لوحة القيادة",
     "limits": "حدود التطبيقات",
     "webFiltering": "تصفية الويب",
-    "settings": "الإعدادات"
+    "settings": "الإعدادات",
+    "main": "التنقل الرئيسي",
+    "sections": "الأقسام"
   },
   "banner": {
     "enforcementActive": "تطبيق الحدود نشط ({{count}})",
-    "resetsIn": "إعادة الضبط خلال {{hours}}س {{minutes}}د",
-    "override": "تجاوز لمدة 15 دقيقة"
+    "resetsIn": "يُعاد الضبط خلال ⁨{{hours}}س {{minutes}}د⁩",
+    "override": "السماح بـ 15 دقيقة إضافية",
+    "title_zero": "لا تطبيقات محظورة",
+    "title_one": "تطبيق واحد محظور حتى إعادة ضبط اليوم",
+    "title_two": "تطبيقان محظوران حتى إعادة ضبط اليوم",
+    "title_few": "{{count}} تطبيقات محظورة حتى إعادة ضبط اليوم",
+    "title_many": "{{count}} تطبيقاً محظوراً حتى إعادة ضبط اليوم",
+    "title_other": "{{count}} تطبيق محظور حتى إعادة ضبط اليوم"
   },
   "hero": {
     "today": "اليوم",
@@ -22,7 +30,40 @@
     "nextDay": "اليوم التالي",
     "mostTimeIn": "أكثر وقت في <strong>{{label}}</strong> ({{duration}}، {{percent}}%)",
     "noUsage": "لم يتم تسجيل أي استخدام نشط حتى الآن اليوم.",
-    "noUsageDay": "لم يتم تسجيل أي استخدام لهذا اليوم."
+    "noUsageDay": "لم يتم تسجيل أي استخدام لهذا اليوم.",
+    "summaryLabel": "ملخص وقت الشاشة",
+    "onAverage": "مطابق لمتوسط آخر 7 أيام",
+    "aboveAverage": "أعلى من متوسط آخر 7 أيام بنسبة {{percent}}%",
+    "belowAverage": "أقل من متوسط آخر 7 أيام بنسبة {{percent}}%",
+    "mostlyIn": "معظمه في {{label}} · {{percent}}%",
+    "longestStretch": "أطول فترة متواصلة",
+    "stretchIn": "في {{app}}",
+    "noStretch": "لا يوجد نشاط بعد",
+    "closestLimit": "أقرب حد",
+    "reachedCount_zero": "تم بلوغ {{count}}",
+    "reachedCount_one": "تم بلوغ حد واحد",
+    "reachedCount_two": "تم بلوغ حدين",
+    "reachedCount_few": "تم بلوغ {{count}} حدود",
+    "reachedCount_many": "تم بلوغ {{count}} حداً",
+    "reachedCount_other": "تم بلوغ {{count}} حد",
+    "noLimits": "لا توجد حدود",
+    "noLimitsHint": "أضف حداً من صفحة حدود التطبيقات",
+    "timeLeft": "متبقٍ {{duration}}",
+    "allReached": "تم بلوغ الكل",
+    "protection": "الحماية",
+    "protectionOn": "مفعّلة",
+    "protectionUnknown": "متوقفة",
+    "enforcing": "قيد التطبيق",
+    "notRunning": "الخدمة متوقفة",
+    "notRunningHint": "لن تُطبَّق الحدود والحظر حتى تعود خدمة Tether للعمل.",
+    "blockedNow_zero": "لا تطبيقات محظورة",
+    "blockedNow_one": "تطبيق واحد محظور",
+    "blockedNow_two": "تطبيقان محظوران",
+    "blockedNow_few": "{{count}} تطبيقات محظورة",
+    "blockedNow_many": "{{count}} تطبيقاً محظوراً",
+    "blockedNow_other": "{{count}} تطبيق محظور",
+    "nothingBlocked": "لا شيء محظور",
+    "familyDnsOn": "DNS العائلي مفعّل"
   },
   "ledger": {
     "byCategory": "حسب الفئة",
@@ -50,7 +91,8 @@
     "wed": "الأربعاء",
     "thu": "الخميس",
     "fri": "الجمعة",
-    "sat": "السبت"
+    "sat": "السبت",
+    "historyTitle": "هذا الأسبوع"
   },
   "limits": {
     "title": "حدود التطبيقات والفئات",
@@ -78,7 +120,11 @@
     "activeLimits": "الحدود النشطة",
     "extensionActive": "تمديد نشط",
     "limitsReached": "تم بلوغ الحدود",
-    "totalLimits": "إجمالي القواعد"
+    "totalLimits": "إجمالي القواعد",
+    "yourLimits": "حدودك",
+    "filterAll": "الكل",
+    "filterActive": "مفعّلة",
+    "filterDisabled": "متوقفة مؤقتاً"
   },
   "downtime": {
     "tabDowntime": "أوقات التوقف المجدولة",
@@ -106,7 +152,18 @@
     "allowlistDesc": "التطبيقات الأساسية المختارة هنا لن يتم قفلها أبداً خلال أوقات التوقف (مثل الهاتف، الآلة الحاسبة، والملاحظات).",
     "searchAppToAllow": "اختر تطبيقاً للسماح به...",
     "addToAllowlist": "إضافة إلى القائمة المسموحة",
-    "noAllowlist": "لا توجد تطبيقات مسموحة حالياً. سيتم تطبيق التوقف على كافة التطبيقات."
+    "noAllowlist": "لا توجد تطبيقات مسموحة حالياً. سيتم تطبيق التوقف على كافة التطبيقات.",
+    "schedulesHeading": "الجداول",
+    "allowAdded": "أُضيف إلى قائمة المسموح دائماً.",
+    "allowRemoved": "أُزيل من قائمة المسموح دائماً.",
+    "allowRemove": "إزالة من المسموح دائماً",
+    "errName": "أدخل اسماً للجدول.",
+    "errDays": "اختر يوماً واحداً على الأقل.",
+    "errSave": "تعذّر حفظ الجدول.",
+    "namePlaceholder": "مثال: وقت النوم، الواجبات",
+    "created": "تم إنشاء الجدول.",
+    "updated": "تم حفظ الجدول.",
+    "removed": "تم حذف الجدول."
   },
   "settings": {
     "title": "الإعدادات",
@@ -115,13 +172,8 @@
     "theme": "سمة الألوان",
     "themeMidnightCobalt": "كوبالت منتصف الليل",
     "themeSlateCharcoal": "فحمي رمادي",
-    "themeCyberEmerald": "فحمي رمادي",
     "themeCleanTitanium": "تيتانيوم نقي",
     "themeNordicFrost": "صقيع نورديك",
-    "themeHorizonDark": "كوبالت منتصف الليل",
-    "themeHorizonLight": "تيتانيوم نقي",
-    "themeClassicDark": "فحمي رمادي",
-    "themeClassicLight": "صقيع نورديك",
     "themeSystem": "النظام (تلقائي)",
     "hudTitle": "شريط المؤقت وواجهة الألعاب",
     "hudSubtitle": "المؤقت العائم، سلوك ملء الشاشة للألعاب، واختصارات لوحة المفاتيح.",
@@ -160,7 +212,7 @@
     "advanced": "السياسات المتقدمة",
     "advancedDesc": "التكوين العميق لكيفية عمل الحدود والتتبع.",
     "cooldown": "فترة التهدئة ضد الاندفاع",
-    "cooldownDesc": "المدة المستغرقة قبل أن يسري مفعول تخفيف أو حذف الحد.",
+    "cooldownDesc": "المدة التي ينتظرها الحد بعد تخفيفه قبل أن يسري. أما تشديد الحد أو إيقافه مؤقتاً أو حذفه فيسري فوراً.",
     "dayReset": "وقت إعادة تعيين اليوم",
     "dayResetDesc": "متى يعاد تعيين وقت الشاشة اليومي إلى الصفر؟",
     "idleThreshold": "حد الخمول",
@@ -175,11 +227,13 @@
     "familyDnsInactive": "معطل (DNS الأصلي)",
     "categoriesTitle": "تصنيفات التطبيقات",
     "categoriesDesc": "إدارة كيفية تصنيف تيذر للتطبيقات وتجميعها على جهازك.",
-    "appDirectoryDesc": "تصفح جميع التطبيقات المكتشفة على هذا الجهاز وتخصيص فئاتها."
+    "appDirectoryDesc": "تصفح جميع التطبيقات المكتشفة على هذا الجهاز وتخصيص فئاتها.",
+    "subtitle": "كيف يتتبع Tether ويحمي ويبدو.",
+    "themeDesc": "اختر سمة ألوان، أو اتبع إعداد النظام."
   },
   "tutorial": {
     "title": "كيفية الاستخدام",
-    "subtitle": "دليل سريع لبدء استخدام تيذر.",
+    "subtitle": "الاختصارات ومفاتيح التشغيل السريع وعناصر التحكم.",
     "step1_title": "عرض وقت الشاشة",
     "step1": "يعرض تبويب النظرة العامة وقت شاشتك اليومي، مقسمًا حسب الفئة والتطبيق. استخدم أزرار الأسهم لتصفح الأيام السابقة.",
     "step2_title": "تعيين حدود زمنية",
@@ -225,7 +279,11 @@
     "removeDomain": "إزالة {{domain}}",
     "searchPlaceholder": "البحث في النطاقات المحظورة...",
     "unlockHidden": "إلغاء قفل النطاقات المخفية للبالغين",
-    "importSummary": "تم استيراد {{added}} نطاقاً؛ وتم تخطي {{skipped}} لأنها ليست أسماء نطاقات صالحة."
+    "importSummary": "تم استيراد {{added}} نطاقاً؛ وتم تخطي {{skipped}} لأنها ليست أسماء نطاقات صالحة.",
+    "kindAdult": "محتوى للبالغين",
+    "kindCustom": "أضفته أنت",
+    "prevPage": "الصفحة السابقة",
+    "nextPage": "الصفحة التالية"
   },
   "categorize": {
     "title": "تصنيف التطبيق",
@@ -245,7 +303,9 @@
     "filterUncategorized": "غير المصنفة",
     "noAppsFound": "لم يتم العثور على تطبيقات مطابقة لبحثك.",
     "customized": "مخصص",
-    "appsDetected": "تم اكتشاف {{count}} تطبيقًا"
+    "appsDetected": "تم اكتشاف {{count}} تطبيقًا",
+    "uncategorized": "غير مصنف",
+    "userSet": "عيّنته أنت"
   },
   "limitEditor": {
     "editOrder": "تعديل الأمر الدائم",
@@ -263,8 +323,8 @@
     "hours": "ساعات",
     "minutes": "دقائق",
     "allDays": "الكل",
-    "weekdays": "أيام العمل",
-    "weekends": "عطلة الأسبوع",
+    "weekdays": "أيام الأسبوع",
+    "weekends": "نهاية الأسبوع",
     "minutesPerDay": "الدقائق في اليوم",
     "perDayOverrides": "تجاوزات يومية",
     "inForce": "ساري المفعول",
@@ -279,7 +339,16 @@
     "removeOverride": "إعادة للحد اليومي",
     "resetTitle": "إزالة التخصيص واستخدام الحد اليومي التلقائي",
     "syncTitle": "تطبيق هذه المدة على جميع الأيام المخصصة",
-    "syncAll": "مزامنة الكل"
+    "syncAll": "مزامنة الكل",
+    "searchPlaceholder": "ابحث في التطبيقات أو التصنيفات",
+    "noMatches": "لا نتائج",
+    "selectCategory": "اختر تصنيفاً",
+    "totalHint": "ميزانية يومية واحدة مشتركة بين كل التطبيقات على هذا الجهاز.",
+    "everyDay": "كل يوم",
+    "dailyDefault": "يستخدم الميزانية اليومية",
+    "daily": "افتراضي",
+    "minus15": "أقل بـ 15 دقيقة",
+    "plus15": "أكثر بـ 15 دقيقة"
   },
   "pinGate": {
     "title": "رمز PIN للمسؤول",
@@ -310,7 +379,8 @@
     "editSchedule": "تعديل جدول التوقف «{{name}}»",
     "disableSchedule": "إيقاف جدول التوقف «{{name}}» مؤقتاً",
     "deleteSchedule": "حذف جدول التوقف «{{name}}»",
-    "allowApp": "السماح دائماً بـ {{app}} أثناء فترة التوقف"
+    "allowApp": "السماح دائماً بـ {{app}} أثناء فترة التوقف",
+    "pinLabel": "رمز PIN"
   },
   "pinSetup": {
     "recoveryCodeTitle": "رمز الاسترداد",
@@ -348,7 +418,8 @@
     "blocked": "تم بلوغ الحد",
     "beta": "تجريبي",
     "offline": "إعادة محاولة الاتصال بالسجل",
-    "trackingUnavailable": "التتبع غير متاح - لا يستطيع المتعقب رؤية النوافذ النشطة على هذا النظام."
+    "trackingUnavailable": "التتبع غير متاح - لا يستطيع المتعقب رؤية النوافذ النشطة على هذا النظام.",
+    "clearSearch": "مسح البحث"
   },
   "onboarding": {
     "welcome": "مرحباً بك في تيذر",
@@ -398,7 +469,7 @@
     }
   },
   "sidebar": {
-    "statusLive": "نشط",
+    "statusLive": "متصل",
     "statusConnecting": "جاري الاتصال...",
     "statusOffline": "غير متصل",
     "systemPolicy": "سياسة النظام",
@@ -414,7 +485,12 @@
     "minute": "دقيقة",
     "minutes": "دقائق",
     "hour": "ساعة",
-    "hours": "ساعات"
+    "hours": "ساعات",
+    "short": {
+      "h": "س",
+      "m": "د",
+      "s": "ث"
+    }
   },
   "overlay": {
     "limitReached": "تم بلوغ الحد",
@@ -428,5 +504,39 @@
     "quitApp": "إغلاق التطبيق",
     "keyboardHint": "اكتب أرقام PIN، Enter للمتابعة، Esc للخروج",
     "clear": "مسح"
+  },
+  "timeline": {
+    "title": "المخطط الزمني",
+    "unknownApp": "تطبيق غير معروف",
+    "description": "نشط: {{active}}، تطبيقات محدودة: {{limited}}، خامل: {{idle}}"
+  },
+  "offline": {
+    "title": "خدمة Tether في الخلفية لا تستجيب",
+    "body": "لا يتم تطبيق الحدود وفترات التوقف والحظر حالياً. عادةً ما تعيد الخدمة التشغيل تلقائياً خلال دقيقة؛ وإذا استمر ذلك، أعد تشغيل الجهاز أو أعد تثبيت Tether."
+  },
+  "usage": {
+    "eyebrow": "نشاطك",
+    "mostUsed": "الأكثر استخداماً",
+    "allApps": "كل التطبيقات",
+    "allAppsHint": "تصفح كل التطبيقات وصنّفها",
+    "empty": "لم يُسجَّل أي نشاط للتطبيقات بعد.",
+    "shareOfDay": "⁨{{percent}}%⁩ من اليوم",
+    "changeCategory": "تغيير التصنيف"
+  },
+  "mix": {
+    "eyebrow": "التصنيفات",
+    "title": "أين يذهب الوقت",
+    "tracked": "مُسجَّل",
+    "empty": "لا توجد تصنيفات بعد."
+  },
+  "titlebar": {
+    "minimize": "تصغير",
+    "maximize": "تكبير",
+    "restore": "استعادة",
+    "hide": "إغلاق النافذة (يبقى Tether قيد التشغيل)"
+  },
+  "toasts": {
+    "region": "الإشعارات",
+    "dismiss": "إغلاق"
   }
 }

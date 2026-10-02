@@ -3342,3 +3342,49 @@ button:not([disabled]):active {
   color: var(--color-primary);
   background: var(--bg-surface-hover);
 }
+
+/* ---- Service alert: the agent is unreachable ----------------------------
+   Deliberately loud. While this shows, nothing is enforced, and the old dim
+   one-line notice ("Retrying the ledger") undersold that. */
+.service-alert {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  border-radius: var(--redesign-radius, 12px);
+  border: 1px solid var(--border-danger, rgba(244, 63, 94, 0.32));
+  background: var(--color-danger-subtle, rgba(244, 63, 94, 0.1));
+  color: var(--text-primary);
+}
+
+.service-alert__icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--color-danger);
+}
+
+.service-alert__title {
+  margin: 0;
+  font-weight: 650;
+  font-size: 14px;
+}
+
+.service-alert__body {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.service-alert__detail {
+  margin: 6px 0 0;
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+/* Day picker is meaningful only on the dashboard; keep its footprint. */
+.sidebar-footer--hidden {
+  visibility: hidden;
+}

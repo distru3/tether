@@ -535,9 +535,13 @@ pub struct StatusDto {
     #[serde(default = "default_hud_peek_hotkey")]
     pub hud_peek_hotkey: String,
     #[serde(default = "default_alert_volume")]
+    #[ts(as = "i32")]
     pub alert_volume: i64,
+    #[ts(as = "i32")]
     pub limit_cooldown_hours: i64,
+    #[ts(as = "i32")]
     pub day_start_minutes: i64,
+    #[ts(as = "i32")]
     pub idle_threshold_secs: i64,
     /// The active filter can enforce wildcard (subdomain) rules. True only when
     /// the DNS-proxy backend is genuinely applied, not just present.
