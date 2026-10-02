@@ -8,7 +8,7 @@ members = [
     "crates/tracker-linux",
     "crates/enforce-win",
     "crates/enforce-linux",
-    "crates/dnsproxy",
+    "crates/family-dns",
     "crates/st-win32",
     "crates/agent",
     "crates/session",
@@ -32,7 +32,7 @@ st-tracker-win = { path = "crates/tracker-win" }
 st-tracker-linux = { path = "crates/tracker-linux" }
 st-enforce-win = { path = "crates/enforce-win" }
 st-enforce-linux = { path = "crates/enforce-linux" }
-st-dns = { path = "crates/dnsproxy" }
+st-dns = { path = "crates/family-dns" }
 
 # External
 anyhow = "1"

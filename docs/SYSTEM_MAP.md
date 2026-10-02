@@ -59,7 +59,7 @@ crates/
 ├── tracker-linux/    Linux window tracking stub.
 ├── enforce-win/      Process freeze/terminate and hosts-file atomic writer.
 ├── enforce-linux/    Linux cgroup and hosts writer stub.
-├── dnsproxy/         Cloudflare Family DNS adapter configuration & original DNS backup/restore.
+├── family-dns/       Cloudflare Family DNS adapter configuration & original DNS backup/restore.
 ├── agent/            Privileged daemon: IPC server, report ingestion, enforcement loop.
 └── session/          Per-user sampling front, native timer HUD, block-overlay driver.
 
