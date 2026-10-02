@@ -259,10 +259,11 @@ The header metrics are derived in `ui/src/dashboardMetrics.ts` (pure functions):
 - **Immediate Dismissal & Ghost Click Elimination**:
   - On `OverlayBridgeRequest::Hide`, Tauri immediately calls `window.hide()` in 0 ms.
   - Eliminates ghost click stealing and prevents focus oscillation loops where mouse clicks near the overlay area would reactivate `screentime-ui.exe`.
-- **Native OS Input Blocking Without Hooks**:
-  - Upon limit trip, `screentime-session` calls `EnableWindow(target_hwnd, FALSE)` to make the blocked application completely inert to mouse, keyboard, and drag events natively at the Win32 OS level.
-  - Eliminates machine-wide key swallowing, allows uninhibited `Alt+Tab` and Windows key usage, and removes antivirus/EDR false positives.
-  - Upon unlock or focus dismissal, `screentime-session` calls `EnableWindow(target_hwnd, TRUE)` to instantly re-enable normal app interaction.
+- **No input hooks**: the block screen is an always-on-top window covering the app; there is no keyboard hook and the blocked window is not disabled (`EnableWindow` was documented here but never implemented). What keeps the block in place is the session re-asserting it:
+- **Self-healing delivery (2026-10)**: while the block holds and the app is focused, the session re-sends `Show` every 2 s (backoff 1 s → 10 s while unacknowledged) and relaunches the UI (`screentime-ui.exe` / `Tether.exe`) at most every 15 s if the bridge pipe is missing. `Show` is idempotent. `overlay_update` is re-emitted only when the target changes or the window was hidden, so a PIN being typed survives.
+- **Sizing**: at least 520×680 with the PIN pad (460 tall without), centered on the app and clamped to its monitor. The card scrolls instead of clipping, so "Allow 15 more minutes" and "Quit app" are always reachable. (The old 480px floor cut both off.)
+- **Quit is honest**: the overlay hides only after the app actually closed (local close, or the agent's `CloseApps`, which needs no PIN for a *blocked* app). Otherwise it shows "Couldn’t close the app: …" and stays up.
+- **Peer verification**: both bridge ends check the other process is a genuine Tether binary from the same install (`st_win32::peer_is_trusted`).
 - **Visual Design (Solid Crisp Styling — No Glassmorphism)**:
   - Full-window Backdrop: Solid high-opacity veil (`var(--bg-modal-backdrop, rgba(11, 13, 19, 0.92))`).
   - Centered Solid Card: 480px card (`--bg-card, #131620`) with crisp 1px border (`--border-card, #202534`) and deep elevation shadow (`0 24px 64px rgba(0, 0, 0, 0.6)`).

@@ -14,6 +14,7 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
   - `screentime-ui` (Tauri): One-shot connections (connect, request, response, close) mapped to Tauri commands. Maximum worker threads on the agent: 32 (`MAX_WORKERS`).
 
 - **Authorization**: The pipe ACL admits every authenticated local user, so it proves nothing about *who* is asking. Every request passes the agent's central gate (`crates/agent/src/ipc_server/auth.rs`) before dispatch. Requests that loosen enforcement need the PIN once one is configured (see the **PIN** column below). The UI first sends such requests without a PIN and opens its PIN prompt only when the agent answers `bad_pin`, so the agent alone decides what counts as loosening.
+- **Peer identity**: per connection, the agent resolves the client's executable (`GetNamedPipeClientProcessId` → image path → `st_win32::peer_is_trusted`). `ReportUsage` and `RegisterDiscoveredApps` are refused (`bad_request`) from any program other than `screentime-session.exe` in the agent's own install. An uninspectable peer is allowed, so a lookup failure can never silently stop tracking. The overlay bridge pipe applies the same check in both directions.
 - **Brute-force throttle**: After 5 consecutive wrong PINs or recovery codes, each further failure locks credential checks for 30 s, doubling to a 15 min ceiling (`st_core::pin::PinThrottle`). An empty PIN means "not supplied" and never counts. Rejected credentials are written to `audit_log` as `credential_rejected`.
 
 ---
@@ -40,7 +41,7 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
 | `CancelPendingLimit` | `target: LimitTargetDto`, `pin: String` | `Accepted { effective_utc, hud }` | Aborts a queued loosening change before it becomes active. |
 | `GrantOverride` | `target: LimitTargetDto`, `seconds: i64`, `pin: String` | `Accepted { effective_utc, hud }` | Grants +15m override. Rejected outright in strict mode or with invalid PIN. |
 | `Categorize` | `app_id: i64`, `primary: Option<i64>`, `tags: Vec<i64>`, `pin?: String` | `Accepted { effective_utc, hud }` | Reclassifies app. Primary drives reporting; tags affect limit matching. **PIN always** (moving an app to an unlimited category is a bypass). |
-| `CloseApps` | `app_id: i64`, `pin: String` | `Accepted { ... }` | User-initiated app termination from the block overlay. |
+| `CloseApps` | `app_id: i64`, `pin: String` | `Accepted { ... }` | User-initiated app termination from the block overlay. **No PIN when the app is currently blocked** (quitting only tightens); closing any other app needs the PIN. |
 | `SetSetting` | `key: String`, `value: String`, `pin?: String` | `Accepted { ... }` | Only keys in `st_core::settings::SettingKey` are accepted (unknown keys, including `pin_hash`, are `bad_request`); values are range-checked and stored in canonical form, then applied to the live policy. **PIN when loosening**: `strict_mode`/`family_dns` → `false`, lowering `limit_cooldown_hours`, any change to `day_start_minutes` or `idle_threshold_secs`. HUD, volume, hotkey and `capture_window_titles` never need it. Ranges: cooldown 0–168 h, day start 0–1439 min, idle 5–3600 s, volume 0–100, hotkey ≤ 32 chars. |
 
 ### PIN Vault

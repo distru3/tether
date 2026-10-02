@@ -23,7 +23,33 @@ impl OverlayBridgeState {
     }
 }
 
+/// Program names the bridge accepts commands from.
+const SESSION_EXE: [&str; 1] = ["screentime-session.exe"];
+
+/// Overlay window floor sizes. The PIN pad plus both action buttons need about
+/// 640px of height; at the old 480px floor they were cut off on small target
+/// windows, leaving no visible way to extend or quit.
+const MIN_WIDTH: u32 = 520;
+const MIN_HEIGHT_PIN: u32 = 680;
+const MIN_HEIGHT_BUTTONS: u32 = 460;
+
+/// Lock the shared overlay state, recovering from poisoning: a panic in one
+/// command must not take the block screen down with it.
+fn lock_state(
+    state: &Mutex<Option<OverlayActiveStateDto>>,
+) -> std::sync::MutexGuard<'_, Option<OverlayActiveStateDto>> {
+    state.lock().unwrap_or_else(|poisoned| {
+        tracing::error!("overlay state mutex poisoned; recovering");
+        poisoned.into_inner()
+    })
+}
+
 /// Spawns the background listener thread for `\\.\pipe\screentime_overlay_bridge`.
+///
+/// `Show` is idempotent: the session helper re-sends it every couple of
+/// seconds while a block holds, so a closed (Alt+F4) or hidden overlay, or a
+/// restarted UI, comes back on its own. Only a changed target re-emits
+/// `overlay_update`, so a PIN being typed is never reset.
 pub fn start_bridge_server(
     app: AppHandle,
     bridge_state: Arc<Mutex<Option<OverlayActiveStateDto>>>,
@@ -33,6 +59,27 @@ pub fn start_bridge_server(
         .spawn(move || loop {
             match st_ipc::transport::server_accept(OVERLAY_PIPE_NAME) {
                 Ok(mut stream) => {
+                    // Only the session helper may drive the block screen. A
+                    // definite mismatch is refused; an uninspectable peer is
+                    // let through (and logged) rather than risk never showing
+                    // a block.
+                    #[cfg(windows)]
+                    match st_win32::peer_is_trusted(stream.peer_process_id(), &SESSION_EXE) {
+                        Some(false) => {
+                            tracing::warn!(
+                                "overlay bridge: refusing a client that is not the session helper"
+                            );
+                            let _ = st_ipc::write_message(
+                                &mut stream,
+                                &OverlayBridgeResponse::Error {
+                                    message: "untrusted client".into(),
+                                },
+                            );
+                            continue;
+                        }
+                        None => tracing::debug!("overlay bridge: client process not inspectable"),
+                        Some(true) => {}
+                    }
                     let req: Result<OverlayBridgeRequest, _> = st_ipc::read_message(&mut stream);
                     match req {
                         Ok(OverlayBridgeRequest::Show {
@@ -50,46 +97,21 @@ pub fn start_bridge_server(
                                 target_hwnd: target_hwnd.unwrap_or(0),
                                 process_id,
                             };
-                            *bridge_state.lock().unwrap() = Some(active.clone());
-
+                            let changed = {
+                                let mut current = lock_state(&bridge_state);
+                                let changed = current.as_ref() != Some(&active);
+                                *current = Some(active.clone());
+                                changed
+                            };
                             if let Some(window) = app.get_webview_window("overlay") {
-                                if let Some(r) = rect {
-                                    // Sized to cover the target application window exactly,
-                                    // ensuring comfortable space for the 480px card while
-                                    // NEVER expanding over the Windows taskbar.
-                                    let width = (r.width as u32).max(520);
-                                    let height = (r.height as u32).max(480);
-                                    let center_x = r.x + r.width / 2;
-                                    let center_y = r.y + r.height / 2;
-                                    let x = center_x - (width as i32) / 2;
-                                    let y = center_y - (height as i32) / 2;
-
-                                    let _ = window.set_position(tauri::Position::Physical(
-                                        tauri::PhysicalPosition { x, y },
-                                    ));
-                                    let _ = window.set_size(tauri::Size::Physical(
-                                        tauri::PhysicalSize { width, height },
-                                    ));
-                                } else if let Ok(Some(mon)) = window.primary_monitor() {
-                                    let pos = mon.position();
-                                    let size = mon.size();
-                                    let width = 560u32;
-                                    let height = 520u32;
-                                    let x = pos.x + (size.width as i32 - width as i32) / 2;
-                                    let y = pos.y + (size.height as i32 - height as i32) / 2;
-                                    let _ = window.set_position(tauri::Position::Physical(
-                                        tauri::PhysicalPosition { x, y },
-                                    ));
-                                    let _ = window.set_size(tauri::Size::Physical(
-                                        tauri::PhysicalSize { width, height },
-                                    ));
-                                }
-
+                                place_overlay(&window, rect, pin_locked);
                                 let _ = window.set_always_on_top(true);
                                 let _ = window.show();
                                 let _ = window.set_focus();
-                                let _ = app.emit("overlay_update", &active);
-                                let _ = window.emit("overlay_update", &active);
+                                if changed || !window.is_visible().unwrap_or(false) {
+                                    let _ = app.emit("overlay_update", &active);
+                                    let _ = window.emit("overlay_update", &active);
+                                }
                             }
                             let _ = st_ipc::write_message(&mut stream, &OverlayBridgeResponse::Ack);
                         }
@@ -114,12 +136,58 @@ pub fn start_bridge_server(
         .expect("spawning overlay bridge server thread");
 }
 
-/// Gracefully hide the overlay window with a subtle fade-out transition.
+/// Size the overlay to cover the target window (never smaller than the card
+/// needs) and keep it inside the monitor the target is on.
+fn place_overlay(
+    window: &tauri::WebviewWindow,
+    rect: Option<st_ipc::OverlayRectDto>,
+    pin_locked: bool,
+) {
+    let min_height = if pin_locked {
+        MIN_HEIGHT_PIN
+    } else {
+        MIN_HEIGHT_BUTTONS
+    };
+    let monitor = window
+        .current_monitor()
+        .ok()
+        .flatten()
+        .or_else(|| window.primary_monitor().ok().flatten());
+    let (mut width, mut height, center_x, center_y) = match (rect, &monitor) {
+        (Some(r), _) => (
+            (r.width.max(0) as u32).max(MIN_WIDTH),
+            (r.height.max(0) as u32).max(min_height),
+            r.x + r.width / 2,
+            r.y + r.height / 2,
+        ),
+        (None, Some(mon)) => (
+            560,
+            min_height,
+            mon.position().x + mon.size().width as i32 / 2,
+            mon.position().y + mon.size().height as i32 / 2,
+        ),
+        (None, None) => (560, min_height, 400, 400),
+    };
+    let mut x = center_x - width as i32 / 2;
+    let mut y = center_y - height as i32 / 2;
+    if let Some(mon) = &monitor {
+        let (mx, my) = (mon.position().x, mon.position().y);
+        let (mw, mh) = (mon.size().width, mon.size().height);
+        width = width.min(mw);
+        height = height.min(mh);
+        x = x.clamp(mx, mx + (mw - width) as i32);
+        y = y.clamp(my, my + (mh - height) as i32);
+    }
+    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition { x, y }));
+    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width, height }));
+}
+
+/// Hide the overlay window after a short fade-out.
 fn hide_overlay_gracefully(
     app: &AppHandle,
     bridge_state: Arc<Mutex<Option<OverlayActiveStateDto>>>,
 ) {
-    *bridge_state.lock().unwrap() = None;
+    *lock_state(&bridge_state) = None;
     if let Some(window) = app.get_webview_window("overlay") {
         let _ = app.emit("overlay_graceful_exit", ());
         let _ = window.emit("overlay_graceful_exit", ());
@@ -129,7 +197,9 @@ fn hide_overlay_gracefully(
         let state_clone = bridge_state.clone();
         std::thread::spawn(move || {
             std::thread::sleep(std::time::Duration::from_millis(240));
-            if state_clone.lock().unwrap().is_none() {
+            // A Show that arrived during the fade wins: only hide if nothing
+            // re-armed the overlay meanwhile.
+            if lock_state(&state_clone).is_none() {
                 let _ = win.hide();
             }
         });
@@ -140,7 +210,7 @@ fn hide_overlay_gracefully(
 pub fn get_overlay_state(
     state: State<'_, OverlayBridgeState>,
 ) -> CmdResult<Option<OverlayActiveStateDto>> {
-    Ok(state.0.lock().unwrap().clone())
+    Ok(lock_state(&state.0).clone())
 }
 
 #[tauri::command]
@@ -170,6 +240,11 @@ pub fn overlay_extend(
     }
 }
 
+/// "Quit" from the block screen. Tries a polite close and a direct terminate
+/// from the user's session, then asks the agent (which runs elevated and can
+/// close what the user cannot, e.g. an elevated game). The overlay hides only
+/// when one of them actually worked; otherwise the error is returned and the
+/// block screen stays up instead of uncovering the app.
 #[tauri::command]
 pub fn overlay_quit(
     app: AppHandle,
@@ -178,6 +253,8 @@ pub fn overlay_quit(
     pid: u32,
     target_hwnd: i64,
 ) -> CmdResult<()> {
+    #[allow(unused_mut)]
+    let mut terminated_locally = false;
     #[cfg(windows)]
     unsafe {
         use windows::Win32::Foundation::{CloseHandle, HWND, LPARAM, WPARAM};
@@ -194,17 +271,26 @@ pub fn overlay_quit(
         }
         if pid != 0 {
             if let Ok(handle) = OpenProcess(PROCESS_TERMINATE, false, pid) {
-                let _ = TerminateProcess(handle, 1);
+                terminated_locally = TerminateProcess(handle, 1).is_ok();
                 let _ = CloseHandle(handle);
             }
         }
     }
+    #[cfg(not(windows))]
+    let _ = (pid, target_hwnd);
 
-    let _ = ipc_client::request(st_ipc::Request::CloseApps {
+    // Closing a blocked app needs no PIN (the agent's auth gate allows it).
+    let agent = ipc_client::request(st_ipc::Request::CloseApps {
         app_id,
         pin: String::new(),
     });
-
+    match agent {
+        Ok(Response::Accepted { .. }) => {}
+        _ if terminated_locally => {}
+        Ok(Response::Error { code, message }) => return Err(error_from(code, message)),
+        Ok(_) => return Err(CommandError::unexpected()),
+        Err(e) => return Err(CommandError::unreachable(e)),
+    }
     hide_overlay_gracefully(&app, state.0.clone());
     Ok(())
 }

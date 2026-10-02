@@ -19,6 +19,9 @@
 //!   setting change [`SettingKey::is_loosening`] flags. The opposite direction
 //!   (enabling, un-allowlisting, switching protection on) is free.
 //! * Overrides are refused outright in strict mode, before any PIN is spent.
+//! * Quitting a *blocked* app is free; quitting any other app needs the PIN.
+//! * `ReportUsage` / `RegisterDiscoveredApps` are refused from any program
+//!   other than the session helper ([`Peer`]).
 //! * The vault requests (`SetPin`, `RecoverPin`, `RemovePin`) carry their own
 //!   credential semantics and call [`verify_credential`] from their handlers.
 //!
@@ -75,6 +78,29 @@ impl From<Denied> for Response {
     }
 }
 
+/// Who is on the other end of the pipe, resolved once per connection from the
+/// peer process's executable (see `st_win32::peer_is_trusted`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Peer {
+    /// Tether's own session helper.
+    SessionHelper,
+    /// Some other program: the UI, or anything else a local user runs.
+    Other,
+    /// The peer could not be inspected (it may have exited already).
+    Unknown,
+}
+
+impl Peer {
+    #[cfg(windows)]
+    pub(crate) fn of(stream: &st_ipc::transport::PipeStream) -> Self {
+        match st_win32::peer_is_trusted(stream.peer_process_id(), &["screentime-session.exe"]) {
+            Some(true) => Peer::SessionHelper,
+            Some(false) => Peer::Other,
+            None => Peer::Unknown,
+        }
+    }
+}
+
 /// Which credentials a check accepts.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Accept {
@@ -84,10 +110,38 @@ pub(super) enum Accept {
 }
 
 /// Decide whether `request` may run. `Err` carries the response to send back.
-pub(super) fn authorize(ctx: &Ctx, request: &Request) -> Result<(), Denied> {
+pub(super) fn authorize(ctx: &Ctx, peer: Peer, request: &Request) -> Result<(), Denied> {
     match request {
-        Request::CloseApps { pin, .. }
-        | Request::SetLimit { pin, .. }
+        // Only the session helper sees the focused window. Usage or focus
+        // reported by anything else would let a local process credit the
+        // wrong app, or point the enforcer away from a blocked one.
+        // An uninspectable peer is allowed (logged at the connection) so a
+        // lookup hiccup can never silently stop usage tracking.
+        Request::ReportUsage { .. } | Request::RegisterDiscoveredApps { .. }
+            if peer == Peer::Other =>
+        {
+            Err(Denied::new(
+                ErrorCode::BadRequest,
+                "usage reports are accepted only from the session helper",
+            ))
+        }
+
+        // Quitting an app that is currently blocked only tightens things, so
+        // the block screen's Quit button works without a PIN. Closing any
+        // other app is still PIN-gated: CloseApps can terminate arbitrary
+        // processes by app id.
+        Request::CloseApps { app_id, pin } => {
+            let blocked = lock_db(&ctx.db)
+                .is_blocked(st_core::model::SubjectRef::App(*app_id))
+                .map_err(|e| Denied::internal(format!("read block state: {e}")))?;
+            if blocked {
+                Ok(())
+            } else {
+                require_pin(ctx, pin)
+            }
+        }
+
+        Request::SetLimit { pin, .. }
         | Request::DeleteLimit { pin, .. }
         | Request::CancelPendingLimit { pin, .. }
         | Request::RemoveManualBlock { pin, .. }

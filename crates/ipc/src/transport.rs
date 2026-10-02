@@ -60,6 +60,13 @@ pub type PipeStream = UnsupportedStream;
 pub struct UnsupportedStream;
 
 #[cfg(not(windows))]
+impl UnsupportedStream {
+    pub fn peer_process_id(&self) -> Option<u32> {
+        None
+    }
+}
+
+#[cfg(not(windows))]
 impl io::Read for UnsupportedStream {
     fn read(&mut self, _buf: &mut [u8]) -> io::Result<usize> {
         Err(io::Error::other("transport unavailable on this platform"))
@@ -126,8 +133,9 @@ mod win {
         FILE_SHARE_WRITE, OPEN_EXISTING, PIPE_ACCESS_DUPLEX,
     };
     use windows::Win32::System::Pipes::{
-        ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, PIPE_READMODE_BYTE,
-        PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES, PIPE_WAIT,
+        ConnectNamedPipe, CreateNamedPipeW, DisconnectNamedPipe, GetNamedPipeClientProcessId,
+        GetNamedPipeServerProcessId, PIPE_READMODE_BYTE, PIPE_TYPE_BYTE, PIPE_UNLIMITED_INSTANCES,
+        PIPE_WAIT,
     };
 
     /// SDDL for the server side of `\\.\pipe\screentime`.
@@ -253,11 +261,17 @@ mod win {
 
         let connected = unsafe { ConnectNamedPipe(handle, None) };
         match connected {
-            Ok(()) => Ok(PipeStream { handle }),
+            Ok(()) => Ok(PipeStream {
+                handle,
+                is_server: true,
+            }),
             Err(e) if e.code() == ERROR_PIPE_CONNECTED.into() => {
                 // The client connected between CreateNamedPipeW and
                 // ConnectNamedPipe; that is a successful accept.
-                Ok(PipeStream { handle })
+                Ok(PipeStream {
+                    handle,
+                    is_server: true,
+                })
             }
             Err(e) => {
                 unsafe {
@@ -302,7 +316,10 @@ mod win {
                 )
             } {
                 Ok(handle) if handle != INVALID_HANDLE_VALUE => {
-                    return Ok(PipeStream { handle });
+                    return Ok(PipeStream {
+                        handle,
+                        is_server: false,
+                    });
                 }
                 Ok(_) => return Err(TransportError::Io(io::Error::last_os_error())),
                 Err(e) => {
@@ -329,9 +346,31 @@ mod win {
     #[derive(Debug)]
     pub struct PipeStream {
         handle: HANDLE,
+        /// Which end we are, so [`PipeStream::peer_process_id`] asks the
+        /// kernel about the *other* one.
+        is_server: bool,
     }
 
     impl PipeStream {
+        /// Process id of the other end of the pipe: the client when we
+        /// accepted, the server when we connected. `None` if the kernel
+        /// cannot say (the peer already went away).
+        ///
+        /// The pipe ACL admits every local user, so this is how an endpoint
+        /// checks *which program* it is talking to (see
+        /// `st_win32::is_trusted_peer`).
+        pub fn peer_process_id(&self) -> Option<u32> {
+            let mut pid: u32 = 0;
+            let ok = unsafe {
+                if self.is_server {
+                    GetNamedPipeClientProcessId(self.handle, &mut pid)
+                } else {
+                    GetNamedPipeServerProcessId(self.handle, &mut pid)
+                }
+            };
+            ok.ok().map(|()| pid).filter(|pid| *pid != 0)
+        }
+
         fn read_raw(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             let mut read: u32 = 0;
             unsafe { ReadFile(self.handle, Some(buf), Some(&mut read), None) }
@@ -487,5 +526,21 @@ mod tests {
         let name = format!("screentime_nobody_{}", std::process::id());
         let err = client_connect(&name).expect_err("no agent running");
         assert!(matches!(err, TransportError::Io(_)));
+    }
+
+    #[test]
+    fn both_ends_see_the_other_process() {
+        let name: &'static str =
+            Box::leak(format!("st_peer_pid_test_{}", std::process::id()).into_boxed_str());
+        let server = std::thread::spawn(move || {
+            let stream = server_accept(name).expect("accept");
+            stream.peer_process_id()
+        });
+        let client = client_connect(name).expect("connect");
+        let seen_by_client = client.peer_process_id();
+        let seen_by_server = server.join().expect("server thread");
+        // Same process on both ends here, so both must report our own pid.
+        assert_eq!(seen_by_client, Some(std::process::id()));
+        assert_eq!(seen_by_server, Some(std::process::id()));
     }
 }

@@ -14,6 +14,20 @@
   WriteRegStr HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "ScreentimeSession" '"$INSTDIR\bin\screentime-session.exe"'
   ; Also register HKCU Run if available
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "ScreentimeSession" '"$INSTDIR\bin\screentime-session.exe"'
+  ; RivaTuner Statistics Server hooks every process it sees and can break the
+  ; HUD (session) and block overlay (UI) windows over games. Its profile folder
+  ; lives under Program Files, which only this elevated installer can write, so
+  ; drop "do not hook" profiles here (the session helper itself cannot).
+  IfFileExists "$PROGRAMFILES32\RivaTuner Statistics Server\Profiles\*.*" 0 +10
+    FileOpen $0 "$PROGRAMFILES32\RivaTuner Statistics Server\Profiles\screentime-session.exe.cfg" w
+    FileWrite $0 "[Hooking]$\r$\nEnableHooking = 0$\r$\n"
+    FileClose $0
+    FileOpen $0 "$PROGRAMFILES32\RivaTuner Statistics Server\Profiles\screentime-ui.exe.cfg" w
+    FileWrite $0 "[Hooking]$\r$\nEnableHooking = 0$\r$\n"
+    FileClose $0
+    FileOpen $0 "$PROGRAMFILES32\RivaTuner Statistics Server\Profiles\Tether.exe.cfg" w
+    FileWrite $0 "[Hooking]$\r$\nEnableHooking = 0$\r$\n"
+    FileClose $0
   ; Immediately spawn screentime-session.exe so tracking begins right away without waiting for reboot/logoff
   Exec '"$INSTDIR\bin\screentime-session.exe"'
 !macroend
