@@ -98,15 +98,6 @@
 }
 
 /* PIN dial input and buttons inside overlay */
-.block-overlay-card .pin-cell {
-  background: var(--bg-input, var(--bg-recessed));
-  border: 1px solid var(--border-subtle);
-  color: var(--text-primary);
-}
-
-.block-overlay-card .pin-cell:focus {
-  border-color: var(--color-primary);
-}
 
 @media (prefers-reduced-motion: reduce) {
   .block-overlay-container,

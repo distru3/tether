@@ -63,6 +63,9 @@ export function Sidebar({
                     type="button"
                     className={`nav-item ${activeTab === "overview" ? "nav-item--active" : ""}`}
                     onClick={() => onSelectTab("overview")}
+                    aria-label={t("nav.overview", "Dashboard")}
+                    title={t("nav.overview", "Dashboard")}
+                    aria-current={activeTab === "overview" ? "page" : undefined}
                 >
                     <LayoutDashboard size={15} className="nav-icon" />
                     <span className="nav-text">{t("nav.overview", "Dashboard")}</span>
@@ -77,6 +80,9 @@ export function Sidebar({
                     type="button"
                     className={`nav-item ${activeTab === "web-filtering" ? "nav-item--active" : ""}`}
                     onClick={() => onSelectTab("web-filtering")}
+                    aria-label={t("nav.webFiltering", "Web Filter")}
+                    title={t("nav.webFiltering", "Web Filter")}
+                    aria-current={activeTab === "web-filtering" ? "page" : undefined}
                 >
                     <ShieldAlert size={15} className="nav-icon" />
                     <span className="nav-text">{t("nav.webFiltering", "Web Filter")}</span>
@@ -86,6 +92,9 @@ export function Sidebar({
                     type="button"
                     className={`nav-item ${activeTab === "limits" ? "nav-item--active" : ""}`}
                     onClick={() => onSelectTab("limits")}
+                    aria-label={t("nav.limits", "App Limits")}
+                    title={t("nav.limits", "App Limits")}
+                    aria-current={activeTab === "limits" ? "page" : undefined}
                 >
                     <Clock size={15} className="nav-icon" />
                     <span className="nav-text">{t("nav.limits", "App Limits")}</span>
@@ -95,6 +104,9 @@ export function Sidebar({
                     type="button"
                     className={`nav-item ${activeTab === "settings" ? "nav-item--active" : ""}`}
                     onClick={() => onSelectTab("settings")}
+                    aria-label={t("nav.settings", "Settings")}
+                    title={t("nav.settings", "Settings")}
+                    aria-current={activeTab === "settings" ? "page" : undefined}
                 >
                     <SettingsLucide size={15} className="nav-icon" />
                     <span className="nav-text">{t("nav.settings", "Settings")}</span>

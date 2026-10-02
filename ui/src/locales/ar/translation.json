@@ -538,5 +538,25 @@
   "toasts": {
     "region": "الإشعارات",
     "dismiss": "إغلاق"
+  },
+  "categoryNames": {
+    "games": "الألعاب",
+    "social-media": "التواصل الاجتماعي",
+    "short-form-video": "الفيديو القصير",
+    "video-streaming": "الفيديو والبث",
+    "music-audio": "الموسيقى والصوت",
+    "news": "الأخبار",
+    "shopping": "التسوق",
+    "communication": "المراسلة والاتصال",
+    "productivity": "الإنتاجية والمكتب",
+    "creativity": "الإبداع والتصميم",
+    "education": "التعليم والقراءة",
+    "finance": "المال",
+    "ai-chatbots": "مساعدو الذكاء الاصطناعي",
+    "uncategorized": "غير مصنف",
+    "development": "التطوير والأدوات",
+    "utilities-system": "الأدوات المساعدة والنظام",
+    "adult-content": "محتوى للبالغين",
+    "gambling": "القمار والمراهنات"
   }
 }

@@ -454,32 +454,37 @@ fn stop_all_services(app: tauri::AppHandle) -> CmdResult<()> {
     Ok(())
 }
 
-/// Returns the user's saved theme preference from `{app_data_dir}/theme.txt`.
-/// Returns `"system"` if the file doesn't exist or can't be read.
-fn is_valid_theme(t: &str) -> bool {
-    matches!(
-        t,
-        "midnight-cobalt"
-            | "slate-charcoal"
-            | "cyber-emerald"
-            | "clean-titanium"
-            | "nordic-frost"
-            | "horizon-dark"
-            | "horizon-light"
-            | "classic-dark"
-            | "classic-light"
-            | "system"
-    )
+/// Selectable themes, mirroring `ThemePreference` in `ui/src/hooks/useTheme.ts`.
+const THEMES: [&str; 5] = [
+    "midnight-cobalt",
+    "slate-charcoal",
+    "clean-titanium",
+    "nordic-frost",
+    "system",
+];
+
+/// Map a stored preference to a current theme. Retired names written by
+/// earlier versions migrate instead of being rejected, matching `useTheme`'s
+/// `normalizePref` and the bootstrap script in `index.html`.
+fn normalize_theme(t: &str) -> Option<&'static str> {
+    let migrated = match t {
+        "cyber-emerald" => "slate-charcoal",
+        "horizon-dark" | "classic-dark" | "dark" => "midnight-cobalt",
+        "horizon-light" | "classic-light" | "light" => "clean-titanium",
+        other => other,
+    };
+    THEMES.into_iter().find(|known| *known == migrated)
 }
 
+/// Returns the user's saved theme preference from `{app_data_dir}/theme.txt`.
+/// Returns `"system"` if the file doesn't exist or can't be read.
 #[tauri::command]
 fn get_theme(app: tauri::AppHandle) -> String {
     let path = app.path().app_data_dir().map(|d| d.join("theme.txt")).ok();
     if let Some(p) = path {
         if let Ok(s) = std::fs::read_to_string(&p) {
-            let s = s.trim().to_string();
-            if is_valid_theme(&s) {
-                return s;
+            if let Some(theme) = normalize_theme(s.trim()) {
+                return theme.to_string();
             }
         }
     }
@@ -490,24 +495,12 @@ fn get_theme(app: tauri::AppHandle) -> String {
 /// `theme_changed` across all windows (main and overlay).
 #[tauri::command]
 fn set_theme(app: tauri::AppHandle, theme: String) -> CmdResult<()> {
-    if !matches!(
-        theme.as_str(),
-        "midnight-cobalt"
-            | "slate-charcoal"
-            | "cyber-emerald"
-            | "clean-titanium"
-            | "nordic-frost"
-            | "horizon-dark"
-            | "horizon-light"
-            | "classic-dark"
-            | "classic-light"
-            | "system"
-    ) {
+    let Some(theme) = normalize_theme(&theme) else {
         return Err(CommandError {
             code: "invalid_theme".into(),
             message: format!("unknown theme: {theme}"),
         });
-    }
+    };
     let path = app
         .path()
         .app_data_dir()
@@ -667,4 +660,19 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("failed to launch Tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_theme;
+
+    #[test]
+    fn current_themes_pass_through_and_retired_ones_migrate() {
+        assert_eq!(normalize_theme("nordic-frost"), Some("nordic-frost"));
+        assert_eq!(normalize_theme("system"), Some("system"));
+        assert_eq!(normalize_theme("cyber-emerald"), Some("slate-charcoal"));
+        assert_eq!(normalize_theme("classic-light"), Some("clean-titanium"));
+        assert_eq!(normalize_theme("dark"), Some("midnight-cobalt"));
+        assert_eq!(normalize_theme("neon-pink"), None);
+    }
 }

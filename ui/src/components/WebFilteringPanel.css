@@ -380,13 +380,6 @@
     color: var(--text-muted);
 }
 
-.table-loading-cell {
-    text-align: center;
-    padding: 36px 20px !important;
-    color: var(--text-muted);
-    font-size: 13px;
-}
-
 /* Table Footer with Pagination & Hidden Toggle */
 .web-filter-table-footer {
     display: flex;
@@ -492,8 +485,6 @@
     color: var(--text-secondary);
     padding: 0 4px;
 }
-
-
 
 /* ═══════════════════════════════════════════════════════════════════════════
    LIGHT MODE & COMPONENT POLISH
