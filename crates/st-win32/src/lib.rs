@@ -10,6 +10,7 @@
 //! it later; nothing here depends on them.
 
 pub mod audio;
+pub mod session_launch;
 
 use std::path::Path;
 

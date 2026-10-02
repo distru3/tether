@@ -29,6 +29,7 @@ mod platform;
 mod policy;
 mod sampler;
 mod service;
+mod supervisor;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -291,6 +292,10 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
     );
     tracing::info!(pipe = PIPE_NAME, "IPC server listening");
 
+    // Only the service can start processes in the user's session (it needs
+    // SeTcbPrivilege), and the dev fallback samples in-process instead.
+    let supervise_helper = mode_label == "service" && !self_sampling;
+
     run_main_loop(
         clock,
         db,
@@ -298,6 +303,7 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
         uncategorized,
         day_start_minutes,
         self_sampling,
+        supervise_helper,
         backends,
         ipc,
     );
@@ -316,6 +322,7 @@ fn run_main_loop(
     uncategorized: i64,
     day_start_minutes: i64,
     self_sampling: bool,
+    supervise_helper: bool,
     mut backends: Backends,
     ipc: IpcServerHandle,
 ) {
@@ -325,6 +332,8 @@ fn run_main_loop(
     let mut guard = ClockGuard::new(&*clock, Duration::seconds(CLOCK_TOLERANCE_SECS));
     let mut enforcer = Enforcer::new();
     let mut tracker_error_logged = false;
+    let mut helper_supervisor =
+        supervise_helper.then(|| supervisor::HelperSupervisor::new(clock.now_utc()));
 
     tracing::info!("agent running; press Ctrl+C to stop");
 
@@ -396,6 +405,15 @@ fn run_main_loop(
             }
         }
 
+        if let Some(sup) = helper_supervisor.as_mut() {
+            let alive = ipc
+                .live
+                .helper_reported_within(supervisor::SILENCE_SECS, now);
+            if sup.tick(now, alive) == supervisor::Decision::Launch {
+                relaunch_session_helper();
+            }
+        }
+
         // Every tick evaluates limits: a handful of indexed reads over local
         // SQLite (sub-millisecond), and 1 Hz is what makes enforcement feel
         // live — a crossed limit blocks within a second of the credit landing.
@@ -425,6 +443,38 @@ fn run_main_loop(
         }
     }
 }
+
+/// Start the session helper in the console user's session. Called by the
+/// supervisor with backoff, so failures are logged, never retried here.
+#[cfg(windows)]
+fn relaunch_session_helper() {
+    use st_win32::session_launch::{helper_candidates, launch_in_console_session, LaunchOutcome};
+
+    let Ok(own) = std::env::current_exe() else {
+        return;
+    };
+    let Some(exe) = helper_candidates(&own, "screentime-session.exe")
+        .into_iter()
+        .find(|p| p.is_file())
+    else {
+        tracing::warn!("session helper is not reporting and screentime-session.exe was not found next to the agent");
+        return;
+    };
+    match launch_in_console_session(&exe) {
+        Ok(LaunchOutcome::Started) => {
+            tracing::info!(exe = %exe.display(), "session helper was not reporting; relaunched it");
+        }
+        Ok(LaunchOutcome::NoUser) => {
+            tracing::debug!("session helper not reporting, but nobody is signed in at the console");
+        }
+        Err(e) => {
+            tracing::warn!(error = %e, "relaunching the session helper failed");
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn relaunch_session_helper() {}
 
 fn evaluate_limits(
     clock: &dyn Clock,

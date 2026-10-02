@@ -184,6 +184,12 @@ impl Live {
             .is_some_and(|t| (now - t).num_seconds() <= secs)
     }
 
+    /// Whether the session helper reported within `secs` (it reports every
+    /// second, empty batches included). Read by the helper supervisor.
+    pub(crate) fn helper_reported_within(&self, secs: i64, now: DateTime<Utc>) -> bool {
+        self.reported_within(secs, now)
+    }
+
     fn note_focus(&self, key: AppKey, at: DateTime<Utc>) {
         let mut focus = lock_recover(&self.focus, "focus");
         if focus.as_ref().is_none_or(|(_, t)| at >= *t) {

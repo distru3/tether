@@ -112,7 +112,7 @@ CLI extras: `screentime-agent --service|--install|--uninstall` (SCM mode; instal
 ## 6. Critical Architectural Invariants
 
 - **`st-core` is pure domain logic**: **No OS APIs, no wall-clock reads, no SQL**. Time comes from an injected `Clock` (`TestClock` in tests); OS surface = four traits in `core::platform`.
-- **Enforcement is fail-closed across restarts**: Blocks persist end-of-local-day expiries (`DayKey::end_utc`); startup never wipes blocks; expiry thaw happens per tick. The enforcer evaluates only the currently-focused app (fresh ≤30s session reports).
+- **Enforcement is fail-closed across restarts**: Blocks persist end-of-local-day expiries (`DayKey::end_utc`); startup never wipes blocks; expiry thaw happens per tick. The enforcer evaluates only the currently-focused app (fresh ≤30s session reports). The service relaunches a session helper that stops reporting (`agent/src/supervisor.rs`, ADR 0003); keep the helper panic-free, since release builds abort on panic.
 - **Anti-impulse cooldown asymmetry**: Loosening *minutes* queues into `pending_limits` (+24h default); **removing or disabling a limit applies instantly** by owner decision.
 - **`ui/src-tauri` is a pure IPC adapter**: It serializes `st-ipc` DTOs verbatim (**snake_case wire format**) and returns structured `{code, message}` errors — no business logic there.
 - **One authorization gate**: every IPC request passes `crates/agent/src/ipc_server/auth.rs` before dispatch. Anything that loosens enforcement needs the PIN there (not in individual handlers); `SetSetting` accepts only `st_core::settings::SettingKey` keys. New loosening requests MUST add a rule in `authorize` plus a test.
