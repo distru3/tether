@@ -16,6 +16,7 @@
 pub mod category;
 pub mod clock;
 pub mod daykey;
+pub mod games;
 pub mod limits;
 pub mod model;
 pub mod pin;

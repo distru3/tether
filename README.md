@@ -269,7 +269,7 @@ Options:
 │   ├── tracker-linux/     # Linux X11/Wayland tracker (stub)
 │   ├── enforce-win/       # Win32 NtSuspendProcess / ResumeProcess tree enforcement & hosts file writer
 │   ├── enforce-linux/     # Linux cgroups/SIGSTOP enforcement (stub)
-│   └── dnsproxy/          # Cloudflare Family DNS adapter configurator & original DNS backup/restore
+│   └── family-dns/        # Cloudflare Family DNS adapter configurator & original DNS backup/restore
 ├── ui/
 │   ├── src/               # React 18 application (Dashboard, Daily Timeline, Limits, Settings)
 │   │   ├── components/    # Smoked-glass components, dialogs, charts, SVG icons
