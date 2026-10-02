@@ -9,9 +9,9 @@
 //! samples the foreground window locally, and ships collapsed observations to
 //! this process over `ReportUsage` on the named pipe. Everything this process
 //! touches — SQLite, the limits engine, the pipe server — is desktop-free, so
-//! running it as LocalSystem costs nothing. The GDI block overlay lives in the
-//! session helper too, so blocking still reaches the user's screen even though
-//! this process can never draw one itself.
+//! running it as LocalSystem costs nothing. The session helper drives the
+//! block overlay (rendered by the UI's overlay window), so blocking still
+//! reaches the user's screen even though this process can never draw one.
 //!
 //! # Lifecycle (`sc start ScreentimeAgent`)
 //!

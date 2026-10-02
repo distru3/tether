@@ -355,10 +355,14 @@ pub fn spawn(pipe_name: &'static str, deps: ServerDeps) -> IpcServerHandle {
 /// (edition-2021 closures capture precise places, not whole bindings).
 fn serve_connection(stream: OwnedStream, ctx: Ctx) {
     let OwnedStream(mut stream) = stream;
+    let peer = auth::Peer::of(&stream);
+    if peer == auth::Peer::Unknown {
+        tracing::debug!("IPC peer process could not be inspected");
+    }
     loop {
         match st_ipc::read_message::<_, Request>(&mut stream) {
             Ok(request) => {
-                let response = handle(&ctx, request);
+                let response = handle_from(&ctx, peer, request);
                 if let Err(e) = st_ipc::write_message(&mut stream, &response) {
                     tracing::warn!(error = %e, "failed to write IPC response; closing connection");
                     break;
@@ -640,8 +644,14 @@ fn set_setting(ctx: &Ctx, key: &str, value: &str) -> Response {
     accepted(now)
 }
 
+/// Dispatch a request from a trusted in-process caller (tests).
+#[cfg(test)]
 fn handle(ctx: &Ctx, request: Request) -> Response {
-    if let Err(denied) = auth::authorize(ctx, &request) {
+    handle_from(ctx, auth::Peer::SessionHelper, request)
+}
+
+fn handle_from(ctx: &Ctx, peer: auth::Peer, request: Request) -> Response {
+    if let Err(denied) = auth::authorize(ctx, peer, &request) {
         return denied.into();
     }
     let now = ctx.clock.now_utc();
@@ -2359,7 +2369,7 @@ mod tests {
     }
 
     #[test]
-    fn close_apps_requires_a_valid_pin_once_configured() {
+    fn closing_an_unblocked_app_requires_a_valid_pin_once_configured() {
         let mut db = Db::open_in_memory().expect("db");
         let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
         db.set_pin_hash(&hash_pin("9999").expect("hash"))
@@ -3394,6 +3404,59 @@ mod tests {
             row.limit_seconds.expect("budget") - row.seconds,
             60 * 60 - 600,
             "budget minus usage is the time left"
+        );
+    }
+
+    #[test]
+    fn quitting_a_blocked_app_needs_no_pin() {
+        let mut db = Db::open_in_memory().expect("db");
+        let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
+        db.set_pin_hash(&hash_pin("9999").expect("hash"))
+            .expect("set pin");
+        db.set_block(
+            SubjectRef::App(app),
+            "limit",
+            at("2026-08-20T11:00:00Z"),
+            Some(at("2026-08-21T00:00:00Z")),
+        )
+        .expect("block");
+        let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+        let response = handle(
+            &ctx,
+            Request::CloseApps {
+                app_id: app,
+                pin: String::new(),
+            },
+        );
+        assert!(
+            matches!(response, Response::Accepted { .. }),
+            "{response:?}"
+        );
+    }
+
+    #[test]
+    fn usage_reports_from_other_programs_are_refused() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+        );
+        let report = report_of(vec![obs("C:\\x\\a.exe", "2026-08-20T11:59:58Z", 0)]);
+        assert_eq!(
+            error_code(&handle_from(&ctx, auth::Peer::Other, report.clone())),
+            Some(ErrorCode::BadRequest)
+        );
+        // Uninspectable peers are let through so tracking never silently stops.
+        assert!(matches!(
+            handle_from(&ctx, auth::Peer::Unknown, report),
+            Response::Accepted { .. }
+        ));
+        assert_eq!(
+            error_code(&handle_from(
+                &ctx,
+                auth::Peer::Other,
+                Request::RegisterDiscoveredApps { apps: vec![] }
+            )),
+            Some(ErrorCode::BadRequest)
         );
     }
 }

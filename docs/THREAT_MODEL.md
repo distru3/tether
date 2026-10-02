@@ -42,6 +42,13 @@ worse than one that says nothing: users will trust it and then be surprised.
   through it. PIN change requires the old PIN or the recovery code.
 * Brute-force throttle on PIN and recovery-code checks (escalating lockout
   after 5 consecutive failures, `rate_limited`), with failures audited.
+* Pipe peer verification: usage reports are accepted only from Tether's own
+  session helper, and the overlay bridge checks both ends are genuine Tether
+  binaries from the same install. This stops a local script from faking usage
+  or focus, or squatting the bridge pipe to swallow the block screen.
+* The block screen self-heals: the session re-sends it every 2 s while a
+  block holds and relaunches the UI if needed, so closing the overlay or
+  killing the UI uncovers a blocked app for at most a few seconds.
 * Audit log for overrides, limit edits, service stops, hosts/DNS tampering,
   clock jumps.
 

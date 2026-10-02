@@ -81,7 +81,9 @@
   border: 1px solid var(--border-card, var(--border-subtle));
   border-radius: 16px;
   box-shadow: 0 24px 64px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-subtle);
-  overflow: hidden;
+  /* Scroll rather than clip: on a small target window the actions must stay
+     reachable even if the host could not size the overlay large enough. */
+  overflow-y: auto;
   padding: 32px 28px;
   display: flex;
   flex-direction: column;

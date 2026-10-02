@@ -9,7 +9,6 @@ import {
   getOverlayState,
   overlayExtend,
   overlayQuit,
-  hideOverlayWindow,
   describeError,
 } from "../api";
 import type { OverlayActiveStateDto } from "../api";
@@ -191,15 +190,18 @@ export function BlockOverlay() {
   const handleQuit = useCallback(async () => {
     if (!state || submitting) return;
     setSubmitting(true);
-    setExiting(true);
+    setErrorMsg(null);
     try {
+      // The host hides the overlay only once the app is actually closed.
       await overlayQuit(state.app_id, state.process_id, state.target_hwnd);
-    } catch {
-      await hideOverlayWindow();
+      setExiting(true);
+    } catch (e) {
+      // Never uncover a blocked app because closing it failed.
+      setErrorMsg(t("overlay.quitFailed", { reason: describeError(e) }));
     } finally {
       setSubmitting(false);
     }
-  }, [state, submitting]);
+  }, [state, submitting, t]);
 
   // Physical keyboard listener
   useEffect(() => {
@@ -500,6 +502,13 @@ export function BlockOverlay() {
               {t("overlay.keyboardHint")}
             </span>
           </div>
+        )}
+
+        {/* Non-PIN failures (e.g. the app could not be closed) */}
+        {errorMsg && !wrongPin && (
+          <p role="alert" style={{ margin: 0, fontSize: "12px", color: "var(--color-danger)", fontWeight: 600, textAlign: "center" }}>
+            {errorMsg}
+          </p>
         )}
 
         {/* Action Buttons */}

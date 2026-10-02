@@ -31,7 +31,7 @@ The system is partitioned into **three separate processes** due to Windows opera
 |  |  (crates/session)           |  |  (ui/ + ui/src-tauri)                  |  |
 |  |  - 1 Hz Foreground Tracker  |  |  - Tauri 2 Desktop Shell               |  |
 |  |  - Idle Detection           |  |  - React 18 / TypeScript Dashboard     |  |
-|  |  - Win32 GDI Block Overlay  |  |  - Smoked-Glass Analytics UI           |  |
+|  |  - Native timer HUD         |  |  - Smoked-Glass Analytics UI           |  |
 |  |  - Low-Level Keyboard Hook  |  |  - Settings, Limits & Filtering Admin  |  |
 |  +-----------------------------+  +----------------------------------------+  |
 +-------------------------------------------------------------------------------+
@@ -39,7 +39,7 @@ The system is partitioned into **three separate processes** due to Windows opera
 
 ### Why This Split Exists
 - **Session 0 Isolation**: On Windows, services running as SYSTEM cannot interact with the user desktop, cannot see the focused window, and cannot display UI. Thus, `screentime-agent` cannot sample the foreground app.
-- **Session Helper (`screentime-session`)**: Runs inside the interactive desktop session. It samples `GetForegroundWindow()` and Win32 `GetLastInputInfo()` every second, packaging observations into `ReportUsage` requests sent to the agent over `\\.\pipe\screentime`. It also hosts the hand-painted GDI block overlay window because only a session process can draw topmost windows over games and fullscreen applications.
+- **Session Helper (`screentime-session`)**: Runs inside the interactive desktop session. It samples `GetForegroundWindow()` and Win32 `GetLastInputInfo()` every second, packaging observations into `ReportUsage` requests sent to the agent over `\\.\pipe\screentime`. It draws the native timer HUD, and decides when the block overlay must show. The overlay itself is rendered by the UI's `overlay` webview, which the session commands over `\\.\pipe\screentime_overlay_bridge`.
 - **Tauri UI (`screentime-ui`)**: Runs the React frontend dashboard inside WebView2. It never connects to the database directly; it issues one-shot IPC requests to the agent via Tauri commands.
 
 ---
@@ -61,7 +61,7 @@ crates/
 ├── enforce-linux/    Linux cgroup and hosts writer stub.
 ├── dnsproxy/         Cloudflare Family DNS adapter configuration & original DNS backup/restore.
 ├── agent/            Privileged daemon: IPC server, report ingestion, enforcement loop.
-└── session/          Per-user sampling front and Win32 GDI block overlay.
+└── session/          Per-user sampling front, native timer HUD, block-overlay driver.
 
 ui/
 ├── src-tauri/        Tauri 2 backend: thin adapter translating Tauri invoke -> IPC named pipe.
@@ -107,8 +107,10 @@ SQLite database managed via append-only migrations tracked by `PRAGMA user_versi
 1. If an app or category budget is exhausted, `st-core::LimitEngine` issues a `Decision::Block`.
 2. Agent records the block in `block_state` with `expires_utc` set to the end of the local day.
 3. On its 1 Hz tick, `screentime-session` queries `Request::BlockedApps`.
-4. If the active foreground window matches a blocked app, `screentime-session` spawns the topmost, borderless Win32 GDI block overlay window (`WS_EX_TOPMOST | WS_EX_NOACTIVATE`) and installs a low-level keyboard hook (`WH_KEYBOARD_LL`) to swallow inputs.
-5. User can click **Quit App** (sends `Request::CloseApps`) or enter their PIN on the click-pad for **+15 MIN EXTEND** (sends `Request::GrantOverride`).
+4. If the active foreground window matches a blocked app, `screentime-session` sends `OverlayBridgeRequest::Show` to the UI's bridge pipe. The UI sizes its always-on-top `overlay` window over the app (at least 520×680 when the PIN pad is shown, clamped to the monitor) and renders `BlockOverlay.tsx`.
+   - **Self-healing**: while the block holds and the app stays focused, the session re-sends `Show` every 2 s (with backoff up to 10 s while unacknowledged) and relaunches the UI if its pipe is missing. Alt+F4 on the overlay, a UI crash or a dropped message is repaired within seconds. `Show` is idempotent and preserves a PIN being typed.
+   - **Peer checks**: the session only talks to a bridge served by `screentime-ui.exe`/`Tether.exe` from its own install; the bridge only accepts the session helper (`st_win32::peer_is_trusted`). An uninspectable peer is allowed and logged.
+5. The user can press **Quit app** or enter the PIN for **Allow 15 more minutes** (`Request::GrantOverride`). Quit tries `WM_CLOSE` and `TerminateProcess` from the user session, then `Request::CloseApps` via the agent. Quitting a *blocked* app needs no PIN; closing an unblocked app does. The overlay hides only if one of those actually closed the app; otherwise it shows the error and stays up.
 
 ### C. Web Filtering & Domain Enforcement
 1. Manually blocked domains (`block_rules` rows with neither a blocklist nor a category) are enforced natively in the Windows hosts file (`%SystemRoot%\System32\drivers\etc\hosts`) by `st-enforce-win::HostsFileFilter`. The main loop re-applies the list whenever it changes. Domains are normalised (lowercase, no leading/trailing dots) on add and remove; adding is idempotent, and removing deletes every copy. Bulk upload accepts plain domains and hosts-file lines (`0.0.0.0 example.com`) and skips invalid lines instead of aborting. (The storage layer also has blocklist tables, but nothing writes or enforces them yet.)

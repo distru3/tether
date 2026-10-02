@@ -83,6 +83,7 @@ mod overlay {
 
     impl OverlayRun {
         pub fn dismiss_and_join(self) {}
+        pub fn maintain(&mut self) {}
     }
 }
 #[cfg(not(windows))]
@@ -168,6 +169,10 @@ pub static RTSSHooksCompatibility: u32 = 0x00000000;
 
 #[cfg(windows)]
 fn ensure_rtss_exclusion() {
+    // Best effort only: the RTSS profile folder is under Program Files, which
+    // this unprivileged helper normally cannot write. The NSIS installer
+    // (`ui/src-tauri/installer_hooks.nsh`) writes the real profiles elevated;
+    // this covers elevated development runs.
     // If RTSS is installed, drop an application profile ensuring EnableHooking=0
     let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") else {
         return;
@@ -204,8 +209,8 @@ fn main() -> anyhow::Result<()> {
 
     // Single-instance guard BEFORE anything else (tracing included): a second
     // helper would sample the same desktop and double-count every observation,
-    // while two overlays would fight over one keyboard hook and one desktop
-    // rectangle. The subscriber does not exist yet, so the refusal goes
+    // while two would fight over the HUD and keep re-showing the block
+    // overlay for each other. The subscriber does not exist yet, so the refusal goes
     // straight to stderr with the *why* spelled out for whoever launched it.
     // The binding lives to the end of `main`: dropping it releases the mutex.
     #[cfg(windows)]
@@ -432,7 +437,13 @@ fn main() -> anyhow::Result<()> {
             &sess.blocked,
         );
         match plan.overlay {
-            cycle::OverlayCmd::Stay => {}
+            cycle::OverlayCmd::Stay => {
+                // Keep re-asserting the block screen while it should be up;
+                // see `overlay::OverlayRun::maintain`.
+                if let Some((_, _, run)) = active.as_mut() {
+                    run.maintain();
+                }
+            }
             cycle::OverlayCmd::Dismiss => {
                 if let Some((id, _, run)) = active.take() {
                     tracing::info!(app = id, "block lifted or focus lost; dismissing");
@@ -440,8 +451,8 @@ fn main() -> anyhow::Result<()> {
                 }
             }
             cycle::OverlayCmd::Show { app_id, gate } => {
-                // Tear the old one down (and join it) before spawning, so two
-                // keyboard hooks never overlap needlessly.
+                // A different app is now blocked: hide the old block screen
+                // before showing the new one.
                 if let Some((_, _, old)) = active.take() {
                     old.dismiss_and_join();
                 }

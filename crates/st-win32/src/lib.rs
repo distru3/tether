@@ -11,6 +11,8 @@
 
 pub mod audio;
 
+use std::path::Path;
+
 use std::os::windows::ffi::OsStrExt;
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE};
@@ -279,8 +281,94 @@ pub fn wide_to_string(buf: &[u16]) -> String {
     String::from_utf16_lossy(&buf[..end])
 }
 
+/// Whether `peer_image` is one of our own install's executables named in
+/// `names`.
+///
+/// The named pipes admit every local user, so a process can claim to be the
+/// session helper or the UI simply by connecting (or by creating the pipe
+/// first). This check pins the *program*: the file name must match
+/// (case-insensitively) and it must live in our own directory, its parent, or
+/// its `bin` child, which covers `target/debug` in development and
+/// `$INSTDIR` + `$INSTDIR\bin` when installed. A standard user cannot plant
+/// files in Program Files, so a match means a genuine Tether binary.
+pub fn is_trusted_peer(peer_image: &Path, own_exe: &Path, names: &[&str]) -> bool {
+    let lower = |p: &Path| p.to_string_lossy().to_lowercase();
+    let Some(file) = peer_image
+        .file_name()
+        .map(|f| f.to_string_lossy().to_lowercase())
+    else {
+        return false;
+    };
+    if !names.iter().any(|n| n.to_lowercase() == file) {
+        return false;
+    }
+    let (Some(peer_dir), Some(own_dir)) = (peer_image.parent(), own_exe.parent()) else {
+        return false;
+    };
+    let peer_dir = lower(peer_dir);
+    let mut allowed = vec![lower(own_dir), lower(&own_dir.join("bin"))];
+    if let Some(parent) = own_dir.parent() {
+        allowed.push(lower(parent));
+    }
+    allowed
+        .iter()
+        .any(|dir| dir.trim_end_matches(['\\', '/']) == peer_dir.trim_end_matches(['\\', '/']))
+}
+
+/// Verdict on a pipe peer: `Some(true)` trusted, `Some(false)` definitely a
+/// different program, `None` when the process could not be inspected (it may
+/// already have exited). Callers decide how to treat `None`; rejecting it
+/// outright would turn a transient lookup failure into lost usage or a
+/// missing block screen.
+pub fn peer_is_trusted(pid: Option<u32>, names: &[&str]) -> Option<bool> {
+    let pid = pid?;
+    if pid == std::process::id() {
+        // Same process (tests, or a server talking to itself).
+        return Some(true);
+    }
+    let image = process_image_path(pid).ok()?;
+    let own = std::env::current_exe().ok()?;
+    Some(is_trusted_peer(Path::new(&image), &own, names))
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn trusted_peers_are_our_own_binaries_next_to_us() {
+        use super::is_trusted_peer;
+        use std::path::Path;
+        let own = Path::new(r"C:\Program Files\Tether\bin\screentime-agent.exe");
+        let session = [r"screentime-session.exe"];
+        assert!(is_trusted_peer(
+            Path::new(r"C:\Program Files\Tether\bin\Screentime-Session.EXE"),
+            own,
+            &session
+        ));
+        // The UI lives one level up from bin/.
+        let ui = own
+            .parent()
+            .and_then(Path::parent)
+            .expect("dir")
+            .join("Tether.exe");
+        assert!(is_trusted_peer(
+            &ui,
+            own,
+            &["screentime-ui.exe", "Tether.exe"]
+        ));
+        // Right name, wrong place.
+        assert!(!is_trusted_peer(
+            Path::new(r"C:\Users\kid\Downloads\screentime-session.exe"),
+            own,
+            &session
+        ));
+        // Right place, wrong name.
+        assert!(!is_trusted_peer(
+            Path::new(r"C:\Program Files\Tether\bin\evil.exe"),
+            own,
+            &session
+        ));
+    }
+
     use super::*;
 
     #[test]

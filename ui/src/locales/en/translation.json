@@ -484,14 +484,15 @@
     "limitReached": "LIMIT REACHED",
     "downtimeActive": "DOWNTIME ACTIVE",
     "headline": "Application Access Paused",
-    "reasonLimit": "You have reached your configured screen time limit for this application today.",
+    "reasonLimit": "Today’s time for this app is used up.",
     "reasonDowntime": "Scheduled downtime is currently active.",
-    "enterPin": "Enter PIN to extend access",
+    "enterPin": "Enter the PIN to allow more time",
     "incorrectPin": "Incorrect PIN. Please try again.",
-    "extend15": "+15 Min Extend",
-    "quitApp": "Quit Application",
-    "keyboardHint": "Type PIN numbers, Enter to unlock, Esc to quit",
-    "clear": "Clear"
+    "extend15": "Allow 15 more minutes",
+    "quitApp": "Quit app",
+    "keyboardHint": "Type the PIN and press Enter · Esc quits the app",
+    "clear": "Clear",
+    "quitFailed": "Couldn’t close the app: {{reason}}"
   },
   "timeline": {
     "title": "Timeline",
