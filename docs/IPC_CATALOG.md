@@ -62,7 +62,7 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
 | `AddManualBlock` | `domain: String` | `Accepted { ... }` | Adds a domain to the manual block list. The domain is normalised; adding an already-blocked domain is a no-op; invalid input is `bad_request`. Tightening, so no PIN. |
 | `RemoveManualBlock`| `domain: String`, `pin: String` | `Accepted { ... }` | Removes every manual rule for the normalised domain; PIN-gated if a PIN is configured. `not_found` when the domain isn't blocked, `bad_request` when it isn't a valid domain. |
 
-### Schedules, Allowlist & Focus Sessions
+### Schedules & Allowlist
 
 | Request Variant | Parameters | Response Variant | Description |
 | :--- | :--- | :--- | :--- |
@@ -73,9 +73,6 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
 | `DeleteSchedule` | `id`, `pin?` | `Accepted { ... }` | Deletes schedule. **PIN always.** |
 | `ListAllowlist` | None | `Allowlist(AllowlistDto)` | Lists subjects exempt from downtime. |
 | `SetAllowlist` | `subject_type`, `subject_id`, `allowed`, `pin?` | `Accepted { ... }` | Adds or removes subject from allowlist. **PIN to add**; removing is free. |
-| `GetFocusSession` | None | `FocusSession { session }` | Queries active focus session if any. |
-| `StartFocusSession`| `duration_minutes: u32`, `name: Option<String>` | `Accepted { ... }` | Starts strict focus session. |
-| `EndFocusSession` | `pin: Option<String>` | `Accepted { ... }` | Ends focus session early (PIN required if strict). |
 
 ---
 

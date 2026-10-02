@@ -461,7 +461,6 @@ fn evaluate_limits(
         &mut lock_db(db),
         &engine,
         focus.as_ref(),
-        None,
         now,
         tz_offset,
         day_start_minutes,

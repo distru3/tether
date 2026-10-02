@@ -230,15 +230,6 @@ pub enum Request {
         #[ts(optional)]
         pin: Option<String>,
     },
-    /// Get the current focus session if active.
-    GetFocusSession,
-    StartFocusSession {
-        duration_minutes: u32,
-        name: Option<String>,
-    },
-    EndFocusSession {
-        pin: Option<String>,
-    },
     /// Check a PIN without changing anything, for UI-only reveals (e.g. the
     /// hidden adult-domain list). Answers `Accepted` or `bad_pin`, and counts
     /// against the same brute-force throttle as every other credential check.
@@ -353,10 +344,6 @@ pub enum Response {
     ScheduleCreated(ScheduleDto),
     /// All always-allowed subjects for downtime.
     Allowlist(AllowlistDto),
-    /// Current focus session state.
-    FocusSession {
-        session: Option<FocusSessionDto>,
-    },
     ManualBlocks {
         domains: Vec<String>,
     },
@@ -636,68 +623,6 @@ pub struct BlockedAppsDto {
     pub blocked: Vec<BlockedAppDto>,
 }
 
-// -- Web filter --------------------------------------------------------------
-
-/// One web-filter blocklist.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct BlocklistDto {
-    #[ts(as = "i32")]
-    pub id: i64,
-    pub name: String,
-    pub source_url: Option<String>,
-    pub version: Option<String>,
-    pub checksum: Option<String>,
-    pub enabled: bool,
-    pub last_updated_utc: Option<String>,
-}
-
-/// The payload of `Response::Blocklists` (wrapped so the internally tagged
-/// `Response` enum can carry the sequence).
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct BlocklistsDto {
-    pub blocklists: Vec<BlocklistDto>,
-}
-
-/// One `block_rules` row: what to block (or, pre-resolution, allow).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct BlockRuleDto {
-    #[ts(as = "i32")]
-    pub id: i64,
-    #[ts(as = "Option<i32>")]
-    pub blocklist_id: Option<i64>,
-    #[ts(as = "Option<i32>")]
-    pub category_id: Option<i64>,
-    pub domain: String,
-    pub include_subdomains: bool,
-    /// `"block"` | `"allow"`.
-    pub action: String,
-}
-
-/// The payload of `Response::BlockRules`.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct BlockRulesDto {
-    pub rules: Vec<BlockRuleDto>,
-}
-
-/// One site, with its primary category and limit-matching tags.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct SiteDto {
-    #[ts(as = "i32")]
-    pub id: i64,
-    pub domain: String,
-    #[ts(as = "i32")]
-    pub primary_category: i64,
-    #[ts(as = "Vec<i32>")]
-    pub tags: Vec<i64>,
-    pub user_classified: bool,
-}
-
-/// The payload of `Response::Sites`.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct SitesDto {
-    pub sites: Vec<SiteDto>,
-}
-
 /// One downtime schedule window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct ScheduleDto {
@@ -729,17 +654,6 @@ pub struct AllowlistItemDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct AllowlistDto {
     pub items: Vec<AllowlistItemDto>,
-}
-
-/// An active focus session.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct FocusSessionDto {
-    pub name: Option<String>,
-    pub started_at_utc: String,
-    pub duration_minutes: u32,
-    pub expires_utc: String,
-    #[ts(as = "i32")]
-    pub remaining_seconds: i64,
 }
 
 /// Write one length-prefixed JSON frame.
@@ -1085,6 +999,16 @@ mod tests {
         let dir =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/src/types/generated");
         std::fs::create_dir_all(&dir).expect("create generated dir");
+        // Start from empty so a removed DTO cannot leave a stale binding
+        // behind; every file in this directory is generated.
+        for entry in std::fs::read_dir(&dir)
+            .expect("read generated dir")
+            .flatten()
+        {
+            if entry.path().extension().is_some_and(|ext| ext == "ts") {
+                std::fs::remove_file(entry.path()).expect("remove stale binding");
+            }
+        }
         // Export both protocol roots; every consumed DTO (and its transitive
         // dependencies in st-core) is reachable from one of them.
         Response::export_all_to(&dir).expect("export response bindings");

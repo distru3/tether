@@ -731,10 +731,6 @@ fn handle_from(ctx: &Ctx, peer: auth::Peer, request: Request) -> Response {
             allowed,
             ..
         } => set_allowlist(ctx, &subject_type, subject_id, allowed),
-        _ => Response::Error {
-            code: st_ipc::ErrorCode::BadRequest,
-            message: "Feature not yet available.".to_string(),
-        },
     }
 }
 

@@ -67,7 +67,6 @@ impl Enforcer {
         db: &mut Db,
         engine: &LimitEngine,
         window_key: Option<&AppKey>,
-        active_focus_session: Option<&st_core::FocusSession>,
         now: DateTime<Utc>,
         tz_offset_secs: i32,
         day_start_minutes: i64,
@@ -106,23 +105,10 @@ impl Enforcer {
         let subject = SubjectRef::App(record.id);
         let blockable = self.blockable(db, record.primary_category)?;
 
-        // 1. Check Allowlist: if allowlisted, never block via downtime or focus session
+        // 1. Check Allowlist: if allowlisted, never block via downtime
         let allowlisted = db.is_subject_allowlisted("app", record.id)?;
 
-        // 2. Check Focus Session block
-        let focus_active = active_focus_session
-            .map(|f| f.is_active(now))
-            .unwrap_or(false);
-        if blockable && focus_active && !allowlisted {
-            let expires = active_focus_session
-                .map(|f| f.expires_utc)
-                .unwrap_or(now + FALLBACK_EXPIRY);
-            tracing::info!(app = %record.key, "blocking app due to active focus session");
-            db.set_block(subject, "focus_session", now, Some(expires))?;
-            return Ok(());
-        }
-
-        // 3. Check Downtime Schedules
+        // 2. Check Downtime Schedules
         // Wall-clock minute and weekday from the same local instant; see
         // `local_minute_and_weekday` for why `today` must not be used here.
         let (minute_of_day, weekday_idx) =
@@ -307,7 +293,7 @@ mod tests {
     ) {
         let engine = engine_for(target);
         enforcer
-            .tick(db, &engine, Some(key), None, now, 0, 0)
+            .tick(db, &engine, Some(key), now, 0, 0)
             .expect("tick");
     }
 
@@ -389,7 +375,6 @@ mod tests {
                 &mut db,
                 &no_limits,
                 Some(&steam_key()),
-                None,
                 at("2026-08-18T02:00:00Z"),
                 0,
                 4 * 60,
@@ -405,7 +390,6 @@ mod tests {
                 &mut db,
                 &no_limits,
                 Some(&steam_key()),
-                None,
                 at("2026-08-18T02:01:00Z"),
                 0,
                 4 * 60,
@@ -455,15 +439,7 @@ mod tests {
         // Next day: everything is unblocked.
         let engine = engine_for(st_core::limits::LimitTarget::Category(games));
         enforcer
-            .tick(
-                &mut db,
-                &engine,
-                None,
-                None,
-                at("2026-08-21T06:00:00Z"),
-                0,
-                0,
-            )
+            .tick(&mut db, &engine, None, at("2026-08-21T06:00:00Z"), 0, 0)
             .expect("tick");
         assert!(!db.is_blocked(SubjectRef::App(app)).expect("cleared"));
     }
@@ -521,7 +497,6 @@ mod tests {
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
                 None,
-                None,
                 at("2026-08-20T12:05:00Z"),
                 0,
                 0,
@@ -556,7 +531,6 @@ mod tests {
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
                 None,
-                None,
                 at("2026-08-20T12:02:00Z"),
                 0,
                 0,
@@ -586,7 +560,6 @@ mod tests {
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
                 None,
-                None,
                 at("2026-08-20T12:00:00Z"),
                 0,
                 0,
@@ -614,7 +587,6 @@ mod tests {
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
                 Some(&steam_key()),
-                None,
                 at("2026-08-20T23:30:00Z"),
                 tz,
                 0,
