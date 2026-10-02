@@ -77,10 +77,10 @@ The top chrome consists of a streamlined App Bar (TitleBar) and a horizontal Top
 - **Window Controls**: Minimize, Maximize/Restore, Close caption buttons (46px hit width, hover states, `#e81123` close hover, with `transform: none !important` to prevent active-state distortion).
 
 ### Navigation Bar (`Sidebar.tsx` & `redesign.css`)
-- **Container**: 58px min-height, `rgba(26, 11, 42, 0.94)` smoked glass, `backdrop-filter: blur(20px) saturate(135%)`.
-- **Brand Cluster**: Renders the 30px Tether squircle logo cleanly without any outer border/background wrapper, paired with "Tether" logotype (`1.05rem`, font-weight 750) and an inline **Live Status Pill** (`status-pill--live`).
-- **Center Nav Segmented Capsule**: Horizontal row (`flex-direction: row !important`) hosting the 4 section tabs side-by-side in a sleek floating pill track. Active tab is highlighted with an elevated warm terracotta gradient (`rgba(165, 91, 75, 0.35)` to `rgba(122, 62, 48, 0.28)`) and amber icon accent.
-- **Date Stepper Capsule**: Matching floating pill track on the right with responsive `<` and `>` buttons and an interactive "Today" / date label with calendar icon for returning to Today when viewing past ledger records.
+- **Container**: sticky 56px bar, `var(--bg-panel)` background with a `var(--border-card)` bottom border (opaque; no blur). At ≤980px nav labels hide (icon-only, each item keeps its `aria-label`); at ≤700px the bar wraps and the nav scrolls horizontally.
+- **Brand Cluster**: "Tether" wordmark (`.logo-title`, `1.05rem`, weight 750; there is no logo image) and the **status pill** (`status-pill--live` / `--offline`).
+- **Center Nav Segmented Capsule**: the 4 section tabs in a recessed pill track (`.sidebar-nav`). The active tab (`.nav-item--active`, `aria-current="page"`) is raised on `var(--bg-card-elevated)` with `var(--color-primary)` text and icon.
+- **Date Stepper Capsule**: matching pill track on the right with `<` / `>` buttons and a "Today" / date label that returns to today when viewing a past day. Hidden (keeping its footprint) off the dashboard.
 
 ### Nav Items
 1. **Dashboard** (`overview`): Daily timeline, top applications, weekly chart, category distribution (includes blocked app count badge).
