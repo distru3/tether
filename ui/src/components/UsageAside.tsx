@@ -23,7 +23,7 @@ export function UsageAside({ entries, total, catalog, onCategorize, onOpenAppDir
       <div className="panel-heading-row">
         <div>
           <p className="panel-eyebrow">{t("usage.eyebrow")}</p>
-          <h3>{t("usage.mostUsed")}</h3>
+          <h3 aria-level={2}>{t("usage.mostUsed")}</h3>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {onOpenAppDirectory && (

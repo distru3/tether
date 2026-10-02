@@ -190,7 +190,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
         <div className="view-container web-filter-page-shell">
             <div className="view-header page-intro">
                 <div>
-                    <h2 className="view-title">{t("webFilter.customBlockedDomains", "Web Shield")}</h2>
+                    <h2 className="view-title" aria-level={1}>{t("webFilter.customBlockedDomains", "Web Shield")}</h2>
                     <p className="view-subtitle">{t("webFilter.desc", "Manage blocked domains and bulk upload custom lists.")}</p>
                 </div>
             </div>
@@ -200,7 +200,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
             <section className="card limits-panel web-filter-command-panel">
                 <div className="card-body">
                     {error && (
-                        <div className="error-text" style={{ marginBottom: "16px", color: "var(--color-danger)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
+                        <div className="error-text" style={{ marginBottom: "16px", color: "var(--color-danger-text)", fontSize: "13px", display: "flex", alignItems: "center", gap: "6px" }}>
                             <AlertCircle size={15} />
                             {error}
                         </div>
@@ -244,7 +244,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                     <div className="ai-prompt-card">
                         <div className="ai-prompt-header">
                             <Sparkles size={16} color="var(--color-accent)" />
-                            <h3 className="ai-prompt-title">{t("webFilter.generateListsWithAi", "Generate Blocklists with AI")}</h3>
+                            <h3 aria-level={2} className="ai-prompt-title">{t("webFilter.generateListsWithAi", "Generate Blocklists with AI")}</h3>
                         </div>
                         <p className="ai-prompt-desc">
                             {t("webFilter.aiDesc", "Enter a topic to copy an AI prompt that will generate a formatted domain list for bulk upload.")}
@@ -274,7 +274,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                 <div className="card-body">
                     <div className="web-filter-table-header">
                         <div className="web-filter-table-title-group">
-                            <h3 className="web-filter-table-title">
+                            <h3 aria-level={2} className="web-filter-table-title">
                                 {t("webFilter.activeRules", "Active Domain Rules")}
                             </h3>
                             <span className="web-filter-count-badge">

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShieldOff, ChevronDown } from "lucide-react";
 import { applyLanguage } from "./i18n";
-import { formatDayLabel } from "./format";
+import { formatDayLabel, formatDuration } from "./format";
 import { limitOutlook, longestStretch, vsWeekAverage } from "./dashboardMetrics";
 import { ExecutiveHeader } from "./components/ExecutiveHeader";
 import { UsageAside } from "./components/UsageAside";
@@ -267,6 +267,7 @@ function MainDashboard() {
 
             {activeTab === "overview" && (
               <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)", display: "flex", flexDirection: "column", gap: "20px" }}>
+                <h1 className="sr-only">{t("nav.overview", "Dashboard")}</h1>
                 <ExecutiveHeader
                   total={total}
                   categories={categories}
@@ -299,7 +300,7 @@ function MainDashboard() {
                     <div className="timeline-panel__header">
                       <div>
                         <p className="panel-eyebrow">{isViewingToday ? t("hero.today") : formatDayLabel(viewDay)}</p>
-                        <h3>{t("timeline.title")}</h3>
+                        <h3 aria-level={2}>{t("timeline.title")}</h3>
                       </div>
                     </div>
                     {pastDayEmpty ? (
@@ -321,7 +322,7 @@ function MainDashboard() {
 
                 <div className="analytics-trends-container">
                   <div className="analytics-trends-history">
-                    <h3 className="analytics-trends-history-title">{t("weeklyChart.historyTitle")}</h3>
+                    <h3 aria-level={2} className="analytics-trends-history-title">{t("weeklyChart.historyTitle")}</h3>
                     <WeeklyChart week={week} viewDay={viewDay} loading={weekLoading} onSelectDay={setViewDay} />
                   </div>
                   <div className="analytics-trends-distribution">
@@ -363,7 +364,7 @@ function MainDashboard() {
               <div className="tab-page settings-page" style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
 
                 <div className="settings-page-intro">
-                  <h2>{t("settings.title")}</h2>
+                  <h2 aria-level={1}>{t("settings.title")}</h2>
                   <p>{t("settings.subtitle")}</p>
                 </div>
 
@@ -478,6 +479,7 @@ function MainDashboard() {
                           <input
                             type="checkbox"
                             className="toggle-switch"
+                            aria-label={t("settings.showHud")}
                             checked={statusInfo?.show_hud_overlay ?? true}
                             disabled={pendingSettings["show_hud_overlay"]}
                             onChange={(e) => {
@@ -503,6 +505,7 @@ function MainDashboard() {
                           <input
                             type="checkbox"
                             className="toggle-switch"
+                            aria-label={t("settings.showHudInFullscreen")}
                             checked={statusInfo?.show_hud_in_fullscreen ?? false}
                             disabled={pendingSettings["show_hud_in_fullscreen"] || !(statusInfo?.show_hud_overlay ?? true)}
                             onChange={(e) => {
@@ -565,11 +568,11 @@ function MainDashboard() {
                         </div>
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', marginTop: 4 }}>
                           {[
-                            { label: "15 min", color: "var(--accent-indigo)", bg: "rgba(99, 102, 241, 0.10)", border: "rgba(99, 102, 241, 0.25)" },
-                            { label: "10 min", color: "var(--accent-indigo)", bg: "rgba(99, 102, 241, 0.10)", border: "rgba(99, 102, 241, 0.25)" },
-                            { label: "5 min", color: "var(--accent-amber)", bg: "rgba(245, 158, 11, 0.10)", border: "rgba(245, 158, 11, 0.25)" },
-                            { label: "1 min", color: "var(--accent-rose)", bg: "rgba(244, 63, 94, 0.10)", border: "rgba(244, 63, 94, 0.25)" },
-                            { label: t("common.blocked", "Limit Reached"), color: "var(--accent-rose)", bg: "rgba(244, 63, 94, 0.15)", border: "rgba(244, 63, 94, 0.35)" }
+                            { label: formatDuration(15 * 60), color: "var(--color-accent-text)", bg: "rgba(99, 102, 241, 0.10)", border: "rgba(99, 102, 241, 0.25)" },
+                            { label: formatDuration(10 * 60), color: "var(--color-accent-text)", bg: "rgba(99, 102, 241, 0.10)", border: "rgba(99, 102, 241, 0.25)" },
+                            { label: formatDuration(5 * 60), color: "var(--color-warning-text)", bg: "rgba(245, 158, 11, 0.10)", border: "rgba(245, 158, 11, 0.25)" },
+                            { label: formatDuration(60), color: "var(--color-danger-text)", bg: "rgba(244, 63, 94, 0.10)", border: "rgba(244, 63, 94, 0.25)" },
+                            { label: t("common.blocked", "Limit Reached"), color: "var(--color-danger-text)", bg: "rgba(244, 63, 94, 0.15)", border: "rgba(244, 63, 94, 0.35)" }
                           ].map((m) => (
                             <span
                               key={m.label}
@@ -706,6 +709,7 @@ function MainDashboard() {
                           <input
                             type="checkbox"
                             className="toggle-switch"
+                            aria-label={t("settings.strictMode", "Strict Mode")}
                             checked={statusInfo?.strict_mode ?? false}
                             disabled={pendingSettings["strict_mode"]}
                             onChange={(e) => {
@@ -744,6 +748,7 @@ function MainDashboard() {
                           <input
                             type="checkbox"
                             className="toggle-switch"
+                            aria-label={t("settings.familyDns", "Family DNS Protection")}
                             checked={statusInfo?.family_dns_enabled ?? false}
                             disabled={pendingSettings["family_dns"]}
                             onChange={(e) => {
@@ -773,6 +778,7 @@ function MainDashboard() {
                           {pendingSettings["limit_cooldown_hours"] && <LoadingSpinner size="xs" />}
                           <div className="input-with-suffix">
                             <input
+                              aria-label={t("settings.cooldown", "Anti-impulse Cooldown")}
                               type="number"
                               className="input"
                               style={{ width: '60px' }}
@@ -803,6 +809,7 @@ function MainDashboard() {
                           {pendingSettings["idle_threshold_secs"] && <LoadingSpinner size="xs" />}
                           <div className="input-with-suffix">
                             <input
+                              aria-label={t("settings.idleThreshold", "Idle Threshold")}
                               type="number"
                               className="input"
                               style={{ width: '60px' }}
@@ -833,6 +840,7 @@ function MainDashboard() {
                           {pendingSettings["day_start_minutes"] && <LoadingSpinner size="xs" />}
                           <div className="input-with-suffix">
                             <input
+                              aria-label={t("settings.dayReset", "Day Start Offset")}
                               type="number"
                               className="input"
                               style={{ width: '60px' }}

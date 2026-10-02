@@ -123,7 +123,7 @@ function CategorySelect({
                                         )}
                                         <span>{opt.label}</span>
                                     </div>
-                                    {isSelected && <span style={{ fontSize: "11px", color: "var(--color-accent)" }}>✓</span>}
+                                    {isSelected && <span style={{ fontSize: "11px", color: "var(--color-accent-text)" }}>✓</span>}
                                 </li>
                             );
                         })}

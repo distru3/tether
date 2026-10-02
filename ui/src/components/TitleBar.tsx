@@ -25,7 +25,7 @@ export function TitleBar() {
     }, []);
 
     return (
-        <div data-tauri-drag-region className="titlebar">
+        <header data-tauri-drag-region className="titlebar">
             <div className="titlebar-left" data-tauri-drag-region>
                 <span className="titlebar-title" data-tauri-drag-region>Tether</span>
             </div>
@@ -69,7 +69,7 @@ export function TitleBar() {
                     </svg>
                 </button>
             </div>
-        </div>
+        </header>
     );
 }
 

@@ -111,7 +111,8 @@
     "yourLimits": "Your limits",
     "filterAll": "All",
     "filterActive": "Active",
-    "filterDisabled": "Paused"
+    "filterDisabled": "Paused",
+    "toggleLabel": "Limit for {{target}}"
   },
   "downtime": {
     "tabDowntime": "Scheduled Downtime",
@@ -150,7 +151,8 @@
     "namePlaceholder": "e.g. Bedtime, Homework",
     "created": "Schedule created.",
     "updated": "Schedule saved.",
-    "removed": "Schedule deleted."
+    "removed": "Schedule deleted.",
+    "toggleLabel": "Schedule “{{name}}”"
   },
   "settings": {
     "title": "Settings",
@@ -496,7 +498,9 @@
     "quitApp": "Quit app",
     "keyboardHint": "Type the PIN and press Enter · Esc quits the app",
     "clear": "Clear",
-    "quitFailed": "Couldn’t close the app: {{reason}}"
+    "quitFailed": "Couldn’t close the app: {{reason}}",
+    "clearPin": "Clear PIN",
+    "submitPin": "Confirm PIN"
   },
   "timeline": {
     "title": "Timeline",

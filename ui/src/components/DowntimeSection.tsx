@@ -172,7 +172,7 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
                     {/* The page header already titles this section; the card
                         only names its contents. */}
-                    <h3 style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--text-primary)" }}>
+                    <h3 aria-level={2} style={{ margin: 0, fontSize: "15px", fontWeight: 600, color: "var(--text-primary)" }}>
                         {t("downtime.schedulesHeading")}
                     </h3>
                     <button
@@ -232,6 +232,7 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
                                         <ToggleSwitch
                                             checked={schedule.enabled}
                                             onChange={(checked) => toggleSchedule(schedule.id, checked)}
+                                            label={t("downtime.toggleLabel", { name: schedule.name })}
                                         />
 
                                         <div>
@@ -319,7 +320,7 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
             <div className="card glass-card" style={{ marginTop: "24px", padding: "24px" }}>
                 <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
                     <ShieldCheck size={18} color="var(--accent-emerald)" />
-                    <h3 style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "var(--text-primary)" }}>
+                    <h3 aria-level={2} style={{ margin: 0, fontSize: "16px", fontWeight: 600, color: "var(--text-primary)" }}>
                         {t("downtime.allowlistTitle", "Always Allowed Apps")}
                     </h3>
                 </div>
@@ -335,6 +336,7 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
                             value={selectedAppId}
                             onChange={(e) => setSelectedAppId(e.target.value ? Number(e.target.value) : "")}
                             style={{ width: "100%" }}
+                            aria-label={t("downtime.searchAppToAllow", "Choose an app to allow...")}
                         >
                             <option value="">{t("downtime.searchAppToAllow", "Choose an app to allow...")}</option>
                             {availableApps.map((app) => (
@@ -512,7 +514,7 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
                 </div>
 
                 {isOvernight && (
-                    <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--accent-indigo)", display: "flex", alignItems: "center", gap: "6px" }}>
+                    <div style={{ marginTop: "10px", fontSize: "12px", color: "var(--color-accent-text)", display: "flex", alignItems: "center", gap: "6px" }}>
                         <Sparkles size={13} />
                         <span>{t("downtime.overnightNotice", "Overnight window: runs from evening through the following morning.")}</span>
                     </div>
@@ -526,7 +528,7 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
                             <button
                                 type="button"
                                 className="btn-ghost"
-                                style={{ padding: "1px 6px", fontSize: "11px", cursor: "pointer", color: "var(--accent-indigo)" }}
+                                style={{ padding: "1px 6px", fontSize: "11px", cursor: "pointer", color: "var(--color-accent-text)" }}
                                 onClick={() => setWeekdayMask(127)}
                             >
                                 {t("downtime.everyday", "Every day")}
@@ -535,7 +537,7 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
                             <button
                                 type="button"
                                 className="btn-ghost"
-                                style={{ padding: "1px 6px", fontSize: "11px", cursor: "pointer", color: "var(--accent-indigo)" }}
+                                style={{ padding: "1px 6px", fontSize: "11px", cursor: "pointer", color: "var(--color-accent-text)" }}
                                 onClick={() => setWeekdayMask(31)}
                             >
                                 {t("downtime.weekdays", "Weekdays")}
@@ -544,7 +546,7 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
                             <button
                                 type="button"
                                 className="btn-ghost"
-                                style={{ padding: "1px 6px", fontSize: "11px", cursor: "pointer", color: "var(--accent-indigo)" }}
+                                style={{ padding: "1px 6px", fontSize: "11px", cursor: "pointer", color: "var(--color-accent-text)" }}
                                 onClick={() => setWeekdayMask(96)}
                             >
                                 {t("downtime.weekends", "Weekends")}

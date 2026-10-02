@@ -34,7 +34,7 @@
     /* Typography / Ink */
     --text-primary: #F8FAFC;     /* Crisp titanium white */
     --text-secondary: #94A3B8;   /* Muted slate */
-    --text-muted: #7888A0;       /* WCAG AA compliant muted label */
+    --text-muted: #7C8CA2;       /* WCAG AA on every dark surface; mirrors redesign.css */
     --text-faint: rgba(148, 163, 184, 0.45);
 
     /* Primary Accent & Focus */
@@ -185,7 +185,7 @@
 
     --text-primary: #F0F6FC;
     --text-secondary: #8B949E;
-    --text-muted: #7E8896;
+    --text-muted: #848D97;
     --text-faint: rgba(139, 148, 158, 0.50);
 
     --color-primary: #38BDF8;

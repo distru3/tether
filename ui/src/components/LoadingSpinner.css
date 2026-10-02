@@ -15,7 +15,7 @@
 
 .st-spinner-head {
     animation: st-dash 1.5s ease-in-out infinite;
-    color: var(--color-accent, #DCA06D);
+    color: var(--color-accent-text);
 }
 
 .st-spinner-label {

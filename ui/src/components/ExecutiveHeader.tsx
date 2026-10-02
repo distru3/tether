@@ -74,7 +74,7 @@ export function ExecutiveHeader({
         </div>
 
         <div className="executive-time-readout">
-          <span className="exec-time-figure" aria-label={formatDuration(total)}>
+          <span className="exec-time-figure" role="img" aria-label={formatDuration(total)}>
             {heroParts(total).map(([value, unit]) => (
               <span key={unit} className="exec-time-cluster" aria-hidden="true">
                 <span className="exec-time-val">{value}</span>
@@ -116,7 +116,7 @@ export function ExecutiveHeader({
         <div className="exec-metric-cell">
           <div className="exec-metric-label-row">
             <span className="exec-metric-icon">
-              <Hourglass size={14} color="var(--color-primary)" aria-hidden="true" />
+              <Hourglass size={14} color="var(--color-primary-text)" aria-hidden="true" />
             </span>
             <span className="exec-metric-kicker">{t("hero.closestLimit")}</span>
             {limits.reached.length > 0 && (

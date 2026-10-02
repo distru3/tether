@@ -26,7 +26,7 @@ export function CategoryMix({ categories, total }: CategoryMixProps) {
       <div className="panel-heading-row">
         <div>
           <p className="panel-eyebrow">{t("mix.eyebrow")}</p>
-          <h3>{t("mix.title")}</h3>
+          <h3 aria-level={2}>{t("mix.title")}</h3>
         </div>
       </div>
       <div className="mix-content">

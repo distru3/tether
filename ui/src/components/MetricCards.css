@@ -61,7 +61,7 @@
 
 .metric-telemetry-icon,
 .metric-icon {
-    color: var(--color-primary);
+    color: var(--color-primary-text);
     display: flex;
     opacity: 0.85;
 }
