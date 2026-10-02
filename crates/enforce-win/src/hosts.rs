@@ -1,9 +1,11 @@
-//! `hosts`-file cleaner and legacy remover.
+//! Domain blocking through the system `hosts` file.
 //!
-//! Domain blocking is handled STRICTLY in-memory by `DnsProxyFilter` on UDP port 53.
-//! The `HostsFileFilter` exists ONLY to clean up any legacy managed blocks
-//! from previous versions and will NEVER write 0.0.0.0 or any domain entries
-//! to the system `hosts` file.
+//! Blocked domains are written inside a marker-delimited managed block so user
+//! entries outside it are never touched; `clear()` removes only that block.
+//! Each blocked host gets both an IPv4 (`0.0.0.0`) and an IPv6 (`::`) entry:
+//! with only the IPv4 line, the resolver still answers AAAA lookups from DNS,
+//! so the site stays reachable over IPv6. The hosts file has no wildcards, so
+//! `www.` and `m.` variants are written explicitly for subdomain rules.
 
 use std::fs;
 use std::path::PathBuf;
@@ -122,20 +124,19 @@ fn render_with_rules(existing: &str, rules: &[BlockRule]) -> String {
         out.push_str(BEGIN_MARKER);
         out.push('\n');
         for rule in rules {
-            out.push_str("0.0.0.0 ");
-            out.push_str(&rule.domain);
-            out.push('\n');
-
-            // Mirror common subdomains if wildcarding isn't possible in hosts
+            let mut hosts = vec![rule.domain.clone()];
             if rule.include_subdomains {
-                if !rule.domain.starts_with("www.") {
-                    out.push_str("0.0.0.0 www.");
-                    out.push_str(&rule.domain);
-                    out.push('\n');
+                for prefix in ["www.", "m."] {
+                    if !rule.domain.starts_with(prefix) {
+                        hosts.push(format!("{prefix}{}", rule.domain));
+                    }
                 }
-                if !rule.domain.starts_with("m.") {
-                    out.push_str("0.0.0.0 m.");
-                    out.push_str(&rule.domain);
+            }
+            for host in hosts {
+                for sink in ["0.0.0.0", "::"] {
+                    out.push_str(sink);
+                    out.push(' ');
+                    out.push_str(&host);
                     out.push('\n');
                 }
             }
@@ -232,8 +233,11 @@ mod tests {
             "127.0.0.1 localhost\n\n",
             "# >>> screentime managed block >>>\n",
             "0.0.0.0 tiktok.com\n",
+            ":: tiktok.com\n",
             "0.0.0.0 www.tiktok.com\n",
+            ":: www.tiktok.com\n",
             "0.0.0.0 m.tiktok.com\n",
+            ":: m.tiktok.com\n",
             "# <<< screentime managed block <<<\n",
         );
         assert_eq!(out, expected);

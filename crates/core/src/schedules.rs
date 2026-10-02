@@ -1,4 +1,4 @@
-//! Pure domain models and interval math for downtime schedules and focus sessions.
+//! Pure domain models and interval math for downtime schedules.
 //!
 //! # Invariants
 //!
@@ -97,42 +97,6 @@ pub fn is_any_downtime_active(
         .any(|s| is_schedule_active(s, local_minute, weekday_index))
 }
 
-/// An active, timed distraction-free focus session.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FocusSession {
-    pub name: Option<String>,
-    pub started_at_utc: DateTime<Utc>,
-    pub duration_minutes: u32,
-    pub expires_utc: DateTime<Utc>,
-}
-
-impl FocusSession {
-    pub fn new(name: Option<String>, started_at_utc: DateTime<Utc>, duration_minutes: u32) -> Self {
-        let duration_secs = (duration_minutes as i64) * 60;
-        let expires_utc = started_at_utc + chrono::Duration::seconds(duration_secs);
-        Self {
-            name,
-            started_at_utc,
-            duration_minutes,
-            expires_utc,
-        }
-    }
-
-    /// Check if the focus session is currently running.
-    pub fn is_active(&self, now: DateTime<Utc>) -> bool {
-        now >= self.started_at_utc && now < self.expires_utc
-    }
-
-    /// Remaining seconds in the session, or 0 if expired.
-    pub fn remaining_seconds(&self, now: DateTime<Utc>) -> i64 {
-        if now >= self.expires_utc {
-            0
-        } else {
-            (self.expires_utc - now).num_seconds().max(0)
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -211,28 +175,6 @@ mod tests {
             enabled: false,
         };
         assert!(!is_schedule_active(&schedule, 500, 0));
-    }
-
-    #[test]
-    fn focus_session_countdown_and_expiry() {
-        let start = DateTime::parse_from_rfc3339("2026-08-29T10:00:00Z")
-            .unwrap()
-            .with_timezone(&Utc);
-        let session = FocusSession::new(Some("Pomodoro".into()), start, 25);
-
-        assert_eq!(session.duration_minutes, 25);
-        assert_eq!(
-            session.expires_utc.to_rfc3339(),
-            "2026-08-29T10:25:00+00:00"
-        );
-
-        let mid = start + chrono::Duration::minutes(10);
-        assert!(session.is_active(mid));
-        assert_eq!(session.remaining_seconds(mid), 15 * 60);
-
-        let after = start + chrono::Duration::minutes(26);
-        assert!(!session.is_active(after));
-        assert_eq!(session.remaining_seconds(after), 0);
     }
 
     #[test]

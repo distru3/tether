@@ -419,41 +419,6 @@ fn set_allowlist(
     })
 }
 
-#[tauri::command]
-fn get_focus_session() -> CmdResult<Option<st_ipc::FocusSessionDto>> {
-    match ipc_client::request(st_ipc::Request::GetFocusSession) {
-        Ok(Response::FocusSession { session }) => Ok(session),
-        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
-        Ok(_) => Err(CommandError::unexpected()),
-        Err(e) => Err(CommandError::unreachable(e)),
-    }
-}
-
-#[tauri::command]
-fn start_focus_session(duration_minutes: u32, name: Option<String>) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::StartFocusSession {
-        duration_minutes,
-        name,
-    })
-}
-
-#[tauri::command]
-fn end_focus_session(pin: Option<String>) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::EndFocusSession { pin })
-}
-
-#[tauri::command]
-fn emergency_reset_network() -> CmdResult<()> {
-    tray::run_emergency_network_reset();
-    Ok(())
-}
-
-#[tauri::command]
-fn stop_all_services(app: tauri::AppHandle) -> CmdResult<()> {
-    tray::stop_all_services(&app);
-    Ok(())
-}
-
 /// Selectable themes, mirroring `ThemePreference` in `ui/src/hooks/useTheme.ts`.
 const THEMES: [&str; 5] = [
     "midnight-cobalt",
@@ -594,11 +559,6 @@ pub fn run() {
             delete_schedule,
             list_allowlist,
             set_allowlist,
-            get_focus_session,
-            start_focus_session,
-            end_focus_session,
-            emergency_reset_network,
-            stop_all_services,
             preview_alert_sound,
             get_theme,
             set_theme,

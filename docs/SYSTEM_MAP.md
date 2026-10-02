@@ -50,7 +50,7 @@ The system is partitioned into **three separate processes** due to Windows opera
 crates/
 ├── core/             Pure domain logic. NO OS APIs. NO wall clock. NO SQL.
 │                     Platform traits (`WindowTracker`, `ProcessController`, etc.),
-│                     DayKey calculation, LimitEngine, Category, Schedules, FocusSession.
+│                     DayKey calculation, LimitEngine, Category, Schedules, Settings.
 ├── storage/          SQLite migrations (0001-0004), query modules, connection handling.
 ├── ipc/              Named pipe framing, wire serialization, Request/Response enums,
 │                     ts-rs TypeScript binding generator.

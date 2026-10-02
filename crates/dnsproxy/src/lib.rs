@@ -1,27 +1,22 @@
-//! DNS configuration and network filtering utilities.
+//! Family DNS: adapter DNS configuration and the browser DoH lockdown.
 //!
-//! Provides system DNS management for adult/malware protection (Cloudflare Family DNS
-//! via `netsh`), original DNS configuration backup and restoration, browser DoH policy
-//! lockdown, and network filter hooks.
+//! Provides system DNS management for adult/malware protection (Cloudflare
+//! Family DNS via `netsh`), capture of the original configuration for exact
+//! restoration, and browser enterprise policies plus DoT firewall rules so
+//! browsers cannot bypass system DNS. Orchestration (backups, ordering,
+//! rollback) lives in the agent's `family_dns` module.
 //!
 //! # Module map
 //!
 //! * [`dns_config`] (Windows) — per-interface DNS capture and restore via
 //!   `GetAdaptersAddresses` + `netsh` (Cloudflare Family DNS).
-//! * [`lockdown`] — browser enterprise policy keys to disable DoH and ensure queries
-//!   respect system DNS resolution.
-//! * [`filter`] (Windows) — [`DnsProxyFilter`] network filter adapter.
+//! * [`lockdown`] — browser enterprise policy keys to disable DoH and ensure
+//!   queries respect system DNS resolution; outbound DoT firewall rules.
 //!
-//! On non-Windows targets the OS-touching modules compile away and the crate
-//! is a transparent no-op (mirroring `st-enforce-win`), so the workspace builds
-//! everywhere while the resolver logic stays fully exercised by tests.
+//! Domain blocking itself is not here: it is the hosts file
+//! (`st-enforce-win::HostsFileFilter`).
 
 pub mod lockdown;
 
 #[cfg(windows)]
 pub mod dns_config;
-#[cfg(windows)]
-pub mod filter;
-
-#[cfg(windows)]
-pub use filter::DnsProxyFilter;

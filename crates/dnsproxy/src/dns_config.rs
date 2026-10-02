@@ -10,8 +10,7 @@
 //! * **Capture** uses [`GetAdaptersAddresses`] (iphlpapi) with the unicast /
 //!   anycast / multicast address lists skipped — we only care about the DNS
 //!   server chain and the friendly name. Only adapters whose `OperStatus` is
-//!   `IfOperStatusUp` are captured, so a dead VPN adapter is not turned into a
-//!   `127.0.0.1` resolver.
+//!   `IfOperStatusUp` are captured, so a dead VPN adapter is not reconfigured.
 //! * **Override** runs `netsh interface ipv4 set dnsservers ...` per adapter.
 //!   `validate=no` is essential: in SYSTEM context `netsh` would otherwise try
 //!   to validate reachability and can hang on an unresponsive resolver.
@@ -22,17 +21,16 @@
 //! # Honest caveats (verified by manual integration, not headless tests)
 //!
 //! * The override is global to the machine and lives outside the process; a
-//!   crash between override and restore leaves the machine pointed at
-//!   `127.0.0.1`. The agent's fail-closed rule — blocks persist across restarts
-//!   and startup never wipes them — means the resolver is re-applied on next
-//!   start, which is the same state. `clear()` is the undo.
+//!   crash between override and restore leaves the machine on Cloudflare
+//!   Family DNS, which still resolves everything except filtered domains. The
+//!   backup survives (database and file), so a later disable restores it.
 //! * Restore pins the captured static values even when they originally came
 //!   from DHCP (the API reports DHCP-assigned DNS in the same list). That pins
 //!   today's values rather than tracking future DHCP changes; it never strands
 //!   the machine, and it is the documented cost of not reading the DHCP flag.
-//! * On failure to capture, the caller must NOT override anything — see
-//!   [`DnsProxyFilter`](crate::filter::DnsProxyFilter). Never override what we
-//!   did not first observe.
+//! * On failure to capture, the caller must NOT override anything (the agent's
+//!   `family_dns::enable` aborts first). Never override what we did not first
+//!   observe.
 
 use std::net::{IpAddr, Ipv4Addr};
 
@@ -376,7 +374,7 @@ pub fn pick_upstream(ifaces: &[IfaceDns]) -> Option<IpAddr> {
         .find(|ip| !ip.is_loopback())
 }
 
-/// Point every captured interface's IPv4 resolver at `127.0.0.1`.
+/// Point every captured interface at Cloudflare Family DNS (IPv4 and IPv6).
 ///
 /// `validate=no` is load-bearing (see the module docs: SYSTEM hangs on
 /// validation). Runs each `netsh` as a short-lived child; failure on one
