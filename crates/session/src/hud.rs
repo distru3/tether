@@ -249,7 +249,15 @@ impl HudOverlayRun {
     }
 }
 
-pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) -> HudOverlayRun {
+/// Create the HUD on its own UI thread. `None` when the window could not be
+/// created; the caller simply has no HUD this tick. (This used to panic, and
+/// the release profile aborts on panic, so a failed `CreateWindowExW` took the
+/// whole session helper, and with it focus reports and the block overlay,
+/// down.)
+pub fn spawn_hud_overlay(
+    target_hwnd: isize,
+    target_rect: (i32, i32, i32, i32),
+) -> Option<HudOverlayRun> {
     let (tx, ty, tw, th) = target_rect;
     let wr = RECT {
         left: tx,
@@ -274,7 +282,9 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
 
     let (sender, receiver) = std::sync::mpsc::channel();
     let thread = std::thread::spawn(move || unsafe {
-        let instance = GetModuleHandleW(None).unwrap();
+        let Ok(instance) = GetModuleHandleW(None) else {
+            return;
+        };
         let class_name = w!("ScreentimeHudClass");
         let wc = WNDCLASSEXW {
             cbSize: std::mem::size_of::<WNDCLASSEXW>() as u32,
@@ -441,7 +451,9 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
             let _ = timeEndPeriod(1);
         });
 
-        sender.send(hwnd.0 as isize).unwrap();
+        if sender.send(hwnd.0 as isize).is_err() {
+            return;
+        }
 
         let mut msg = MSG::default();
         while GetMessageW(&mut msg, None, 0, 0).as_bool() {
@@ -452,12 +464,18 @@ pub fn spawn_hud_overlay(target_hwnd: isize, target_rect: (i32, i32, i32, i32)) 
         let _ = KillTimer(hwnd, TRACK_TIMER_ID);
     });
 
-    let hwnd = HWND(receiver.recv().unwrap() as *mut c_void);
-    HudOverlayRun {
+    // The thread drops `sender` without sending when it fails before the
+    // window exists.
+    let Ok(raw) = receiver.recv() else {
+        let _ = thread.join();
+        tracing::debug!("HUD window could not be created");
+        return None;
+    };
+    Some(HudOverlayRun {
         thread: Some(thread),
-        hwnd,
+        hwnd: HWND(raw as *mut c_void),
         controller: anim_shared,
-    }
+    })
 }
 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
@@ -728,7 +746,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let hdc = BeginPaint(hwnd, &mut ps);
 
             let mut rect = RECT::default();
-            windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect).unwrap();
+            if windows::Win32::UI::WindowsAndMessaging::GetClientRect(hwnd, &mut rect).is_err() {
+                let _ = EndPaint(hwnd, &ps);
+                return LRESULT(0);
+            }
 
             let bg_color = if st.is_light { BG_LIGHT } else { BG_DARK };
             let border_color = if st.is_light {
