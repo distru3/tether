@@ -1472,22 +1472,6 @@ button:not([disabled]):active {
 
 /* ---- Redesigned Limit Editor Dialog Controls ---- */
 
-.duration-slider-wrap {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 6px;
-  margin-bottom: 10px;
-}
-
-.duration-slider {
-  flex: 1;
-  height: 6px;
-  border-radius: 3px;
-  accent-color: var(--color-primary);
-  cursor: pointer;
-}
-
 .weekday-pill-bar {
   display: flex;
   gap: 6px;

@@ -78,7 +78,7 @@ export function AppDirectoryDialog({
                     </span>
                 </div>
                 <p className="panel-note" style={{ marginBottom: 16 }}>
-                    {t("categorize.desc", "Choose the primary category for this app. You can also add tag categories for overlapping budgets.")}
+                    {t("categorize.directoryDesc")}
                 </p>
 
                 {/* Search & filter toolbar */}
@@ -166,7 +166,7 @@ export function AppDirectoryDialog({
                                                     </span>
                                                 )}
                                             </div>
-                                            <span className="app-directory-key">{app.key}</span>
+                                            <span className="app-directory-key" title={app.key}>{app.key.replace(/^exe:/i, "")}</span>
                                         </div>
                                     </div>
 
@@ -181,7 +181,7 @@ export function AppDirectoryDialog({
                                                 cursor: "pointer",
                                             }}
                                             onClick={() => onCategorize(app.id, app.display_name, app.primary_category, app.tags)}
-                                            title={t("categorize.changeCategory", "Click to change category")}
+                                            title={t("categorize.changeCategory")}
                                             disabled={busy}
                                         >
                                             {catName}
@@ -192,7 +192,7 @@ export function AppDirectoryDialog({
                                             onClick={() => onCategorize(app.id, app.display_name, app.primary_category, app.tags)}
                                             disabled={busy}
                                         >
-                                            {t("ledger.tag", "Tag")}
+                                            {t("categorize.change")}
                                         </button>
                                     </div>
                                 </div>
