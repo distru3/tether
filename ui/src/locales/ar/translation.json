@@ -450,7 +450,9 @@
     "pinSaved": "تم حفظ رمز PIN — يرجى تدوين رمز الاسترداد.",
     "categorized": "تم تصنيف {{app}}.",
     "resetAutoDetect": "تمت إعادة {{app}} إلى الكشف التلقائي.",
-    "settingSaved": "تم حفظ الإعداد."
+    "settingSaved": "تم حفظ الإعداد.",
+    "applied": "تم التطبيق.",
+    "takesEffect": "يسري {{when}}."
   },
   "api": {
     "errors": {

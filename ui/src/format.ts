@@ -65,24 +65,22 @@ export function sharePercent(seconds: number, total: number): number {
     return Math.min(100, Math.round((seconds / total) * 100));
 }
 
-const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"] as const;
-const FULL_WEEKDAYS = ["SUNDAY", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY"] as const;
-const MONTHS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const;
-
-export function formatDateline(d: Date): string {
-    return `${WEEKDAYS[d.getDay()]} ${d.getDate()} ${MONTHS[d.getMonth()]}`;
-}
-
+/** Local clock time in the UI language, e.g. "9:30 PM" / "٩:٣٠ م". */
 export function formatClock(d: Date): string {
-    return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return d.toLocaleTimeString(i18n.language, { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * The tail of a limit-change toast: " Applied." when it took effect now, or
+ * " Takes effect Tue 9:30 PM." when the anti-impulse cooldown queued it.
+ */
 export function effectClause(effectiveUtc: string | null | undefined): string {
-    if (!effectiveUtc) return " Applied.";
-    const t = new Date(effectiveUtc);
-    if (Number.isNaN(t.getTime())) return " Applied.";
-    if (t.getTime() <= Date.now()) return " Applied.";
-    return ` Takes effect ${formatClock(t)}.`;
+    const t = effectiveUtc ? new Date(effectiveUtc) : null;
+    if (t === null || Number.isNaN(t.getTime()) || t.getTime() <= Date.now()) {
+        return " " + i18n.t("actions.applied");
+    }
+    const when = t.toLocaleString(i18n.language, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+    return " " + i18n.t("actions.takesEffect", { when });
 }
 
 export function targetLabel(target: LimitTargetDto, catalog: CatalogDto | null): string {
@@ -105,10 +103,13 @@ export function shiftDay(key: number, delta: number): number {
     return calendarKey(new Date(dayKeyToDate(key).getTime() + delta * 86400000));
 }
 
-/** Dateline above the hero when browsing history: "TUESDAY · AUG 24". */
+/** A browsed day in the UI language: "Tuesday, Aug 24" / "الثلاثاء، ٢٤ أغسطس". */
 export function formatDayLabel(key: number): string {
-    const d = dayKeyToDate(key);
-    return `${FULL_WEEKDAYS[d.getDay()]} · ${MONTHS[d.getMonth()]} ${d.getDate()}`;
+    return dayKeyToDate(key).toLocaleDateString(i18n.language, {
+        weekday: "long",
+        month: "short",
+        day: "numeric",
+    });
 }
 
 /** Compact ledger bar label: "07·23". */
