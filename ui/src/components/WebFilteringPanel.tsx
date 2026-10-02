@@ -15,7 +15,26 @@ import {
     ChevronLeft,
     ChevronRight,
 } from "lucide-react";
-import { addManualBlock, listManualBlocks, removeManualBlock } from "../api";
+import { addManualBlock, describeError, listManualBlocks, removeManualBlock, verifyPin } from "../api";
+
+/** Thrown `Error`s carry our own (already translated) text; invoke failures are wire errors. */
+function messageOf(e: unknown): string {
+    return e instanceof Error ? e.message : describeError(e);
+}
+
+/**
+ * The domain on one line of an uploaded list. Accepts plain domains and
+ * hosts-file lines (`0.0.0.0 example.com`), which is how most published
+ * blocklists are distributed; strips trailing comments.
+ */
+function domainFromLine(line: string): string | null {
+    const content = (line.split("#")[0] ?? "").trim().toLowerCase();
+    const tokens = content.split(/[\s,]+/).filter(Boolean);
+    const first = tokens[0];
+    if (first === undefined) return null;
+    const candidate = /^[\d.:]+$/.test(first) ? tokens[1] : first;
+    return candidate !== undefined && candidate.includes(".") ? candidate : null;
+}
 import { MetricCards } from "./MetricCards";
 import { LoadingSpinner } from "./LoadingSpinner";
 import "./WebFilteringPanel.css";
@@ -40,7 +59,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
         setLoading(true);
         listManualBlocks()
             .then(res => setDomains(res.domains))
-            .catch(e => setError(e.toString()))
+            .catch(e => setError(messageOf(e)))
             .finally(() => setLoading(false));
     };
 
@@ -63,13 +82,15 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
             await addManualBlock(trimmed);
             setNewDomain("");
             refresh();
-        } catch (e: any) {
-            setError(e.toString());
+        } catch (e: unknown) {
+            setError(messageOf(e));
         }
     };
 
     const handleShowAdult = () => {
-        onAttempt(t("pinGate.viewHidden"), async (_pin: string) => {
+        onAttempt(t("pinGate.viewHidden"), async (pin: string) => {
+            // Ask the agent: a UI-only check would accept any input.
+            await verifyPin(pin);
             setShowAdult(true);
         });
     };
@@ -104,10 +125,10 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
 
         try {
             const text = await file.text();
-            const lines = text.split(/[\r\n]+/).map(line => line.trim().toLowerCase()).filter(line => line.length > 0 && !line.startsWith("#"));
-            
+            const parsed = text.split(/[\r\n]+/).map(domainFromLine).filter((d): d is string => d !== null);
+
             const existingLowers = domains.map(d => d.toLowerCase());
-            const uniqueNew = Array.from(new Set(lines)).filter(d => !existingLowers.includes(d));
+            const uniqueNew = Array.from(new Set(parsed)).filter(d => !existingLowers.includes(d));
 
             if (uniqueNew.length === 0) {
                 throw new Error(t("webFilter.allBlocked"));
@@ -117,15 +138,23 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                 throw new Error(t("webFilter.tooMany", { count: uniqueNew.length }));
             }
 
-            // Simple batch processing
+            // One bad line must not abort the rest of the import.
+            let added = 0;
+            let skipped = 0;
             for (const domain of uniqueNew) {
-                if (domain.includes(".") && !domain.includes(" ")) {
+                try {
                     await addManualBlock(domain);
+                    added += 1;
+                } catch {
+                    skipped += 1;
                 }
             }
             refresh();
-        } catch (err: any) {
-            setError(err.toString());
+            if (skipped > 0) {
+                setError(t("webFilter.importSummary", { added, skipped }));
+            }
+        } catch (err: unknown) {
+            setError(messageOf(err));
         } finally {
             setIsUploading(false);
             if (fileInputRef.current) {

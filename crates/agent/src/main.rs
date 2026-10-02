@@ -22,21 +22,22 @@
 mod classify;
 mod cli;
 mod enforcer;
+mod family_dns;
 mod ipc_server;
 mod locks;
 mod platform;
+mod policy;
 mod sampler;
 mod service;
 
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, RwLock};
 use std::time::Duration as StdDuration;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use st_core::clock::{Clock, ClockGuard, ClockVerdict, SystemClock};
-use st_core::daykey::DayKey;
 use st_core::limits::LimitEngine;
 use st_core::model::SubjectRef;
 use st_core::platform::IdleState;
@@ -48,8 +49,9 @@ use tracing_subscriber::prelude::*;
 
 use crate::enforcer::Enforcer;
 use crate::ipc_server::{IpcServerHandle, StatusInfo};
-use crate::locks::lock_db;
+use crate::locks::{lock_db, read_recover};
 use crate::platform::Backends;
+use crate::policy::Policy;
 use crate::sampler::{PendingInterval, Sampler};
 
 const POLL: StdDuration = StdDuration::from_secs(1);
@@ -86,104 +88,74 @@ fn main() -> Result<()> {
         Ok(cli::Action::Uninstall) => service::uninstall(),
         Ok(cli::Action::ResetNetwork) => {
             println!("Resetting network: clearing DNS lockdown, hosts file, and DNS overrides...");
-            st_dns::lockdown::clear_lockdown();
-
-            // Clear DNS
-            if let Ok(ifaces) = st_dns::dns_config::capture() {
-                for iface in ifaces {
-                    let _ = st_dns::dns_config::command(
-                        "netsh",
-                        &[
-                            "interface",
-                            "ipv4",
-                            "set",
-                            "dnsservers",
-                            &format!("name={}", iface.name),
-                            "source=dhcp",
-                        ],
-                    );
-                }
-                let _ = st_dns::dns_config::command("ipconfig", &["/flushdns"]);
-            }
-
+            reset_network();
             println!("Network reset complete.");
             Ok(())
         }
         Ok(cli::Action::EnableFamilyDns) => {
             println!("Enabling Family DNS...");
-            st_dns::lockdown::apply_lockdown(Some(std::net::IpAddr::V4(std::net::Ipv4Addr::new(
-                1, 1, 1, 3,
-            ))));
-            if let Ok(ifaces) = st_dns::dns_config::capture() {
-                if let Ok(dir) = data_dir() {
-                    let _ = std::fs::create_dir_all(&dir);
-                    let backup_file = dir.join("original_dns_backup.json");
-                    if !backup_file.exists() {
-                        if let Ok(json) = serde_json::to_string(&ifaces) {
-                            let _ = std::fs::write(&backup_file, json);
-                        }
-                    }
-                }
-                st_dns::dns_config::set_family_dns(&ifaces);
-                st_dns::dns_config::set_registry_family_dns(true);
-                println!("Enabled Family DNS successfully.");
-            }
+            let data_dir = data_dir()?;
+            let db = Mutex::new(open_db(&data_dir)?);
+            family_dns::enable(&db, &family_dns::WindowsDns, Some(&data_dir))
+                .map_err(|e| anyhow::anyhow!("enabling Family DNS failed: {e}"))?;
+            println!("Enabled Family DNS successfully.");
             Ok(())
         }
         Ok(cli::Action::DisableFamilyDns) => {
             println!("Disabling Family DNS...");
-            st_dns::lockdown::clear_lockdown();
-            let mut restored = false;
-            if let Ok(dir) = data_dir() {
-                let backup_file = dir.join("original_dns_backup.json");
-                if backup_file.exists() {
-                    if let Ok(content) = std::fs::read_to_string(&backup_file) {
-                        if let Ok(ifaces) =
-                            serde_json::from_str::<Vec<st_dns::dns_config::IfaceDns>>(&content)
-                        {
-                            st_dns::dns_config::restore_all(&ifaces);
-                            restored = true;
-                        }
-                    }
-                    let _ = std::fs::remove_file(backup_file);
-                }
-            }
-            if !restored {
-                if let Ok(ifaces) = st_dns::dns_config::capture() {
-                    for iface in &ifaces {
-                        let _ = st_dns::dns_config::command(
-                            "netsh",
-                            &[
-                                "interface",
-                                "ipv4",
-                                "set",
-                                "dnsservers",
-                                &format!("name={}", iface.name),
-                                "source=dhcp",
-                            ],
-                        );
-                        let _ = st_dns::dns_config::command(
-                            "netsh",
-                            &[
-                                "interface",
-                                "ipv6",
-                                "set",
-                                "dnsservers",
-                                &format!("name={}", iface.name),
-                                "source=dhcp",
-                            ],
-                        );
-                    }
-                    let _ = st_dns::dns_config::command("ipconfig", &["/flushdns"]);
-                }
-            }
-            st_dns::dns_config::set_registry_family_dns(false);
+            let data_dir = data_dir()?;
+            // The uninstaller runs this against a possibly half-removed
+            // install: use the database if it is there, the file otherwise.
+            let db = data_dir
+                .join(DB_FILE)
+                .exists()
+                .then(|| open_db(&data_dir).ok().map(Mutex::new))
+                .flatten();
+            family_dns::disable(db.as_ref(), &family_dns::WindowsDns, Some(&data_dir))
+                .map_err(|e| anyhow::anyhow!("disabling Family DNS failed: {e}"))?;
             println!("Disabled Family DNS successfully.");
             Ok(())
         }
         Err(message) => {
             eprintln!("{message}");
             std::process::exit(1);
+        }
+    }
+}
+
+/// Database file name under the data directory.
+const DB_FILE: &str = "screentime.db";
+
+fn open_db(data_dir: &Path) -> Result<Db> {
+    std::fs::create_dir_all(data_dir)
+        .with_context(|| format!("creating data directory {}", data_dir.display()))?;
+    let path = data_dir.join(DB_FILE);
+    Db::open(&path).with_context(|| format!("opening database {}", path.display()))
+}
+
+/// `--reset-network`: emergency recovery that undoes every network change
+/// Tether can make — browser DoH policies and DoT firewall rules, adapter DNS
+/// overrides (back to DHCP, ignoring any backup in case the backup is what is
+/// broken), and the managed hosts-file block. Best effort throughout: each
+/// step runs even if an earlier one failed.
+fn reset_network() {
+    st_dns::lockdown::clear_lockdown();
+    if let Err(e) = family_dns::WindowsDns::reset_all_to_dhcp() {
+        eprintln!("resetting adapter DNS failed: {e}");
+    }
+    st_dns::dns_config::set_registry_family_dns(false);
+    let mut hosts = st_enforce_win::HostsFileFilter::new();
+    if let Err(e) = st_core::platform::NetworkFilter::clear(&mut hosts) {
+        eprintln!("clearing the hosts file block failed: {e}");
+    }
+    // Keep the UI truthful: protection is off now.
+    if let Ok(dir) = data_dir() {
+        let _ = std::fs::remove_file(dir.join(family_dns::BACKUP_FILE));
+        if let Ok(db) = open_db(&dir) {
+            let _ = db.set_setting("family_dns_enabled", "false");
+            let _ = db
+                .conn()
+                .execute("DELETE FROM settings WHERE key = 'original_dns_config'", []);
         }
     }
 }
@@ -242,19 +214,16 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
     install_shutdown_handler();
     tracing::info!(mode = mode_label, "agent entrypoint reached");
 
-    let db_path = data_dir.join("screentime.db");
-    let db =
-        Arc::new(Mutex::new(Db::open(&db_path).with_context(|| {
-            format!("opening database {}", db_path.display())
-        })?));
-    tracing::info!(path = %db_path.display(), "database ready");
+    let db = Arc::new(Mutex::new(open_db(&data_dir)?));
+    tracing::info!(path = %data_dir.join(DB_FILE).display(), "database ready");
 
     let clock = Arc::new(SystemClock::new());
-    // Read the policy knobs one statement each: a temporary `MutexGuard` lives
-    // until the end of its statement, so two lock acquisitions inside a single
-    // struct literal would deadlock on the second one.
-    let day_start_minutes = lock_db(&db).setting_i64("day_start_minutes", 0);
-    let idle_threshold = lock_db(&db).setting_i64("idle_threshold_secs", 60).max(1) as u64;
+    // One typed load; the IPC server and the main loop share it live.
+    let policy = Arc::new(RwLock::new(Policy::load(&lock_db(&db))));
+    let (day_start_minutes, idle_threshold) = {
+        let p = read_recover(&policy, "policy");
+        (p.day_start_minutes, p.idle_threshold_secs.max(1) as u64)
+    };
     let capture_titles = lock_db(&db)
         .setting("capture_window_titles")?
         .map(|v| v == "true")
@@ -308,53 +277,24 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
             .expect("process controller present"),
     ));
 
-    let limit_cooldown_hours = lock_db(&db).setting_i64("limit_cooldown_hours", 24);
-    let strict_mode = lock_db(&db)
-        .setting("strict_mode")
-        .ok()
-        .flatten()
-        .map(|v| v == "true")
-        .unwrap_or(false);
-    let show_hud_overlay = lock_db(&db)
-        .setting("show_hud_overlay")
-        .ok()
-        .flatten()
-        .map(|v| v != "false")
-        .unwrap_or(true);
-    let show_hud_in_fullscreen = lock_db(&db)
-        .setting("show_hud_in_fullscreen")
-        .ok()
-        .flatten()
-        .map(|v| v == "true")
-        .unwrap_or(false);
-    let hud_peek_hotkey = lock_db(&db)
-        .setting("hud_peek_hotkey")
-        .ok()
-        .flatten()
-        .unwrap_or_else(|| "Ctrl+Alt+T".to_string());
-    let alert_volume = lock_db(&db).setting_i64("alert_volume", 80).clamp(0, 100);
     let ipc = ipc_server::spawn(
         PIPE_NAME,
-        db.clone(),
-        status,
-        ipc_server::Policy {
-            limit_cooldown_hours,
-            strict_mode,
-            day_start_minutes,
-            idle_threshold_secs: idle_threshold as i64,
-            show_hud_overlay,
-            show_hud_in_fullscreen,
-            hud_peek_hotkey,
-            alert_volume,
+        ipc_server::ServerDeps {
+            db: db.clone(),
+            status,
+            policy: policy.clone(),
+            processes,
+            clock: clock.clone(),
+            dns: Arc::new(family_dns::WindowsDns),
+            data_dir: Some(data_dir.clone()),
         },
-        processes,
-        clock.clone(),
     );
     tracing::info!(pipe = PIPE_NAME, "IPC server listening");
 
     run_main_loop(
         clock,
         db,
+        policy,
         uncategorized,
         day_start_minutes,
         self_sampling,
@@ -368,9 +308,11 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
 
 /// The sampling/enforcement loop. Returns on graceful shutdown instead of
 /// exiting in place so `main` can log a clean stop.
+#[allow(clippy::too_many_arguments)]
 fn run_main_loop(
     clock: Arc<dyn Clock>,
     db: Arc<Mutex<Db>>,
+    policy: Arc<RwLock<Policy>>,
     uncategorized: i64,
     day_start_minutes: i64,
     self_sampling: bool,
@@ -378,7 +320,7 @@ fn run_main_loop(
     ipc: IpcServerHandle,
 ) {
     // Only the development fallback owns a sampler; report ingestion replaces
-    // it otherwise.
+    // it otherwise. It keeps the startup day boundary (dev-only path).
     let mut sampler = self_sampling.then(|| Sampler::new(day_start_minutes));
     let mut guard = ClockGuard::new(&*clock, Duration::seconds(CLOCK_TOLERANCE_SECS));
     let mut enforcer = Enforcer::new();
@@ -391,6 +333,9 @@ fn run_main_loop(
     while !shutdown_requested() {
         let now = clock.now_utc();
         let tz_offset = clock.local_offset_seconds();
+        // Read live every tick: a day-boundary change over IPC must move
+        // enforcement in step with report ingestion, which also reads it live.
+        let day_start_minutes = read_recover(&policy, "policy").day_start_minutes;
 
         // Check for manual web blocks
         if let Ok(rules) = lock_db(&db).list_block_rules() {
@@ -490,8 +435,6 @@ fn evaluate_limits(
     tz_offset: i32,
     day_start_minutes: i64,
 ) {
-    let today = DayKey::from_utc(now, tz_offset, day_start_minutes);
-
     let limits = {
         let mut db_guard = lock_db(db);
         // A loosened limit may have come into effect since the last tick.
@@ -527,7 +470,6 @@ fn evaluate_limits(
     if let Err(e) = result {
         tracing::error!(error = %e, "limit enforcement failed");
     }
-    let _ = today;
 }
 
 /// Persist one completed interval, auto-classifying the app on first sight.

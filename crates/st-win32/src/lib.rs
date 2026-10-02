@@ -9,6 +9,8 @@
 //! implementation: fixes and audits land in one place. Existing crates adopt
 //! it later; nothing here depends on them.
 
+pub mod audio;
+
 use std::os::windows::ffi::OsStrExt;
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE};

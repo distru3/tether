@@ -224,7 +224,8 @@
     "noMatches": "No blocked domains match your search query.",
     "remove": "Remove",
     "removeDomain": "Remove {{domain}}",
-    "searchPlaceholder": "Search blocked domains..."
+    "searchPlaceholder": "Search blocked domains...",
+    "importSummary": "Imported {{added}} domains; skipped {{skipped}} that were not valid domain names."
   },
   "categorize": {
     "title": "Categorize app",

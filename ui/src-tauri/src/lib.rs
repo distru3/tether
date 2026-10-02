@@ -253,6 +253,12 @@ fn set_setting(key: String, value: String, pin: Option<String>) -> CmdResult<()>
     accepted_cmd(st_ipc::Request::SetSetting { key, value, pin })
 }
 
+/// Check a PIN without changing anything (UI-only reveals).
+#[tauri::command]
+fn verify_pin(pin: String) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::VerifyPin { pin })
+}
+
 /// Dismantle the vault. `credential` may be the current PIN or the standing
 /// recovery code.
 #[tauri::command]
@@ -602,47 +608,11 @@ fn set_theme(app: tauri::AppHandle, theme: String) -> CmdResult<()> {
 fn preview_alert_sound(volume: Option<u32>) -> CmdResult<()> {
     #[cfg(windows)]
     {
-        let volume_pct = volume.unwrap_or(80);
-        if volume_pct == 0 {
-            return Ok(());
-        }
         const CHIME_WAV: &[u8] = include_bytes!("../../../crates/session/src/assets/chime.wav");
-        #[link(name = "winmm")]
-        extern "system" {
-            fn PlaySoundW(pszsound: *const u16, hmod: isize, fdwsound: u32) -> i32;
-        }
-        const SND_ASYNC: u32 = 0x0001;
-        const SND_NODEFAULT: u32 = 0x0002;
-        const SND_MEMORY: u32 = 0x0004;
-
-        if volume_pct >= 100 {
-            unsafe {
-                let _ = PlaySoundW(
-                    CHIME_WAV.as_ptr() as *const u16,
-                    0,
-                    SND_ASYNC | SND_NODEFAULT | SND_MEMORY,
-                );
-            }
-        } else {
-            let mut scaled = CHIME_WAV.to_vec();
-            if scaled.len() > 44 {
-                for chunk in scaled[44..].chunks_exact_mut(2) {
-                    let sample = i16::from_le_bytes([chunk[0], chunk[1]]);
-                    let new_sample = ((sample as i32 * volume_pct as i32) / 100)
-                        .clamp(i16::MIN as i32, i16::MAX as i32)
-                        as i16;
-                    chunk.copy_from_slice(&new_sample.to_le_bytes());
-                }
-            }
-            unsafe {
-                let _ = PlaySoundW(
-                    scaled.as_ptr() as *const u16,
-                    0,
-                    SND_ASYNC | SND_NODEFAULT | SND_MEMORY,
-                );
-            }
-        }
+        st_win32::audio::play_wav_scaled(CHIME_WAV, volume.unwrap_or(80));
     }
+    #[cfg(not(windows))]
+    let _ = volume;
     Ok(())
 }
 
@@ -676,6 +646,7 @@ pub fn run() {
             set_pin,
             recover_pin,
             remove_pin,
+            verify_pin,
             set_setting,
             set_limit,
             cancel_pending_limit,

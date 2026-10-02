@@ -60,6 +60,11 @@ export function recoverPin(recoveryCode: string, newPin: string): Promise<PinVau
     return invoke("recover_pin", { recoveryCode, newPin });
 }
 
+/** Check a PIN without changing anything; rejects with `bad_pin` on mismatch. */
+export function verifyPin(pin: string): Promise<void> {
+    return invoke("verify_pin", { pin });
+}
+
 /** Dismantle the vault; the credential may be the PIN or the recovery code. */
 export function removePin(credential: string): Promise<void> {
     return invoke("remove_pin", { credential });

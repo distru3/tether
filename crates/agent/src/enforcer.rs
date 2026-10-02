@@ -123,9 +123,10 @@ impl Enforcer {
         }
 
         // 3. Check Downtime Schedules
-        let minute_of_day =
-            (now.timestamp().rem_euclid(86400) + tz_offset_secs as i64).rem_euclid(86400) / 60;
-        let weekday_idx = today.weekday_index().unwrap_or(0);
+        // Wall-clock minute and weekday from the same local instant; see
+        // `local_minute_and_weekday` for why `today` must not be used here.
+        let (minute_of_day, weekday_idx) =
+            st_core::schedules::local_minute_and_weekday(now, tz_offset_secs);
         let schedules = db.list_schedules()?;
         let downtime_active = schedules.iter().any(|s| {
             let sched = st_core::DowntimeSchedule {
@@ -136,7 +137,7 @@ impl Enforcer {
                 end_minute: s.end_minute,
                 enabled: s.enabled,
             };
-            st_core::schedules::is_schedule_active(&sched, minute_of_day as u32, weekday_idx as u32)
+            st_core::schedules::is_schedule_active(&sched, minute_of_day, weekday_idx)
         });
 
         if blockable && downtime_active && !allowlisted {
@@ -365,6 +366,52 @@ mod tests {
             at("2026-08-20T12:02:00Z"),
         );
         assert!(!db.is_blocked(SubjectRef::App(app)).expect("unblocked"));
+    }
+
+    /// Regression: with a non-midnight day start, the overnight window's
+    /// morning half used to be checked against the wrong weekday bit.
+    #[test]
+    fn overnight_downtime_blocks_in_the_small_hours_with_a_late_day_start() {
+        let mut db = Db::open_in_memory().expect("db");
+        let app = seed_app(&mut db, "C:\\games\\steam\\steam.exe", "games");
+        // Monday-only Bedtime, 22:00-07:00.
+        let id = db
+            .create_schedule("Bedtime", 0b000_0001, 22 * 60, 7 * 60)
+            .expect("schedule");
+        assert!(id > 0);
+
+        let mut enforcer = Enforcer::new();
+        let no_limits = LimitEngine::with_default_warnings(vec![]);
+        // 2026-08-18 is a Tuesday: 02:00 local belongs to Monday's window,
+        // even though a 04:00 day start still files it under Monday's DayKey.
+        enforcer
+            .tick(
+                &mut db,
+                &no_limits,
+                Some(&steam_key()),
+                None,
+                at("2026-08-18T02:00:00Z"),
+                0,
+                4 * 60,
+            )
+            .expect("tick");
+        assert!(db.is_blocked(SubjectRef::App(app)).expect("blocked"));
+
+        // The allowlist exempts an app from downtime.
+        db.set_allowlist_subject("app", app, true).expect("allow");
+        db.clear_block(SubjectRef::App(app)).expect("clear");
+        enforcer
+            .tick(
+                &mut db,
+                &no_limits,
+                Some(&steam_key()),
+                None,
+                at("2026-08-18T02:01:00Z"),
+                0,
+                4 * 60,
+            )
+            .expect("tick");
+        assert!(!db.is_blocked(SubjectRef::App(app)).expect("not blocked"));
     }
 
     #[test]

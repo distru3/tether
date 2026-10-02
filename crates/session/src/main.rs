@@ -733,45 +733,8 @@ fn log_ingest_ack(effective_utc: &str, sent_at: DateTime<Utc>) {
 /// Plays a modern, smooth, non-intrusive alert chime for overlay milestone alerts and block events.
 #[cfg(windows)]
 pub fn play_alert_sound(volume_pct: u32) {
-    if volume_pct == 0 {
-        return;
-    }
     const CHIME_WAV: &[u8] = include_bytes!("assets/chime.wav");
-    #[link(name = "winmm")]
-    extern "system" {
-        fn PlaySoundW(pszsound: *const u16, hmod: isize, fdwsound: u32) -> i32;
-    }
-    const SND_ASYNC: u32 = 0x0001;
-    const SND_NODEFAULT: u32 = 0x0002;
-    const SND_MEMORY: u32 = 0x0004;
-
-    if volume_pct >= 100 {
-        unsafe {
-            let _ = PlaySoundW(
-                CHIME_WAV.as_ptr() as *const u16,
-                0,
-                SND_ASYNC | SND_NODEFAULT | SND_MEMORY,
-            );
-        }
-    } else {
-        let mut scaled = CHIME_WAV.to_vec();
-        if scaled.len() > 44 {
-            for chunk in scaled[44..].chunks_exact_mut(2) {
-                let sample = i16::from_le_bytes([chunk[0], chunk[1]]);
-                let new_sample = ((sample as i32 * volume_pct as i32) / 100)
-                    .clamp(i16::MIN as i32, i16::MAX as i32)
-                    as i16;
-                chunk.copy_from_slice(&new_sample.to_le_bytes());
-            }
-        }
-        unsafe {
-            let _ = PlaySoundW(
-                scaled.as_ptr() as *const u16,
-                0,
-                SND_ASYNC | SND_NODEFAULT | SND_MEMORY,
-            );
-        }
-    }
+    st_win32::audio::play_wav_scaled(CHIME_WAV, volume_pct);
 }
 
 #[cfg(not(windows))]
