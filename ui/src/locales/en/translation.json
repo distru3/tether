@@ -303,7 +303,13 @@
     "cancelPending": "Cancel the pending limit change for {{target}}",
     "grantMinutes": "Grant fifteen more minutes to {{target}}",
     "viewHidden": "View Hidden Domains",
-    "removeBlock": "Remove block on {{domain}}"
+    "removeBlock": "Remove block on {{domain}}",
+    "changeSetting": "Change the setting “{{setting}}”",
+    "recategorize": "Recategorize {{app}}",
+    "editSchedule": "Edit the downtime schedule “{{name}}”",
+    "disableSchedule": "Pause the downtime schedule “{{name}}”",
+    "deleteSchedule": "Delete the downtime schedule “{{name}}”",
+    "allowApp": "Always allow {{app}} during downtime"
   },
   "pinSetup": {
     "recoveryCodeTitle": "Recovery code",
@@ -384,7 +390,10 @@
       "bad_request": "The request didn't parse — try again.",
       "internal": "Something went wrong on our side.",
       "unreachable": "Can't reach the Tether agent right now.",
-      "unexpected_response": "Unexpected response from the backend."
+      "unexpected_response": "Unexpected response from the backend.",
+      "bad_request_detail": "That value was rejected: {{detail}}",
+      "rate_limited": "Too many wrong PIN attempts. Try again in {{seconds}} seconds.",
+      "rate_limited_generic": "Too many wrong PIN attempts. Please wait and try again."
     }
   },
   "sidebar": {

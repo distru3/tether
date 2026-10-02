@@ -303,7 +303,13 @@
     "cancelPending": "إلغاء تغيير الحد المعلق لـ {{target}}",
     "grantMinutes": "منح 15 دقيقة إضافية لـ {{target}}",
     "viewHidden": "عرض النطاقات المخفية",
-    "removeBlock": "إزالة الحظر عن {{domain}}"
+    "removeBlock": "إزالة الحظر عن {{domain}}",
+    "changeSetting": "تغيير الإعداد «{{setting}}»",
+    "recategorize": "إعادة تصنيف {{app}}",
+    "editSchedule": "تعديل جدول التوقف «{{name}}»",
+    "disableSchedule": "إيقاف جدول التوقف «{{name}}» مؤقتاً",
+    "deleteSchedule": "حذف جدول التوقف «{{name}}»",
+    "allowApp": "السماح دائماً بـ {{app}} أثناء فترة التوقف"
   },
   "pinSetup": {
     "recoveryCodeTitle": "رمز الاسترداد",
@@ -384,7 +390,10 @@
       "bad_request": "لم يتم تحليل الطلب — حاول مرة أخرى.",
       "internal": "حدث خطأ ما من جانبنا.",
       "unreachable": "لا يمكن الوصول إلى وكيل Tether في الوقت الحالي.",
-      "unexpected_response": "استجابة غير متوقعة من الواجهة الخلفية."
+      "unexpected_response": "استجابة غير متوقعة من الواجهة الخلفية.",
+      "bad_request_detail": "تم رفض هذه القيمة: {{detail}}",
+      "rate_limited": "محاولات خاطئة كثيرة لرمز PIN. حاول مرة أخرى بعد {{seconds}} ثانية.",
+      "rate_limited_generic": "محاولات خاطئة كثيرة لرمز PIN. يرجى الانتظار ثم المحاولة مرة أخرى."
     }
   },
   "sidebar": {

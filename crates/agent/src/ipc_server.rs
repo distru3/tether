@@ -39,15 +39,18 @@ use st_core::clock::Clock;
 use st_core::daykey::DayKey;
 use st_core::limits::{LimitTarget, UsageSnapshot};
 use st_core::model::{AppKey, SubjectRef};
-use st_core::pin::{generate_recovery_code, hash_pin, normalize_recovery_code, verify_pin};
+use st_core::pin::{generate_recovery_code, hash_pin, normalize_recovery_code, PinThrottle};
 use st_core::platform::ProcessController;
+use st_core::settings::SettingKey;
 use st_ipc::{
     transport, ErrorCode, LimitTargetDto, ObservationDto, ReportUsageDto, Request, Response,
     StatusDto, UsageRowDto,
 };
 use st_storage::{Db, LimitRow};
 
-use crate::locks::{lock_db, lock_recover};
+use crate::locks::{lock_db, lock_recover, read_recover, write_recover};
+
+mod auth;
 use crate::persist;
 use crate::sampler::PendingInterval;
 
@@ -143,6 +146,8 @@ pub struct Live {
     focus: Mutex<Option<(AppKey, DateTime<Utc>)>>,
     seen_observations: Mutex<Vec<(String, i64)>>,
     open_chains: Mutex<HashMap<String, ChainState>>,
+    /// Brute-force throttle shared by every credential check; see `auth`.
+    pin_throttle: Mutex<PinThrottle>,
 }
 
 impl Default for Live {
@@ -152,6 +157,7 @@ impl Default for Live {
             focus: Mutex::new(None),
             seen_observations: Mutex::new(Vec::new()),
             open_chains: Mutex::new(HashMap::new()),
+            pin_throttle: Mutex::new(PinThrottle::default()),
         }
     }
 }
@@ -414,14 +420,8 @@ fn add_manual_block(ctx: &Ctx, domain: &str) -> Response {
     }
 }
 
-fn remove_manual_block(ctx: &Ctx, domain: &str, pin: &str) -> Response {
+fn remove_manual_block(ctx: &Ctx, domain: &str) -> Response {
     let db = lock_db(&ctx.db);
-    if !pin_ok(&db, pin) {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "PIN required".into(),
-        };
-    }
     // Find the rule
     let rule_id = match db.list_block_rules() {
         Ok(rows) => rows
@@ -604,7 +604,105 @@ fn set_allowlist(ctx: &Ctx, subject_type: &str, subject_id: i64, allowed: bool) 
     }
 }
 
+/// Apply one validated setting. `auth` has already rejected unknown keys,
+/// invalid values and unauthorised loosening; parsing again here keeps the
+/// handler self-contained and guarantees the stored value is canonical.
+fn set_setting(ctx: &Ctx, key: &str, value: &str) -> Response {
+    let (key, value) = match auth::parse_setting(key, value) {
+        Ok(parsed) => parsed,
+        Err(denied) => return denied.into(),
+    };
+    let now = ctx.clock.now_utc();
+    if key == SettingKey::FamilyDns {
+        set_family_dns(ctx, value == "true");
+        return accepted(now);
+    }
+    if let Err(e) = lock_db(&ctx.db).set_setting(key.storage_key(), &value) {
+        return error_internal(format!("save setting: {e}"));
+    }
+    let mut p = write_recover(&ctx.policy, "policy");
+    // Numeric values were range-checked by `SettingKey::normalize`.
+    let number = || value.parse::<i64>().unwrap_or_default();
+    match key {
+        SettingKey::LimitCooldownHours => p.limit_cooldown_hours = number(),
+        SettingKey::StrictMode => p.strict_mode = value == "true",
+        SettingKey::DayStartMinutes => p.day_start_minutes = number(),
+        SettingKey::IdleThresholdSecs => p.idle_threshold_secs = number(),
+        SettingKey::ShowHudOverlay => p.show_hud_overlay = value == "true",
+        SettingKey::ShowHudInFullscreen => p.show_hud_in_fullscreen = value == "true",
+        SettingKey::HudPeekHotkey => p.hud_peek_hotkey = value,
+        SettingKey::AlertVolume => p.alert_volume = number(),
+        // Read once at startup by the tracker; takes effect on restart.
+        SettingKey::CaptureWindowTitles | SettingKey::FamilyDns => {}
+    }
+    accepted(now)
+}
+
+fn set_family_dns(ctx: &Ctx, enable: bool) {
+    let db_guard = lock_db(&ctx.db);
+    if enable {
+        let already = db_guard
+            .setting("family_dns_enabled")
+            .ok()
+            .flatten()
+            .as_deref()
+            == Some("true");
+        if !already {
+            if let Ok(ifaces) = st_dns::dns_config::capture() {
+                if let Ok(json) = serde_json::to_string(&ifaces) {
+                    let _ = db_guard.set_setting("original_dns_config", &json);
+                    if let Ok(dir) = crate::data_dir() {
+                        let _ = std::fs::create_dir_all(&dir);
+                        let _ = std::fs::write(dir.join("original_dns_backup.json"), &json);
+                    }
+                }
+                st_dns::dns_config::set_family_dns(&ifaces);
+            }
+            let _ = db_guard.set_setting("family_dns_enabled", "true");
+            st_dns::dns_config::set_registry_family_dns(true);
+        }
+    } else {
+        let mut restored = false;
+        let backup = db_guard.setting("original_dns_config").ok().flatten();
+        if let Some(json) = backup {
+            if let Ok(ifaces) = serde_json::from_str::<Vec<st_dns::dns_config::IfaceDns>>(&json) {
+                st_dns::dns_config::restore_all(&ifaces);
+                restored = true;
+            }
+        }
+        if !restored {
+            if let Ok(dir) = crate::data_dir() {
+                let backup_file = dir.join("original_dns_backup.json");
+                if let Ok(content) = std::fs::read_to_string(&backup_file) {
+                    if let Ok(ifaces) =
+                        serde_json::from_str::<Vec<st_dns::dns_config::IfaceDns>>(&content)
+                    {
+                        st_dns::dns_config::restore_all(&ifaces);
+                        restored = true;
+                    }
+                }
+            }
+        }
+        if !restored {
+            if let Ok(current) = st_dns::dns_config::capture() {
+                st_dns::dns_config::restore_all(&current);
+            }
+        }
+        if let Ok(dir) = crate::data_dir() {
+            let _ = std::fs::remove_file(dir.join("original_dns_backup.json"));
+        }
+        let _ = db_guard.set_setting("family_dns_enabled", "false");
+        let _ = db_guard
+            .conn()
+            .execute("DELETE FROM settings WHERE key = 'original_dns_config'", []);
+        st_dns::dns_config::set_registry_family_dns(false);
+    }
+}
+
 fn handle(ctx: &Ctx, request: Request) -> Response {
+    if let Err(denied) = auth::authorize(ctx, &request) {
+        return denied.into();
+    }
     let now = ctx.clock.now_utc();
     match request {
         Request::Ping => Response::Pong,
@@ -613,7 +711,7 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
         Request::WeeklySummary { end_day } => weekly_summary(ctx, end_day),
         Request::Catalog => catalog(ctx),
         Request::BlockedApps => blocked_apps(ctx),
-        Request::CloseApps { app_id, pin } => close_apps(ctx, app_id, &pin),
+        Request::CloseApps { app_id, .. } => close_apps(ctx, app_id),
         Request::SetPin {
             new_pin,
             current_pin,
@@ -623,85 +721,13 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
             new_pin,
         } => recover_pin(ctx, &recovery_code, &new_pin),
         Request::RemovePin { credential } => remove_pin(ctx, &credential),
-        Request::SetSetting { ref key, ref value } => {
-            let db_guard = lock_db(&ctx.db);
-            if key == "family_dns" {
-                let enable = value == "true";
-                if enable {
-                    let already = db_guard.setting("family_dns_enabled").ok().flatten().as_deref() == Some("true");
-                    if !already {
-                        if let Ok(ifaces) = st_dns::dns_config::capture() {
-                            if let Ok(json) = serde_json::to_string(&ifaces) {
-                                let _ = db_guard.set_setting("original_dns_config", &json);
-                                if let Ok(dir) = crate::data_dir() {
-                                    let _ = std::fs::create_dir_all(&dir);
-                                    let _ = std::fs::write(dir.join("original_dns_backup.json"), &json);
-                                }
-                            }
-                            st_dns::dns_config::set_family_dns(&ifaces);
-                        }
-                        let _ = db_guard.set_setting("family_dns_enabled", "true");
-                        st_dns::dns_config::set_registry_family_dns(true);
-                    }
-                } else {
-                    let mut restored = false;
-                    let backup = db_guard.setting("original_dns_config").ok().flatten();
-                    if let Some(json) = backup {
-                        if let Ok(ifaces) = serde_json::from_str::<Vec<st_dns::dns_config::IfaceDns>>(&json) {
-                            st_dns::dns_config::restore_all(&ifaces);
-                            restored = true;
-                        }
-                    }
-                    if !restored {
-                        if let Ok(dir) = crate::data_dir() {
-                            let backup_file = dir.join("original_dns_backup.json");
-                            if let Ok(content) = std::fs::read_to_string(&backup_file) {
-                                if let Ok(ifaces) = serde_json::from_str::<Vec<st_dns::dns_config::IfaceDns>>(&content) {
-                                    st_dns::dns_config::restore_all(&ifaces);
-                                    restored = true;
-                                }
-                            }
-                        }
-                    }
-                    if !restored {
-                        if let Ok(current) = st_dns::dns_config::capture() {
-                            st_dns::dns_config::restore_all(&current);
-                        }
-                    }
-                    if let Ok(dir) = crate::data_dir() {
-                        let _ = std::fs::remove_file(dir.join("original_dns_backup.json"));
-                    }
-                    let _ = db_guard.set_setting("family_dns_enabled", "false");
-                    let _ = db_guard.conn().execute("DELETE FROM settings WHERE key = 'original_dns_config'", []);
-                    st_dns::dns_config::set_registry_family_dns(false);
-                }
-            } else if let Err(e) = db_guard.conn().execute("INSERT INTO settings (key, value) VALUES (?1, ?2) ON CONFLICT(key) DO UPDATE SET value=excluded.value", (key, value)) {
-                tracing::error!(error = %e, "setting save failed");
-            } else {
-                let mut p = ctx.policy.write().unwrap();
-                match key.as_str() {
-                    "limit_cooldown_hours" => if let Ok(v) = value.parse() { p.limit_cooldown_hours = v; }
-                    "strict_mode" => p.strict_mode = value == "true",
-                    "day_start_minutes" => if let Ok(v) = value.parse() { p.day_start_minutes = v; }
-                    "idle_threshold_secs" => if let Ok(v) = value.parse() { p.idle_threshold_secs = v; }
-                    "show_hud_overlay" => p.show_hud_overlay = value != "false",
-                    "show_hud_in_fullscreen" => p.show_hud_in_fullscreen = value == "true",
-                    "hud_peek_hotkey" => p.hud_peek_hotkey = value.clone(),
-                    "alert_volume" => if let Ok(v) = value.parse() { p.alert_volume = v; }
-                    _ => {}
-                }
-            }
-            Response::Accepted {
-                effective_utc: now.to_rfc3339(),
-                hud: None,
-            }
-        }
+        Request::SetSetting { key, value, .. } => set_setting(ctx, &key, &value),
         Request::SetLimit {
             target,
             default_minutes,
             weekday_minutes,
             enabled,
-            pin,
+            ..
         } => set_limit(
             ctx,
             LimitSpec {
@@ -709,27 +735,25 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
                 default_minutes,
                 weekday_minutes,
                 enabled,
-                pin,
             },
             now,
         ),
-        Request::DeleteLimit { target, pin } => delete_limit(ctx, target, &pin, now),
-        Request::CancelPendingLimit { target, pin } => cancel_pending_limit(ctx, target, &pin),
+        Request::DeleteLimit { target, .. } => delete_limit(ctx, target, now),
+        Request::CancelPendingLimit { target, .. } => cancel_pending_limit(ctx, target),
         Request::GrantOverride {
-            target,
-            seconds,
-            pin,
-        } => grant_override(ctx, target, seconds, &pin, now),
+            target, seconds, ..
+        } => grant_override(ctx, target, seconds, now),
         Request::Categorize {
             app_id,
             primary,
             tags,
+            ..
         } => categorize(ctx, app_id, primary, &tags),
         Request::RegisterDiscoveredApps { apps } => register_discovered_apps(ctx, apps, now),
         Request::ReportUsage { report } => report_usage(ctx, report),
         Request::ListManualBlocks => list_manual_blocks(ctx),
         Request::AddManualBlock { domain } => add_manual_block(ctx, &domain),
-        Request::RemoveManualBlock { domain, pin } => remove_manual_block(ctx, &domain, &pin),
+        Request::RemoveManualBlock { domain, .. } => remove_manual_block(ctx, &domain),
         Request::ListSchedules => list_schedules(ctx),
         Request::CreateSchedule {
             name,
@@ -743,14 +767,16 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
             weekday_mask,
             start_minute,
             end_minute,
+            ..
         } => update_schedule(ctx, id, &name, weekday_mask, start_minute, end_minute),
-        Request::SetScheduleEnabled { id, enabled } => set_schedule_enabled(ctx, id, enabled),
-        Request::DeleteSchedule { id } => delete_schedule(ctx, id),
+        Request::SetScheduleEnabled { id, enabled, .. } => set_schedule_enabled(ctx, id, enabled),
+        Request::DeleteSchedule { id, .. } => delete_schedule(ctx, id),
         Request::ListAllowlist => list_allowlist(ctx),
         Request::SetAllowlist {
             subject_type,
             subject_id,
             allowed,
+            ..
         } => set_allowlist(ctx, &subject_type, subject_id, allowed),
         _ => Response::Error {
             code: st_ipc::ErrorCode::BadRequest,
@@ -773,7 +799,7 @@ fn status_response(ctx: &Ctx) -> Response {
             .live
             .reported_within(RECENT_REPORT_SECS, ctx.clock.now_utc());
 
-    let policy = ctx.policy.read().unwrap();
+    let policy = read_recover(&ctx.policy, "policy");
     Response::Status(StatusDto {
         agent_version: ctx.status.agent_version.clone(),
         tracker_backend: ctx.status.tracker_backend.clone(),
@@ -906,7 +932,7 @@ fn catalog(ctx: &Ctx) -> Response {
     let day = DayKey::from_utc(
         now,
         ctx.clock.local_offset_seconds(),
-        ctx.policy.read().unwrap().day_start_minutes,
+        read_recover(&ctx.policy, "policy").day_start_minutes,
     );
     let snapshot = db.day_snapshot(day).ok();
     let (apps, categories, limits, pending_limits) = match (
@@ -987,16 +1013,10 @@ fn blocked_apps(ctx: &Ctx) -> Response {
 }
 
 /// "Quit" from the block overlay: terminate the app's process tree. This is a
-/// deliberate user action (not the removed auto-freeze), so it is PIN-gated
-/// like every other mutating request.
-fn close_apps(ctx: &Ctx, app_id: i64, pin: &str) -> Response {
+/// deliberate user action (not the removed auto-freeze), so `auth` PIN-gates
+/// it like every other mutating request.
+fn close_apps(ctx: &Ctx, app_id: i64) -> Response {
     let db = lock_db(&ctx.db);
-    if !pin_ok(&db, pin) {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "PIN required".into(),
-        };
-    }
     let Some(record) = db.app_record(app_id).ok().flatten() else {
         return Response::Error {
             code: ErrorCode::NotFound,
@@ -1030,23 +1050,15 @@ fn set_pin(ctx: &Ctx, new_pin: &str, current_pin: Option<&str>) -> Response {
             message: "PIN cannot be empty".into(),
         };
     }
-    let db = lock_db(&ctx.db);
-    match db.pin_hash() {
-        Ok(Some(stored)) => {
-            let current = current_pin.unwrap_or("");
-            // Changing an existing vault accepts either the current PIN or
-            // the standing recovery code — same ownership proof either way.
-            if !verify_pin(current, &stored) && !recovery_ok(&db, current) {
-                return Response::Error {
-                    code: ErrorCode::BadPin,
-                    message: "current PIN does not match".into(),
-                };
-            }
-        }
-        Ok(None) => {}
-        Err(e) => return error_internal(format!("read pin: {e}")),
+    // Changing an existing vault accepts either the current PIN or the
+    // standing recovery code — same ownership proof either way. With no vault
+    // yet, this passes and the first PIN is set.
+    if let Err(denied) =
+        auth::verify_credential(ctx, current_pin.unwrap_or(""), auth::Accept::PinOrRecovery)
+    {
+        return denied.into();
     }
-    rotate_vault(&db, new_pin)
+    rotate_vault(ctx, new_pin)
 }
 
 /// Replace a forgotten PIN via its recovery code. Only the code unlocks this
@@ -1059,41 +1071,19 @@ fn recover_pin(ctx: &Ctx, recovery_code: &str, new_pin: &str) -> Response {
             message: "PIN cannot be empty".into(),
         };
     }
-    let db = lock_db(&ctx.db);
-    match db.recovery_hash() {
-        Ok(Some(_)) => {}
-        Ok(None) => {
-            return Response::Error {
-                code: ErrorCode::NotFound,
-                message: "no PIN vault is configured".into(),
-            }
-        }
-        Err(e) => return error_internal(format!("read recovery: {e}")),
+    if let Err(denied) = auth::verify_credential(ctx, recovery_code, auth::Accept::Recovery) {
+        return denied.into();
     }
-    if !recovery_ok(&db, recovery_code) {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "recovery code does not match".into(),
-        };
-    }
-    rotate_vault(&db, new_pin)
+    rotate_vault(ctx, new_pin)
 }
 
 /// Dismantle the vault. Requires the same ownership proof as changing it
 /// (PIN or recovery code); idempotent when no vault exists.
 fn remove_pin(ctx: &Ctx, credential: &str) -> Response {
-    let db = lock_db(&ctx.db);
-    let authorized = match db.pin_hash() {
-        Ok(None) => true,
-        Ok(Some(stored)) => verify_pin(credential, &stored) || recovery_ok(&db, credential),
-        Err(e) => return error_internal(format!("read pin: {e}")),
-    };
-    if !authorized {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "wrong PIN or recovery code".into(),
-        };
+    if let Err(denied) = auth::verify_credential(ctx, credential, auth::Accept::PinOrRecovery) {
+        return denied.into();
     }
+    let db = lock_db(&ctx.db);
     match db
         .clear_pin_vault()
         .and_then(|()| db.audit(ctx.clock.now_utc(), "pin_removed", None))
@@ -1107,8 +1097,9 @@ fn remove_pin(ctx: &Ctx, credential: &str) -> Response {
 ///
 /// The plaintext code exists exactly once — inside the [`Response::PinVault`]
 /// returned here — because only its hash is persisted. Every rotation retires
-/// the previous code, so stale codes from earlier eras are inert.
-fn rotate_vault(db: &Db, new_pin: &str) -> Response {
+/// the previous code, so stale codes from earlier eras are inert. Both Argon2
+/// hashes are computed before the database lock is taken.
+fn rotate_vault(ctx: &Ctx, new_pin: &str) -> Response {
     let pin_hash = match hash_pin(new_pin) {
         Ok(h) => h,
         Err(e) => return error_internal(format!("hash pin: {e}")),
@@ -1119,9 +1110,11 @@ fn rotate_vault(db: &Db, new_pin: &str) -> Response {
         Ok(h) => h,
         Err(e) => return error_internal(format!("hash recovery: {e}")),
     };
+    let db = lock_db(&ctx.db);
     match db
         .set_pin_hash(&pin_hash)
         .and_then(|()| db.set_recovery_hash(&recovery_hash))
+        .and_then(|()| db.audit(ctx.clock.now_utc(), "pin_set", None))
     {
         Ok(()) => Response::PinVault {
             recovery_code: code,
@@ -1132,12 +1125,6 @@ fn rotate_vault(db: &Db, new_pin: &str) -> Response {
 
 fn set_limit(ctx: &Ctx, spec: LimitSpec, now: DateTime<Utc>) -> Response {
     let db = lock_db(&ctx.db);
-    if !pin_ok(&db, &spec.pin) {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "PIN required".into(),
-        };
-    }
     let Some(target) = dto_to_target(&spec.target) else {
         return bad_request("unknown limit target".into());
     };
@@ -1167,7 +1154,13 @@ fn set_limit(ctx: &Ctx, spec: LimitSpec, now: DateTime<Utc>) -> Response {
             now
         }
         // Only loosening *minutes* while staying enabled waits out the cooldown.
-        Some(_) => now + Duration::hours(ctx.policy.read().unwrap().limit_cooldown_hours.max(0)),
+        Some(_) => {
+            now + Duration::hours(
+                read_recover(&ctx.policy, "policy")
+                    .limit_cooldown_hours
+                    .max(0),
+            )
+        }
         None => now,
     };
 
@@ -1200,14 +1193,8 @@ fn set_limit(ctx: &Ctx, spec: LimitSpec, now: DateTime<Utc>) -> Response {
     }
 }
 
-fn delete_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str, now: DateTime<Utc>) -> Response {
+fn delete_limit(ctx: &Ctx, target: LimitTargetDto, now: DateTime<Utc>) -> Response {
     let db = lock_db(&ctx.db);
-    if !pin_ok(&db, pin) {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "PIN required".into(),
-        };
-    }
     let Some(target) = dto_to_target(&target) else {
         return bad_request("unknown limit target".into());
     };
@@ -1224,14 +1211,8 @@ fn delete_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str, now: DateTime<Utc>
     }
 }
 
-fn cancel_pending_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str) -> Response {
+fn cancel_pending_limit(ctx: &Ctx, target: LimitTargetDto) -> Response {
     let db = lock_db(&ctx.db);
-    if !pin_ok(&db, pin) {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "PIN required".into(),
-        };
-    }
     let Some(target) = dto_to_target(&target) else {
         return bad_request("unknown limit target".into());
     };
@@ -1247,26 +1228,9 @@ fn cancel_pending_limit(ctx: &Ctx, target: LimitTargetDto, pin: &str) -> Respons
     }
 }
 
-fn grant_override(
-    ctx: &Ctx,
-    target: LimitTargetDto,
-    seconds: i64,
-    pin: &str,
-    now: DateTime<Utc>,
-) -> Response {
+fn grant_override(ctx: &Ctx, target: LimitTargetDto, seconds: i64, now: DateTime<Utc>) -> Response {
+    // Strict mode and the PIN are checked by `auth` before dispatch.
     let db = lock_db(&ctx.db);
-    if ctx.policy.read().unwrap().strict_mode {
-        return Response::Error {
-            code: ErrorCode::StrictMode,
-            message: "overrides are disabled in strict mode".into(),
-        };
-    }
-    if !pin_ok(&db, pin) {
-        return Response::Error {
-            code: ErrorCode::BadPin,
-            message: "PIN required".into(),
-        };
-    }
     let Some(target) = dto_to_target(&target) else {
         return bad_request("unknown limit target".into());
     };
@@ -1277,7 +1241,7 @@ fn grant_override(
     let day = DayKey::from_utc(
         now,
         ctx.clock.local_offset_seconds(),
-        ctx.policy.read().unwrap().day_start_minutes,
+        read_recover(&ctx.policy, "policy").day_start_minutes,
     );
     match db.grant_override(&target, day, seconds, now, Some("user override")) {
         Ok(()) => accepted(now),
@@ -1397,8 +1361,10 @@ fn register_discovered_apps(
 fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
     let now = ctx.clock.now_utc();
     let tz_offset = ctx.clock.local_offset_seconds();
-    let day_start = ctx.policy.read().unwrap().day_start_minutes;
-    let idle_threshold = ctx.policy.read().unwrap().idle_threshold_secs.max(1);
+    let day_start = read_recover(&ctx.policy, "policy").day_start_minutes;
+    let idle_threshold = read_recover(&ctx.policy, "policy")
+        .idle_threshold_secs
+        .max(1);
 
     // 1. Parse and sanity-check timestamps.
     let mut parsed: Vec<(DateTime<Utc>, ObservationDto)> =
@@ -1616,7 +1582,6 @@ struct LimitSpec {
     default_minutes: u32,
     weekday_minutes: [Option<u32>; 7],
     enabled: bool,
-    pin: String,
 }
 
 /// A limit is "loosening" if any time dimension went up. Disabling is NOT
@@ -1653,26 +1618,6 @@ fn validate_target(db: &Db, target: &LimitTarget) -> Result<(), ErrorCode> {
                 }
             }
         }
-    }
-}
-
-fn pin_ok(db: &Db, pin: &str) -> bool {
-    match db.pin_hash() {
-        Ok(Some(stored)) => verify_pin(pin, &stored),
-        // No PIN configured yet: limit changes are allowed without one (M2
-        // decision, so the app can be dogfooded before the user sets a PIN).
-        Ok(None) => true,
-        Err(_) => false,
-    }
-}
-
-/// Whether `code` matches the standing recovery code. Input is normalised so
-/// lowercase / missing dashes / stray spaces still verify against the paper
-/// form.
-fn recovery_ok(db: &Db, code: &str) -> bool {
-    match db.recovery_hash() {
-        Ok(Some(stored)) => verify_pin(&normalize_recovery_code(code), &stored),
-        _ => false,
     }
 }
 
@@ -1754,6 +1699,7 @@ mod tests {
     use st_core::clock::TestClock;
     use st_core::limits::Limit;
     use st_core::limits::UsageSnapshot;
+    use st_core::pin::verify_pin;
     use st_ipc::IpcError;
     use std::sync::RwLock;
 
@@ -1798,21 +1744,6 @@ mod tests {
         new[0] = Some(15); // tighter on Monday
         new[6] = Some(120); // looser on Sunday
         assert!(is_loosening(&existing, 30, new));
-    }
-
-    #[test]
-    fn pin_gate_accepts_no_pin_before_one_is_set() {
-        let db = Db::open_in_memory().expect("db");
-        assert!(pin_ok(&db, "anything"));
-    }
-
-    #[test]
-    fn pin_gate_requires_a_matching_pin_once_set() {
-        let db = Db::open_in_memory().expect("db");
-        db.set_pin_hash(&hash_pin("1234").expect("hash"))
-            .expect("set");
-        assert!(pin_ok(&db, "1234"));
-        assert!(!pin_ok(&db, "wrong"));
     }
 
     // -- Handler-level fixtures. ---------------------------------------------
@@ -2969,6 +2900,7 @@ mod tests {
                 weekday_mask: 31,
                 start_minute: 1380,
                 end_minute: 480,
+                pin: None,
             },
         );
         assert!(matches!(res, Response::Accepted { .. }));
@@ -2979,6 +2911,7 @@ mod tests {
             Request::SetScheduleEnabled {
                 id: sched_id,
                 enabled: false,
+                pin: None,
             },
         );
         assert!(matches!(res, Response::Accepted { .. }));
@@ -2994,7 +2927,13 @@ mod tests {
         }
 
         // 6. Delete schedule
-        let res = handle(&ctx, Request::DeleteSchedule { id: sched_id });
+        let res = handle(
+            &ctx,
+            Request::DeleteSchedule {
+                id: sched_id,
+                pin: None,
+            },
+        );
         assert!(matches!(res, Response::Accepted { .. }));
 
         let res = handle(&ctx, Request::ListSchedules);
@@ -3010,6 +2949,7 @@ mod tests {
                 subject_type: "app".into(),
                 subject_id: 42,
                 allowed: true,
+                pin: None,
             },
         );
         assert!(matches!(res, Response::Accepted { .. }));
@@ -3031,6 +2971,7 @@ mod tests {
                 subject_type: "app".into(),
                 subject_id: 42,
                 allowed: false,
+                pin: None,
             },
         );
         assert!(matches!(res, Response::Accepted { .. }));
@@ -3040,5 +2981,349 @@ mod tests {
             Response::Allowlist(dto) => assert_eq!(dto.items.len(), 0),
             other => panic!("expected Allowlist, got {other:?}"),
         }
+    }
+    // -- Central authorization (auth.rs). -------------------------------------
+
+    fn ctx_with_pin(pin: &str) -> Ctx {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+        );
+        expect_vault(handle(
+            &ctx,
+            Request::SetPin {
+                new_pin: pin.into(),
+                current_pin: None,
+            },
+        ));
+        ctx
+    }
+
+    fn set_setting_req(key: &str, value: &str, pin: Option<&str>) -> Request {
+        Request::SetSetting {
+            key: key.into(),
+            value: value.into(),
+            pin: pin.map(Into::into),
+        }
+    }
+
+    fn stored_setting(ctx: &Ctx, key: &str) -> Option<String> {
+        lock_db(&ctx.db).setting(key).expect("read")
+    }
+
+    #[test]
+    fn set_setting_refuses_vault_and_unknown_keys_even_without_a_pin() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+        );
+        for key in [
+            "pin_hash",
+            "recovery_hash",
+            "original_dns_config",
+            "nonsense",
+        ] {
+            assert_eq!(
+                error_code(&handle(&ctx, set_setting_req(key, "x", None))),
+                Some(ErrorCode::BadRequest),
+                "{key}"
+            );
+            assert_eq!(stored_setting(&ctx, key), None, "{key} must not be written");
+        }
+    }
+
+    #[test]
+    fn set_setting_validates_values() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+        );
+        for (key, value) in [
+            ("alert_volume", "250"),
+            ("strict_mode", "yes"),
+            ("limit_cooldown_hours", "-3"),
+            ("day_start_minutes", "1440"),
+        ] {
+            assert_eq!(
+                error_code(&handle(&ctx, set_setting_req(key, value, None))),
+                Some(ErrorCode::BadRequest),
+                "{key}={value}"
+            );
+        }
+    }
+
+    #[test]
+    fn loosening_settings_need_the_pin_and_tightening_ones_do_not() {
+        let ctx = ctx_with_pin("1234");
+
+        // Tightening: free.
+        assert!(matches!(
+            handle(&ctx, set_setting_req("strict_mode", "true", None)),
+            Response::Accepted { .. }
+        ));
+        assert!(read_recover(&ctx.policy, "policy").strict_mode);
+        assert!(matches!(
+            handle(&ctx, set_setting_req("limit_cooldown_hours", "48", None)),
+            Response::Accepted { .. }
+        ));
+
+        // Loosening without the PIN: refused, nothing changes.
+        for (key, value) in [
+            ("strict_mode", "false"),
+            ("limit_cooldown_hours", "0"),
+            ("day_start_minutes", "240"),
+            ("idle_threshold_secs", "30"),
+        ] {
+            assert_eq!(
+                error_code(&handle(&ctx, set_setting_req(key, value, None))),
+                Some(ErrorCode::BadPin),
+                "{key}={value}"
+            );
+        }
+        assert!(read_recover(&ctx.policy, "policy").strict_mode);
+        assert_eq!(read_recover(&ctx.policy, "policy").limit_cooldown_hours, 48);
+
+        // With the PIN: applied, to storage and to the live policy.
+        assert!(matches!(
+            handle(
+                &ctx,
+                set_setting_req("limit_cooldown_hours", "0", Some("1234"))
+            ),
+            Response::Accepted { .. }
+        ));
+        assert_eq!(read_recover(&ctx.policy, "policy").limit_cooldown_hours, 0);
+        assert_eq!(
+            stored_setting(&ctx, "limit_cooldown_hours").as_deref(),
+            Some("0")
+        );
+    }
+
+    #[test]
+    fn cosmetic_settings_never_need_the_pin() {
+        let ctx = ctx_with_pin("1234");
+        for (key, value) in [
+            ("alert_volume", "40"),
+            ("show_hud_overlay", "false"),
+            ("hud_peek_hotkey", "Ctrl+Alt+P"),
+        ] {
+            assert!(
+                matches!(
+                    handle(&ctx, set_setting_req(key, value, None)),
+                    Response::Accepted { .. }
+                ),
+                "{key}"
+            );
+        }
+        assert_eq!(read_recover(&ctx.policy, "policy").alert_volume, 40);
+    }
+
+    #[test]
+    fn categorize_and_schedule_edits_need_the_pin() {
+        let ctx = ctx_with_pin("1234");
+        let app = seed_game_app(&mut lock_db(&ctx.db), "C:\\games\\steam\\steam.exe");
+        let education = lock_db(&ctx.db).category_id("education").expect("cat");
+
+        let categorize = |pin: Option<&str>| Request::Categorize {
+            app_id: app,
+            primary: Some(education),
+            tags: vec![],
+            pin: pin.map(Into::into),
+        };
+        assert_eq!(
+            error_code(&handle(&ctx, categorize(None))),
+            Some(ErrorCode::BadPin)
+        );
+        assert!(matches!(
+            handle(&ctx, categorize(Some("1234"))),
+            Response::Accepted { .. }
+        ));
+
+        // Creating a schedule tightens: free.
+        let Response::ScheduleCreated(created) = handle(
+            &ctx,
+            Request::CreateSchedule {
+                name: "Bedtime".into(),
+                weekday_mask: 0x7f,
+                start_minute: 22 * 60,
+                end_minute: 7 * 60,
+            },
+        ) else {
+            panic!("expected ScheduleCreated");
+        };
+
+        // Enabling is free; disabling, editing and deleting need the PIN.
+        let toggle = |enabled: bool, pin: Option<&str>| Request::SetScheduleEnabled {
+            id: created.id,
+            enabled,
+            pin: pin.map(Into::into),
+        };
+        assert!(matches!(
+            handle(&ctx, toggle(true, None)),
+            Response::Accepted { .. }
+        ));
+        assert_eq!(
+            error_code(&handle(&ctx, toggle(false, None))),
+            Some(ErrorCode::BadPin)
+        );
+        assert_eq!(
+            error_code(&handle(
+                &ctx,
+                Request::UpdateSchedule {
+                    id: created.id,
+                    name: "Bedtime".into(),
+                    weekday_mask: 0x01,
+                    start_minute: 0,
+                    end_minute: 1,
+                    pin: None,
+                }
+            )),
+            Some(ErrorCode::BadPin)
+        );
+        assert_eq!(
+            error_code(&handle(
+                &ctx,
+                Request::DeleteSchedule {
+                    id: created.id,
+                    pin: None,
+                }
+            )),
+            Some(ErrorCode::BadPin)
+        );
+        assert!(matches!(
+            handle(
+                &ctx,
+                Request::DeleteSchedule {
+                    id: created.id,
+                    pin: Some("1234".into()),
+                }
+            ),
+            Response::Accepted { .. }
+        ));
+    }
+
+    #[test]
+    fn allowlisting_needs_the_pin_but_removing_from_the_allowlist_does_not() {
+        let ctx = ctx_with_pin("1234");
+        let app = seed_game_app(&mut lock_db(&ctx.db), "C:\\games\\steam\\steam.exe");
+        let allow = |allowed: bool, pin: Option<&str>| Request::SetAllowlist {
+            subject_type: "app".into(),
+            subject_id: app,
+            allowed,
+            pin: pin.map(Into::into),
+        };
+        assert_eq!(
+            error_code(&handle(&ctx, allow(true, None))),
+            Some(ErrorCode::BadPin)
+        );
+        assert!(matches!(
+            handle(&ctx, allow(true, Some("1234"))),
+            Response::Accepted { .. }
+        ));
+        assert!(matches!(
+            handle(&ctx, allow(false, None)),
+            Response::Accepted { .. }
+        ));
+    }
+
+    #[test]
+    fn repeated_wrong_pins_lock_out_even_the_right_pin_until_expiry() {
+        let ctx = ctx_with_pin("1234");
+        let loosen = |pin: &str| set_setting_req("limit_cooldown_hours", "1", Some(pin));
+
+        // Empty PINs are "not supplied" and never count.
+        for _ in 0..20 {
+            assert_eq!(
+                error_code(&handle(&ctx, loosen(""))),
+                Some(ErrorCode::BadPin)
+            );
+        }
+        for _ in 0..st_core::pin::THROTTLE_FREE_ATTEMPTS {
+            assert_eq!(
+                error_code(&handle(&ctx, loosen("0000"))),
+                Some(ErrorCode::BadPin)
+            );
+        }
+        // One more wrong attempt trips the lockout...
+        assert_eq!(
+            error_code(&handle(&ctx, loosen("0000"))),
+            Some(ErrorCode::BadPin)
+        );
+        // ...after which even the right PIN is refused.
+        assert_eq!(
+            error_code(&handle(&ctx, loosen("1234"))),
+            Some(ErrorCode::RateLimited)
+        );
+        // The vault endpoints share the same throttle.
+        assert_eq!(
+            error_code(&handle(
+                &ctx,
+                Request::RemovePin {
+                    credential: "1234".into()
+                }
+            )),
+            Some(ErrorCode::RateLimited)
+        );
+
+        // Same live state (throttle), later wall clock: the lockout expired.
+        let later = Ctx {
+            clock: Arc::new(TestClock::new(
+                at("2026-08-20T12:00:00Z")
+                    + Duration::seconds(st_core::pin::THROTTLE_BASE_LOCKOUT_SECS + 1),
+                0,
+            )),
+            ..ctx.clone()
+        };
+        assert!(matches!(
+            handle(&later, loosen("1234")),
+            Response::Accepted { .. }
+        ));
+    }
+
+    #[test]
+    fn rejected_credentials_are_audited() {
+        let ctx = ctx_with_pin("1234");
+        let _ = handle(
+            &ctx,
+            set_setting_req("limit_cooldown_hours", "1", Some("9999")),
+        );
+        let count: i64 = lock_db(&ctx.db)
+            .conn()
+            .query_row(
+                "SELECT COUNT(*) FROM audit_log WHERE kind = 'credential_rejected'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("count");
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn overrides_in_strict_mode_are_refused_before_the_pin_is_spent() {
+        let ctx = ctx_with_pin("1234");
+        assert!(matches!(
+            handle(&ctx, set_setting_req("strict_mode", "true", None)),
+            Response::Accepted { .. }
+        ));
+        for _ in 0..10 {
+            assert_eq!(
+                error_code(&handle(
+                    &ctx,
+                    Request::GrantOverride {
+                        target: LimitTargetDto::Total,
+                        seconds: 900,
+                        pin: "0000".into(),
+                    }
+                )),
+                Some(ErrorCode::StrictMode)
+            );
+        }
+        // No failures were recorded, so the right PIN still works elsewhere.
+        assert!(matches!(
+            handle(
+                &ctx,
+                set_setting_req("limit_cooldown_hours", "1", Some("1234"))
+            ),
+            Response::Accepted { .. }
+        ));
     }
 }

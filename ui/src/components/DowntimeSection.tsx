@@ -17,6 +17,7 @@ import {
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { ScheduleDto } from "../types/generated/ScheduleDto";
 import { useDowntime } from "../hooks/useDowntime";
+import type { Guarded } from "../hooks/useLedgerActions";
 import { Dialog } from "./Dialog";
 import { ToggleSwitch } from "./ToggleSwitch";
 import { MetricCards, type MetricData } from "./MetricCards";
@@ -25,6 +26,7 @@ import { LoadingSpinner } from "./LoadingSpinner";
 interface DowntimeSectionProps {
     catalog: CatalogDto | null;
     notify: (kind: "success" | "error", message: string) => void;
+    guarded?: Guarded;
 }
 
 const WEEKDAYS = [
@@ -82,7 +84,7 @@ function isCurrentlyActive(schedule: ScheduleDto): boolean {
     }
 }
 
-export function DowntimeSection({ catalog, notify }: DowntimeSectionProps) {
+export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionProps) {
     const { t } = useTranslation();
     const {
         schedules,
@@ -93,7 +95,7 @@ export function DowntimeSection({ catalog, notify }: DowntimeSectionProps) {
         toggleSchedule,
         deleteSchedule,
         setAllowlist,
-    } = useDowntime(notify);
+    } = useDowntime(notify, guarded);
 
     const [editingSchedule, setEditingSchedule] = useState<ScheduleDto | null | "new">(null);
     const [allowlistSearch, setAllowlistSearch] = useState("");
@@ -142,7 +144,8 @@ export function DowntimeSection({ catalog, notify }: DowntimeSectionProps) {
     const handleAddAppToAllowlist = async () => {
         if (selectedAppId === "") return;
         try {
-            await setAllowlist("app", Number(selectedAppId), true);
+            const name = catalog?.apps.find((a) => a.id === Number(selectedAppId))?.display_name;
+            await setAllowlist("app", Number(selectedAppId), true, name);
             setSelectedAppId("");
             setAllowlistSearch("");
             notify("success", "App added to downtime allowlist.");
@@ -258,7 +261,7 @@ export function DowntimeSection({ catalog, notify }: DowntimeSectionProps) {
                                                 <div style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text-primary)" }}>
                                                     <Clock size={13} color="var(--text-muted)" />
                                                     <span>{formatDisplayTime(schedule.start_minute)}</span>
-                                                    <span style={{ color: "var(--text-muted)" }}>–</span>
+                                                    <span style={{ color: "var(--text-muted)" }}>â€“</span>
                                                     <span>{formatDisplayTime(schedule.end_minute)}</span>
                                                 </div>
 
@@ -533,7 +536,7 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
                             >
                                 {t("downtime.everyday", "Every day")}
                             </button>
-                            <span style={{ color: "var(--text-muted)" }}>•</span>
+                            <span style={{ color: "var(--text-muted)" }}>â€¢</span>
                             <button
                                 type="button"
                                 className="btn-ghost"
@@ -542,7 +545,7 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
                             >
                                 {t("downtime.weekdays", "Weekdays")}
                             </button>
-                            <span style={{ color: "var(--text-muted)" }}>•</span>
+                            <span style={{ color: "var(--text-muted)" }}>â€¢</span>
                             <button
                                 type="button"
                                 className="btn-ghost"
