@@ -98,6 +98,7 @@ export function OnboardingSlider({ onComplete }: OnboardingSliderProps) {
                             <ToggleSwitch
                                 checked={familyDns}
                                 onChange={handleToggleFamilyDns}
+                                label={t("settings.familyDns")}
                             />
                         )}
                     </div>
@@ -129,7 +130,7 @@ export function OnboardingSlider({ onComplete }: OnboardingSliderProps) {
     const slide = slides[currentSlide]!;
 
     return (
-        <div className="onboarding-fullscreen">
+        <div className="onboarding-fullscreen" role="main">
             <div className="onboarding-container">
                 <div className="onboarding-slide" key={currentSlide}>
                     <div className="onboarding-icon-wrapper">{slide.icon}</div>

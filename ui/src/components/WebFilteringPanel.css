@@ -146,7 +146,7 @@
     font-size: 11px;
     font-weight: 600;
     font-family: var(--font-mono);
-    color: var(--color-primary);
+    color: var(--color-primary-text);
     background: var(--color-primary-subtle, rgba(165, 91, 75, 0.14));
     border: 1px solid var(--border-card);
     padding: 2px 9px;
@@ -225,7 +225,7 @@
     font-size: 11px;
     letter-spacing: 0.08em;
     text-transform: uppercase;
-    color: var(--color-primary);
+    color: var(--color-primary-text);
     font-weight: 600;
     background: var(--bg-surface);
     border-bottom: 1px solid var(--border-card);
@@ -259,7 +259,7 @@
     border-radius: 8px;
     background: var(--color-primary-subtle, rgba(165, 91, 75, 0.14));
     border: 1px solid var(--border-card);
-    color: var(--color-primary);
+    color: var(--color-primary-text);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -300,7 +300,7 @@
 .pill--adult {
     background: var(--bg-danger);
     border: 1px solid var(--border-danger);
-    color: var(--color-danger);
+    color: var(--color-danger-text);
 }
 
 .domain-status-badge {
@@ -316,7 +316,7 @@
     text-transform: uppercase;
     background: var(--bg-danger);
     border: 1px solid var(--border-danger);
-    color: var(--color-danger);
+    color: var(--color-danger-text);
 }
 
 .status-dot-pulse {
@@ -348,7 +348,7 @@
 }
 
 .domain-remove-action-btn:hover {
-    color: var(--color-danger);
+    color: var(--color-danger-text);
     background: var(--bg-danger);
     border-color: var(--border-danger);
 }
@@ -524,7 +524,7 @@
 }
 
 :is([data-theme-mode="light"], [data-theme="clean-titanium"], [data-theme="nordic-frost"]) .web-filter-count-badge {
-    color: var(--color-primary);
+    color: var(--color-primary-text);
     background: var(--color-primary-subtle);
     border-color: var(--border-card);
 }
@@ -547,7 +547,7 @@
 :is([data-theme-mode="light"], [data-theme="clean-titanium"], [data-theme="nordic-frost"]) .domain-icon-box {
     background: var(--color-primary-subtle);
     border-color: var(--border-card);
-    color: var(--color-primary);
+    color: var(--color-primary-text);
 }
 
 :is([data-theme-mode="light"], [data-theme="clean-titanium"], [data-theme="nordic-frost"]) .pill--custom {

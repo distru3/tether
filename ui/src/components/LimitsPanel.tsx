@@ -98,7 +98,7 @@ export function LimitsPanel({
         <div className="limits-container view-container limits-page-shell">
             <div className="view-header page-intro">
                 <div>
-                    <h2 className="view-title">
+                    <h2 className="view-title" aria-level={1}>
                         {subSection === "limits" ? t("limits.title") : t("downtime.title", "Scheduled Downtime")}
                     </h2>
                     <p className="view-subtitle">
@@ -156,7 +156,7 @@ export function LimitsPanel({
 
             <div className="limits-list-header">
                 <div>
-                    <h3 className="section-title">{t("limits.yourLimits")}</h3>
+                    <h3 aria-level={2} className="section-title">{t("limits.yourLimits")}</h3>
                 </div>
                 <FilterTabs
                     tabs={["All", "Active", "Disabled"]}
@@ -280,6 +280,7 @@ export function LimitsPanel({
                                             checked={limit.enabled} 
                                             onChange={(val) => onToggle(limit, val)} 
                                             disabled={busy}
+                                            label={t("limits.toggleLabel", { target: label })}
                                         />
                                     </div>
                                 </div>
@@ -351,13 +352,13 @@ export function LimitsPanel({
                     return (
                         <div className="glass-card rich-limit-card limit-card--pending" key={`pending-${pending.id}`}>
                             <div className="rich-limit-card-header">
-                                <div className="rich-limit-icon-box" style={{ backgroundColor: "rgba(220, 160, 109, 0.15)", color: "var(--color-warning)" }}>
+                                <div className="rich-limit-icon-box" style={{ backgroundColor: "rgba(220, 160, 109, 0.15)", color: "var(--color-warning-text)" }}>
                                     <WarningIcon size={20} color="var(--color-warning)" />
                                 </div>
                                 <div className="rich-limit-title-group">
                                     <h3 className="limit-target-name">{label}</h3>
                                     <div className="limit-badges">
-                                        <span className="target-badge" style={{ backgroundColor: "rgba(220, 160, 109, 0.2)", color: "var(--color-accent)" }}>
+                                        <span className="target-badge" style={{ backgroundColor: "rgba(220, 160, 109, 0.2)", color: "var(--color-accent-text)" }}>
                                             {t("limits.pending")}
                                         </span>
                                     </div>

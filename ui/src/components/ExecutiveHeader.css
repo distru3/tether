@@ -52,7 +52,7 @@
   border-radius: var(--radius-sm, 6px);
   border: 1px solid var(--border-subtle);
   background: var(--bg-surface);
-  color: var(--color-primary);
+  color: var(--color-primary-text);
   cursor: pointer;
   transition: all 0.12s ease;
 }
@@ -198,19 +198,19 @@
 
 .exec-metric-badge--exhausted {
   background: var(--bg-danger, rgba(244, 63, 94, 0.12));
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   border: 1px solid var(--border-danger, rgba(244, 63, 94, 0.28));
 }
 
 .exec-metric-badge--protected {
   background: var(--bg-success, rgba(16, 185, 129, 0.12));
-  color: var(--color-success);
+  color: var(--color-success-text);
   border: 1px solid var(--border-success, rgba(16, 185, 129, 0.28));
 }
 
 .exec-metric-badge--blocked {
   background: var(--bg-danger, rgba(244, 63, 94, 0.12));
-  color: var(--color-danger);
+  color: var(--color-danger-text);
   border: 1px solid var(--border-danger, rgba(244, 63, 94, 0.28));
 }
 
@@ -275,5 +275,5 @@
 }
 
 .exec-metric-cell--alert .exec-metric-value {
-  color: var(--color-danger);
+  color: var(--color-danger-text);
 }

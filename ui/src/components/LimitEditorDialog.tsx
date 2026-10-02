@@ -518,6 +518,7 @@ export function LimitEditorDialog({
                                 <input
                                     type="number"
                                     className="duration-num-input"
+                                    aria-label={t("limitEditor.hours")}
                                     min={0}
                                     max={24}
                                     value={hoursVal}
@@ -531,6 +532,7 @@ export function LimitEditorDialog({
                                 <input
                                     type="number"
                                     className="duration-num-input"
+                                    aria-label={t("limitEditor.minutes")}
                                     min={0}
                                     max={59}
                                     value={minsVal}
@@ -561,6 +563,8 @@ export function LimitEditorDialog({
                         <input
                             type="range"
                             className="duration-slider"
+                            aria-label={t("limitEditor.minutesPerDay")}
+                            aria-valuetext={formatShortDuration(Math.min(totalMinutesVal, SLIDER_MAX))}
                             min={SLIDER_MIN}
                             max={SLIDER_MAX}
                             step={5}
@@ -648,7 +652,7 @@ export function LimitEditorDialog({
                                     title={t("limitEditor.minus15")}
                                     aria-label={t("limitEditor.minus15")}
                                 >
-                                    -15m
+                                    −{formatShortDuration(15)}
                                 </button>
 
                                 <div className="duration-dual-inputs duration-dual-inputs--sm">
@@ -656,6 +660,7 @@ export function LimitEditorDialog({
                                         <input
                                             type="number"
                                             className="duration-num-input duration-num-input--sm"
+                                            aria-label={t("limitEditor.hours")}
                                             min={0}
                                             max={24}
                                             value={activeFocusedH}
@@ -671,6 +676,7 @@ export function LimitEditorDialog({
                                         <input
                                             type="number"
                                             className="duration-num-input duration-num-input--sm"
+                                            aria-label={t("limitEditor.minutes")}
                                             min={0}
                                             max={59}
                                             value={activeFocusedM}
@@ -693,7 +699,7 @@ export function LimitEditorDialog({
                                     title={t("limitEditor.plus15")}
                                     aria-label={t("limitEditor.plus15")}
                                 >
-                                    +15m
+                                    +{formatShortDuration(15)}
                                 </button>
 
                                 <button

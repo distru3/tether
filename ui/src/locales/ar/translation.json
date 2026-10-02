@@ -123,7 +123,8 @@
     "yourLimits": "حدودك",
     "filterAll": "الكل",
     "filterActive": "مفعّلة",
-    "filterDisabled": "متوقفة مؤقتاً"
+    "filterDisabled": "متوقفة مؤقتاً",
+    "toggleLabel": "حد ⁨{{target}}⁩"
   },
   "downtime": {
     "tabDowntime": "أوقات التوقف المجدولة",
@@ -162,7 +163,8 @@
     "namePlaceholder": "مثال: وقت النوم، الواجبات",
     "created": "تم إنشاء الجدول.",
     "updated": "تم حفظ الجدول.",
-    "removed": "تم حذف الجدول."
+    "removed": "تم حذف الجدول.",
+    "toggleLabel": "جدول «⁨{{name}}⁩»"
   },
   "settings": {
     "title": "الإعدادات",
@@ -512,7 +514,9 @@
     "quitApp": "إنهاء التطبيق",
     "keyboardHint": "اكتب رمز PIN واضغط Enter · Esc ينهي التطبيق",
     "clear": "مسح",
-    "quitFailed": "تعذّر إغلاق التطبيق: {{reason}}"
+    "quitFailed": "تعذّر إغلاق التطبيق: {{reason}}",
+    "clearPin": "مسح الرمز",
+    "submitPin": "تأكيد الرمز"
   },
   "timeline": {
     "title": "المخطط الزمني",

@@ -67,7 +67,7 @@ export function WeeklyChart({ week, viewDay, loading, onSelectDay }: WeeklyChart
         <section className="weekly-chart-card glass-card" aria-label={t("weeklyChart.title")}>
             <header className="chart-header">
                 <div className="chart-title-block">
-                    <h3 className="chart-heading">{t("weeklyChart.title")}</h3>
+                    <h3 aria-level={2} className="chart-heading">{t("weeklyChart.title")}</h3>
                     <div className="chart-metrics-row">
                         <span className="chart-total-time font-mono">{formatDuration(total)}</span>
                         <span className={deltaClass}>{deltaLabel}</span>
@@ -75,7 +75,7 @@ export function WeeklyChart({ week, viewDay, loading, onSelectDay }: WeeklyChart
                 </div>
             </header>
 
-            <div className="week-bars-container" role="region" aria-label={t("weeklyChart.title")}>
+            <div className="week-bars-container">
                 {days.map((day) => {
                     const isSelected = day.day === viewDay;
                     const isHovered = day.day === hoveredDay;

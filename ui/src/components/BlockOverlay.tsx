@@ -254,6 +254,7 @@ export function BlockOverlay() {
   return (
     <div
       id="tether-block-overlay"
+      role="main"
       dir={isRtl ? "rtl" : "ltr"}
       className={`tether-overlay-backdrop ${exiting ? "tether-overlay-backdrop--exiting" : ""}`}
     >
@@ -300,7 +301,7 @@ export function BlockOverlay() {
               borderRadius: "20px",
               background: "var(--bg-danger)",
               border: "1px solid var(--border-danger)",
-              color: "var(--color-danger)",
+              color: "var(--color-danger-text)",
               fontSize: "11px",
               fontWeight: 700,
               letterSpacing: "0.06em",
@@ -414,7 +415,7 @@ export function BlockOverlay() {
               <span
                 style={{
                   fontSize: "12px",
-                  color: "var(--color-danger)",
+                  color: "var(--color-danger-text)",
                   fontWeight: 600,
                 }}
               >
@@ -440,6 +441,7 @@ export function BlockOverlay() {
                     key={key}
                     type="button"
                     onClick={() => handleKeypadPress(key)}
+                    aria-label={key === "C" ? t("overlay.clearPin") : key === "OK" ? t("overlay.submitPin") : undefined}
                     style={{
                       height: "44px",
                       borderRadius: "8px",
@@ -506,7 +508,7 @@ export function BlockOverlay() {
 
         {/* Non-PIN failures (e.g. the app could not be closed) */}
         {errorMsg && !wrongPin && (
-          <p role="alert" style={{ margin: 0, fontSize: "12px", color: "var(--color-danger)", fontWeight: 600, textAlign: "center" }}>
+          <p role="alert" style={{ margin: 0, fontSize: "12px", color: "var(--color-danger-text)", fontWeight: 600, textAlign: "center" }}>
             {errorMsg}
           </p>
         )}
@@ -550,7 +552,7 @@ export function BlockOverlay() {
               justifyContent: "center",
               gap: "8px",
               borderColor: "var(--border-danger)",
-              color: "var(--color-danger)",
+              color: "var(--color-danger-text)",
             }}
           >
             <Power size={16} />
