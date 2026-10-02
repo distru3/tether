@@ -14,7 +14,7 @@
 //! partially applied limit edit. Every lock site in the agent goes through
 //! [`lock_recover`] / [`lock_db`] so the policy lives in exactly one place.
 
-use std::sync::{Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use st_storage::Db;
 
@@ -28,6 +28,29 @@ pub(crate) fn lock_recover<'a, T>(mutex: &'a Mutex<T>, what: &'static str) -> Mu
             what,
             "mutex poisoned; recovering — the panicking thread's writes may be partial"
         );
+        poisoned.into_inner()
+    })
+}
+
+/// Shared read on an `RwLock`, with the same recover-and-keep-serving policy
+/// as [`lock_recover`].
+pub(crate) fn read_recover<'a, T>(
+    lock: &'a RwLock<T>,
+    what: &'static str,
+) -> RwLockReadGuard<'a, T> {
+    lock.read().unwrap_or_else(|poisoned| {
+        tracing::error!(what, "rwlock poisoned; recovering");
+        poisoned.into_inner()
+    })
+}
+
+/// Exclusive write on an `RwLock`; see [`read_recover`].
+pub(crate) fn write_recover<'a, T>(
+    lock: &'a RwLock<T>,
+    what: &'static str,
+) -> RwLockWriteGuard<'a, T> {
+    lock.write().unwrap_or_else(|poisoned| {
+        tracing::error!(what, "rwlock poisoned; recovering");
         poisoned.into_inner()
     })
 }

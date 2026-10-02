@@ -398,6 +398,7 @@ function MainDashboard() {
                   onCategorize={actions.openCategorize}
                   onOpenAppDirectory={() => setAppDirectoryOpen(true)}
                   notify={push}
+                  guarded={actions.guarded}
                 />
               </div>
             )}
@@ -826,6 +827,8 @@ function MainDashboard() {
                               type="number"
                               className="input"
                               style={{ width: '60px' }}
+                              min={0}
+                              max={168}
                               key={`cooldown_${statusInfo?.limit_cooldown_hours}`}
                               defaultValue={statusInfo?.limit_cooldown_hours?.toString() ?? "24"}
                               disabled={pendingSettings["limit_cooldown_hours"]}
@@ -854,6 +857,8 @@ function MainDashboard() {
                               type="number"
                               className="input"
                               style={{ width: '60px' }}
+                              min={5}
+                              max={3600}
                               key={`idle_${statusInfo?.idle_threshold_secs}`}
                               defaultValue={statusInfo?.idle_threshold_secs?.toString() ?? "60"}
                               disabled={pendingSettings["idle_threshold_secs"]}
@@ -882,6 +887,8 @@ function MainDashboard() {
                               type="number"
                               className="input"
                               style={{ width: '60px' }}
+                              min={0}
+                              max={1439}
                               key={`day_start_${statusInfo?.day_start_minutes}`}
                               defaultValue={statusInfo?.day_start_minutes?.toString() ?? "0"}
                               disabled={pendingSettings["day_start_minutes"]}

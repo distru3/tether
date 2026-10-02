@@ -13,6 +13,7 @@ import { ToggleSwitch } from "./ToggleSwitch";
 import { FilterTabs } from "./FilterTabs";
 import { MetricCards, type MetricData } from "./MetricCards";
 import { DowntimeSection } from "./DowntimeSection";
+import type { Guarded } from "../hooks/useLedgerActions";
 import './LimitsPanel.css';
 
 interface LimitsPanelProps {
@@ -30,6 +31,7 @@ interface LimitsPanelProps {
     onCategorize?: (appId: number, appName: string, primaryId: number | null, tagIds: number[]) => void;
     onOpenAppDirectory?: () => void;
     notify?: (kind: "success" | "error", message: string) => void;
+    guarded?: Guarded;
 }
 
 export function LimitsPanel({
@@ -47,6 +49,7 @@ export function LimitsPanel({
     onCategorize,
     onOpenAppDirectory,
     notify,
+    guarded,
 }: LimitsPanelProps) {
     const { t } = useTranslation();
     const [subSection, setSubSection] = useState<"limits" | "downtime">("limits");
@@ -132,6 +135,7 @@ export function LimitsPanel({
                 <DowntimeSection
                     catalog={catalog}
                     notify={notify || (() => {})}
+                    guarded={guarded}
                 />
             ) : (
                 <>

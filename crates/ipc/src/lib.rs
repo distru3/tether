@@ -13,9 +13,12 @@
 //! * The transport is local only. Never bind a TCP socket.
 //! * The agent authenticates the peer at accept time (pipe ACL on Windows,
 //!   `SO_PEERCRED` on Linux) and again per privileged request.
-//! * Anything that loosens enforcement ([`Request::SetLimit`],
-//!   [`Request::GrantOverride`]) carries a PIN and is written to the audit log
-//!   whether it succeeds or fails.
+//! * Anything that loosens enforcement carries a PIN, which the agent checks
+//!   centrally (its `auth` module) before dispatching: limits, overrides,
+//!   quitting a blocked app, removing a web block, recategorising an app,
+//!   editing/disabling/deleting a schedule, allowlisting, and any
+//!   [`Request::SetSetting`] that `st_core::settings::SettingKey::is_loosening`
+//!   flags. Repeated wrong credentials trip [`ErrorCode::RateLimited`].
 
 use std::io::{Read, Write};
 
@@ -84,6 +87,11 @@ pub enum Request {
         primary: Option<i64>,
         #[ts(as = "Vec<i32>")]
         tags: Vec<i64>,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     /// Everything the limit editor needs in one round trip: apps, categories
     /// and current limits.
@@ -149,6 +157,11 @@ pub enum Request {
     SetSetting {
         key: String,
         value: String,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     /// Usage reported by the session helper, which is the only component able
     /// to see the focused window. See [`ReportUsageDto`] for the contract.
@@ -171,15 +184,30 @@ pub enum Request {
         weekday_mask: u8,
         start_minute: u32,
         end_minute: u32,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     SetScheduleEnabled {
         #[ts(as = "i32")]
         id: i64,
         enabled: bool,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     DeleteSchedule {
         #[ts(as = "i32")]
         id: i64,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     ListManualBlocks,
     AddManualBlock {
@@ -196,6 +224,11 @@ pub enum Request {
         #[ts(as = "i32")]
         subject_id: i64,
         allowed: bool,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     /// Get the current focus session if active.
     GetFocusSession,
@@ -340,6 +373,9 @@ pub enum ErrorCode {
     /// something honest.
     BadRequest,
     Internal,
+    /// Too many wrong PINs or recovery codes in a row: credential checks are
+    /// refused until the lockout in the message has elapsed.
+    RateLimited,
 }
 
 /// A batch of foreground-window observations from the session helper.
@@ -811,6 +847,7 @@ mod tests {
             (ErrorCode::NotFound, "\"not_found\""),
             (ErrorCode::BadRequest, "\"bad_request\""),
             (ErrorCode::Internal, "\"internal\""),
+            (ErrorCode::RateLimited, "\"rate_limited\""),
         ];
         for (code, expected) in cases {
             let json = serde_json::to_string(&Response::Error {
@@ -821,6 +858,28 @@ mod tests {
             assert!(
                 json.contains(expected),
                 "expected {expected} in payload for {code:?}: {json}"
+            );
+        }
+    }
+
+    #[test]
+    fn loosening_requests_from_older_clients_parse_without_a_pin() {
+        // Clients predating the central PIN gate never sent `pin`; their frames
+        // must still parse (the agent then treats the PIN as empty).
+        let frames = [
+            r#"{"type":"set_setting","key":"alert_volume","value":"50"}"#,
+            r#"{"type":"categorize","app_id":1,"primary":2,"tags":[]}"#,
+            r#"{"type":"set_schedule_enabled","id":1,"enabled":false}"#,
+            r#"{"type":"delete_schedule","id":1}"#,
+            r#"{"type":"set_allowlist","subject_type":"app","subject_id":1,"allowed":true}"#,
+            r#"{"type":"update_schedule","id":1,"name":"n","weekday_mask":1,"start_minute":0,"end_minute":60}"#,
+        ];
+        for frame in frames {
+            let request: Request = serde_json::from_str(frame).expect(frame);
+            let json = serde_json::to_value(&request).expect("serialise");
+            assert!(
+                json.get("pin").is_some(),
+                "pin field present after round trip: {json}"
             );
         }
     }

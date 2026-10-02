@@ -245,13 +245,16 @@ fn recover_pin(recovery_code: String, new_pin: String) -> CmdResult<PinVaultOut>
     }
 }
 
-/// Dismantle the vault. `credential` may be the current PIN or the standing
-/// recovery code.
+/// Change one setting. `pin` is only required (once a PIN is configured) when
+/// the agent judges the change to loosen enforcement; the UI first tries
+/// without one and prompts on `bad_pin`.
 #[tauri::command]
-fn set_setting(key: String, value: String) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::SetSetting { key, value })
+fn set_setting(key: String, value: String, pin: Option<String>) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::SetSetting { key, value, pin })
 }
 
+/// Dismantle the vault. `credential` may be the current PIN or the standing
+/// recovery code.
 #[tauri::command]
 fn remove_pin(credential: String) -> CmdResult<()> {
     match ipc_client::request(st_ipc::Request::RemovePin { credential }) {
@@ -349,11 +352,17 @@ fn accepted_cmd(request: st_ipc::Request) -> CmdResult<()> {
 }
 
 #[tauri::command]
-fn categorize(app_id: i64, primary: Option<i64>, tags: Vec<i64>) -> CmdResult<()> {
+fn categorize(
+    app_id: i64,
+    primary: Option<i64>,
+    tags: Vec<i64>,
+    pin: Option<String>,
+) -> CmdResult<()> {
     accepted_cmd(st_ipc::Request::Categorize {
         app_id,
         primary,
         tags,
+        pin,
     })
 }
 
@@ -419,6 +428,7 @@ fn update_schedule(
     weekday_mask: u8,
     start_minute: u32,
     end_minute: u32,
+    pin: Option<String>,
 ) -> CmdResult<()> {
     accepted_cmd(st_ipc::Request::UpdateSchedule {
         id,
@@ -426,17 +436,18 @@ fn update_schedule(
         weekday_mask,
         start_minute,
         end_minute,
+        pin,
     })
 }
 
 #[tauri::command]
-fn set_schedule_enabled(id: i64, enabled: bool) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::SetScheduleEnabled { id, enabled })
+fn set_schedule_enabled(id: i64, enabled: bool, pin: Option<String>) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::SetScheduleEnabled { id, enabled, pin })
 }
 
 #[tauri::command]
-fn delete_schedule(id: i64) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::DeleteSchedule { id })
+fn delete_schedule(id: i64, pin: Option<String>) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::DeleteSchedule { id, pin })
 }
 
 #[tauri::command]
@@ -450,11 +461,17 @@ fn list_allowlist() -> CmdResult<st_ipc::AllowlistDto> {
 }
 
 #[tauri::command]
-fn set_allowlist(subject_type: String, subject_id: i64, allowed: bool) -> CmdResult<()> {
+fn set_allowlist(
+    subject_type: String,
+    subject_id: i64,
+    allowed: bool,
+    pin: Option<String>,
+) -> CmdResult<()> {
     accepted_cmd(st_ipc::Request::SetAllowlist {
         subject_type,
         subject_id,
         allowed,
+        pin,
     })
 }
 

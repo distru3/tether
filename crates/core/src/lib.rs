@@ -21,6 +21,7 @@ pub mod model;
 pub mod pin;
 pub mod platform;
 pub mod schedules;
+pub mod settings;
 
 pub use category::{BuiltinCategory, Category, CategoryKind, BUILTIN_CATEGORIES};
 pub use clock::{Clock, ClockGuard, ClockVerdict, SystemClock};

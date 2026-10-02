@@ -13,6 +13,9 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
   - `screentime-session`: One persistent connection looping `ReportUsage` (1 Hz), `Status`, and `BlockedApps`.
   - `screentime-ui` (Tauri): One-shot connections (connect, request, response, close) mapped to Tauri commands. Maximum worker threads on the agent: 32 (`MAX_WORKERS`).
 
+- **Authorization**: The pipe ACL admits every authenticated local user, so it proves nothing about *who* is asking. Every request passes the agent's central gate (`crates/agent/src/ipc_server/auth.rs`) before dispatch. Requests that loosen enforcement need the PIN once one is configured (see the **PIN** column below). The UI first sends such requests without a PIN and opens its PIN prompt only when the agent answers `bad_pin`, so the agent alone decides what counts as loosening.
+- **Brute-force throttle**: After 5 consecutive wrong PINs or recovery codes, each further failure locks credential checks for 30 s, doubling to a 15 min ceiling (`st_core::pin::PinThrottle`). An empty PIN means "not supplied" and never counts. Rejected credentials are written to `audit_log` as `credential_rejected`.
+
 ---
 
 ## 2. Request & Response Specification
@@ -36,9 +39,9 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
 | `DeleteLimit` | `target: LimitTargetDto`, `pin: String` | `Accepted { effective_utc, hud }` | Deleting is instant by owner decision. |
 | `CancelPendingLimit` | `target: LimitTargetDto`, `pin: String` | `Accepted { effective_utc, hud }` | Aborts a queued loosening change before it becomes active. |
 | `GrantOverride` | `target: LimitTargetDto`, `seconds: i64`, `pin: String` | `Accepted { effective_utc, hud }` | Grants +15m override. Rejected outright in strict mode or with invalid PIN. |
-| `Categorize` | `app_id: i64`, `primary: Option<i64>`, `tags: Vec<i64>` | `Accepted { effective_utc, hud }` | Reclassifies app. Primary drives reporting; tags affect limit matching. |
+| `Categorize` | `app_id: i64`, `primary: Option<i64>`, `tags: Vec<i64>`, `pin?: String` | `Accepted { effective_utc, hud }` | Reclassifies app. Primary drives reporting; tags affect limit matching. **PIN always** (moving an app to an unlimited category is a bypass). |
 | `CloseApps` | `app_id: i64`, `pin: String` | `Accepted { ... }` | User-initiated app termination from the block overlay. |
-| `SetSetting` | `key: String`, `value: String` | `Accepted { ... }` | Updates settings table and reloads runtime policy. |
+| `SetSetting` | `key: String`, `value: String`, `pin?: String` | `Accepted { ... }` | Only keys in `st_core::settings::SettingKey` are accepted (unknown keys, including `pin_hash`, are `bad_request`); values are range-checked and stored in canonical form, then applied to the live policy. **PIN when loosening**: `strict_mode`/`family_dns` → `false`, lowering `limit_cooldown_hours`, any change to `day_start_minutes` or `idle_threshold_secs`. HUD, volume, hotkey and `capture_window_titles` never need it. Ranges: cooldown 0–168 h, day start 0–1439 min, idle 5–3600 s, volume 0–100, hotkey ≤ 32 chars. |
 
 ### PIN Vault
 
@@ -62,11 +65,11 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
 | :--- | :--- | :--- | :--- |
 | `ListSchedules` | None | `Schedules(SchedulesDto)` | Lists all downtime schedules. |
 | `CreateSchedule` | `name`, `weekday_mask`, `start_minute`, `end_minute` | `ScheduleCreated(ScheduleDto)` | Inserts new downtime window. |
-| `UpdateSchedule` | `id`, `name`, `weekday_mask`, `start_minute`, `end_minute` | `Accepted { ... }` | Updates downtime window times/days. |
-| `SetScheduleEnabled` | `id`, `enabled` | `Accepted { ... }` | Toggles schedule active state. |
-| `DeleteSchedule` | `id` | `Accepted { ... }` | Deletes schedule. |
+| `UpdateSchedule` | `id`, `name`, `weekday_mask`, `start_minute`, `end_minute`, `pin?` | `Accepted { ... }` | Updates downtime window times/days. **PIN always.** |
+| `SetScheduleEnabled` | `id`, `enabled`, `pin?` | `Accepted { ... }` | Toggles schedule active state. **PIN to disable**; enabling is free. |
+| `DeleteSchedule` | `id`, `pin?` | `Accepted { ... }` | Deletes schedule. **PIN always.** |
 | `ListAllowlist` | None | `Allowlist(AllowlistDto)` | Lists subjects exempt from downtime. |
-| `SetAllowlist` | `subject_type`, `subject_id`, `allowed` | `Accepted { ... }` | Adds or removes subject from allowlist. |
+| `SetAllowlist` | `subject_type`, `subject_id`, `allowed`, `pin?` | `Accepted { ... }` | Adds or removes subject from allowlist. **PIN to add**; removing is free. |
 | `GetFocusSession` | None | `FocusSession { session }` | Queries active focus session if any. |
 | `StartFocusSession`| `duration_minutes: u32`, `name: Option<String>` | `Accepted { ... }` | Starts strict focus session. |
 | `EndFocusSession` | `pin: Option<String>` | `Accepted { ... }` | Ends focus session early (PIN required if strict). |
@@ -84,4 +87,5 @@ When a request fails, the agent responds with `Response::Error { code, message }
 - `not_found`: Requested entity id does not exist.
 - `bad_request`: Malformed payload, out-of-bounds minute/day, or invalid argument.
 - `internal`: Storage failure or unhandled agent error.
+- `rate_limited`: Too many wrong PINs or recovery codes in a row; the message says how many seconds remain.
 - `unreachable` (Host-owned): Named pipe connection failed or agent service stopped.
