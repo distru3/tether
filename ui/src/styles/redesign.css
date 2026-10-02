@@ -1533,52 +1533,67 @@ dialog::backdrop,
   background: rgba(255, 255, 255, 0.055);
 }
 
+/* The one switch definition (ToggleSwitch and the settings rows). The knob
+   travels toward the inline end, so "on" is on the right in English and on
+   the left in Arabic. */
 .toggle-switch {
-  width: 40px !important;
-  height: 22px !important;
-  appearance: none !important;
-  -webkit-appearance: none !important;
-  border-radius: 11px !important;
-  background: rgba(33, 15, 55, 0.85) !important;
-  border: 1px solid rgba(220, 160, 109, 0.25) !important;
-  position: relative !important;
-  cursor: pointer !important;
-  transition: all 0.2s ease !important;
-  flex-shrink: 0 !important;
-  outline: none !important;
-  padding: 0 !important;
-  margin: 0 !important;
-  box-sizing: border-box !important;
-  display: inline-block !important;
-  vertical-align: middle !important;
+  width: 40px;
+  height: 22px;
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 11px;
+  background: rgba(33, 15, 55, 0.85);
+  border: 1px solid rgba(220, 160, 109, 0.25);
+  position: relative;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  padding: 0;
+  margin: 0;
+  box-sizing: border-box;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.toggle-switch:focus {
+  outline: none;
+}
+
+.toggle-switch:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
 }
 
 .toggle-switch::after {
-  content: '' !important;
-  position: absolute !important;
-  width: 16px !important;
-  height: 16px !important;
-  top: 2px !important;
-  left: 2px !important;
-  border-radius: 50% !important;
-  background-color: var(--text-secondary) !important;
-  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease !important;
-  box-sizing: border-box !important;
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  top: 2px;
+  inset-inline-start: 2px;
+  border-radius: 50%;
+  background-color: var(--text-secondary);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+  box-sizing: border-box;
 }
 
 .toggle-switch:checked {
-  background: var(--color-accent) !important;
-  border-color: var(--color-accent) !important;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
 }
 
 .toggle-switch:checked::after {
-  transform: translateX(18px) !important;
-  background-color: #210F37 !important;
+  transform: translateX(18px);
+  background-color: #210F37;
+}
+
+[dir="rtl"] .toggle-switch:checked::after {
+  transform: translateX(-18px);
 }
 
 .toggle-switch:disabled {
-  opacity: 0.45 !important;
-  cursor: not-allowed !important;
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* Cross-page structure refinements. */
@@ -1970,21 +1985,21 @@ dialog::backdrop,
 }
 
 :is([data-theme="clean-titanium"], [data-theme="nordic-frost"], [data-theme-mode="light"]) .toggle-switch {
-  background: #CBD5E1 !important;
-  border-color: #94A3B8 !important;
+  background: #CBD5E1;
+  border-color: #94A3B8;
 }
 
 :is([data-theme="clean-titanium"], [data-theme="nordic-frost"], [data-theme-mode="light"]) .toggle-switch::after {
-  background-color: #FFFFFF !important;
+  background-color: #FFFFFF;
 }
 
 :is([data-theme="clean-titanium"], [data-theme="nordic-frost"], [data-theme-mode="light"]) .toggle-switch:checked {
-  background: var(--color-primary) !important;
-  border-color: var(--color-primary) !important;
+  background: var(--color-primary);
+  border-color: var(--color-primary);
 }
 
 :is([data-theme="clean-titanium"], [data-theme="nordic-frost"], [data-theme-mode="light"]) .toggle-switch:checked::after {
-  background-color: #FFFFFF !important;
+  background-color: #FFFFFF;
 }
 
 :is([data-theme="clean-titanium"], [data-theme="nordic-frost"], [data-theme-mode="light"]) .settings-page .select-input,
