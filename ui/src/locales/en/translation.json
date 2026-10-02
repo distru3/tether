@@ -438,7 +438,9 @@
     "pinSaved": "PIN saved — note the recovery code.",
     "categorized": "{{app}} categorized.",
     "resetAutoDetect": "{{app}} reset to auto-detect.",
-    "settingSaved": "Setting saved."
+    "settingSaved": "Setting saved.",
+    "applied": "Applied.",
+    "takesEffect": "Takes effect {{when}}."
   },
   "api": {
     "errors": {
