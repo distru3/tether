@@ -278,7 +278,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
                                 {t("webFilter.activeRules", "Active Domain Rules")}
                             </h3>
                             <span className="web-filter-count-badge">
-                                {filteredDomains.length} {filteredDomains.length === 1 ? "rule" : "rules"}
+                                {t("webFilter.ruleCount", { count: filteredDomains.length })}
                             </span>
                         </div>
                         <div className="web-filter-search-wrapper">

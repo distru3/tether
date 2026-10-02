@@ -154,6 +154,14 @@
     --print-filter: none;
 }
 
+/* Arabic: JetBrains Mono has no Arabic glyphs, and a monospace fallback sets
+   each connected letter in its own fixed cell. Keep JetBrains Mono for the
+   Latin digits (tabular figures) and let Arabic fall through to a
+   proportional UI face. */
+:root:lang(ar) {
+    --font-mono: 'JetBrains Mono Variable', 'JetBrains Mono', 'Segoe UI', Tahoma, sans-serif;
+}
+
 /* ─── Theme 2: Slate Charcoal (Neutral Dark) ────────────────────────────── */
 [data-theme="slate-charcoal"] {
     color-scheme: dark;

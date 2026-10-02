@@ -2821,6 +2821,7 @@ dialog::backdrop,
 
 .duration-slider-wrap {
   margin-top: 4px;
+  margin-bottom: 10px;
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -2833,12 +2834,35 @@ dialog::backdrop,
   height: 5px;
 }
 
+/* Tick labels sit at their real position on the linear scale (set inline as
+   --at, 0..1), so "1h" lines up with where the thumb is at one hour. */
 .duration-slider-labels {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  height: 14px;
   font-size: 10.5px;
   font-family: var(--font-mono);
   color: var(--text-muted);
+}
+
+.duration-slider-labels > span {
+  position: absolute;
+  inset-inline-start: calc(var(--at) * 100%);
+  translate: -50% 0;
+  white-space: nowrap;
+}
+
+[dir="rtl"] .duration-slider-labels > span {
+  translate: 50% 0;
+}
+
+.duration-slider-labels > span:first-child {
+  translate: 0 0;
+}
+
+.duration-slider-labels > span:last-child {
+  inset-inline-start: auto;
+  inset-inline-end: 0;
+  translate: 0 0;
 }
 
 /* ---- Weekday Schedule ---- */
@@ -3051,3 +3075,11 @@ dialog::backdrop,
   color: var(--text-primary);
 }
 
+
+/* Arabic is a connected script: tracking pulls its letters apart ("ح د ي د").
+   Every letter-spacing in this stylesheet set is tuned for Latin, so Arabic
+   drops all of it. `!important` is needed to beat the few legacy
+   `letter-spacing: … !important` rules above. */
+:lang(ar) * {
+  letter-spacing: normal !important;
+}

@@ -249,7 +249,7 @@ export function LimitsPanel({
                                                                     const appObj = catalog?.apps.find(a => a.id === targetId);
                                                                     onCategorize(targetId, label, appObj?.primary_category ?? null, appObj?.tags ?? []);
                                                                 }}
-                                                                title={t("categorize.changeCategory", "Click to change category")}
+                                                                title={t("categorize.changeCategory")}
                                                                 disabled={busy}
                                                             >
                                                                 {categoryName}

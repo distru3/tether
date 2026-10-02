@@ -1,4 +1,4 @@
-import { useMemo, useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from "react";
+import { useMemo, useState, useRef, useEffect, type CSSProperties, type FormEvent, type KeyboardEvent } from "react";
 import { useTranslation } from "react-i18next";
 import { Smartphone, Layers, LayoutGrid, Clock, Calendar, Check } from "lucide-react";
 import type { WeekdayMinutes } from "../api";
@@ -51,6 +51,11 @@ function decodeTarget(value: string): LimitTargetDto | null {
     if ((kind === "app" || kind === "category") && Number.isFinite(id)) return { kind, id };
     return null;
 }
+
+/** The duration slider's linear range (minutes) and its labelled ticks. */
+const SLIDER_MIN = 5;
+const SLIDER_MAX = 480;
+const SLIDER_TICKS = [15, 60, 120, 240, 360, SLIDER_MAX];
 
 /** Compact per-day budget label, in the app-wide duration style. */
 function formatShortDuration(totalMins: number): string {
@@ -295,14 +300,7 @@ export function LimitEditorDialog({
         setError(null);
     };
 
-    const DURATION_PRESETS = [
-        { label: "15m", val: 15 },
-        { label: "30m", val: 30 },
-        { label: "1h", val: 60 },
-        { label: "2h", val: 120 },
-        { label: "3h", val: 180 },
-        { label: "4h", val: 240 },
-    ];
+    const DURATION_PRESETS = [15, 30, 60, 120, 180, 240].map((val) => ({ label: formatShortDuration(val), val }));
 
     // Weekday schedule quick helpers
     const toggleAllDays = () => {
@@ -526,7 +524,7 @@ export function LimitEditorDialog({
                                     disabled={busy}
                                     onChange={(e) => setHours(Number.parseInt(e.target.value, 10) || 0)}
                                 />
-                                <span className="duration-unit">h</span>
+                                <span className="duration-unit">{t("time.short.h")}</span>
                             </div>
                             <span className="duration-separator">:</span>
                             <div className="duration-input-group">
@@ -539,7 +537,7 @@ export function LimitEditorDialog({
                                     disabled={busy}
                                     onChange={(e) => setMins(Number.parseInt(e.target.value, 10) || 0)}
                                 />
-                                <span className="duration-unit">m</span>
+                                <span className="duration-unit">{t("time.short.m")}</span>
                             </div>
                         </div>
                     </div>
@@ -563,19 +561,19 @@ export function LimitEditorDialog({
                         <input
                             type="range"
                             className="duration-slider"
-                            min={5}
-                            max={480}
+                            min={SLIDER_MIN}
+                            max={SLIDER_MAX}
                             step={5}
-                            value={Math.min(totalMinutesVal, 480)}
+                            value={Math.min(totalMinutesVal, SLIDER_MAX)}
                             disabled={busy}
                             onChange={(e) => { setMinutes(e.target.value); setError(null); }}
                         />
-                        <div className="duration-slider-labels">
-                            <span>15m</span>
-                            <span>1h</span>
-                            <span>2h</span>
-                            <span>4h</span>
-                            <span>8h+</span>
+                        <div className="duration-slider-labels" aria-hidden="true">
+                            {SLIDER_TICKS.map((mins) => (
+                                <span key={mins} style={{ "--at": (mins - SLIDER_MIN) / (SLIDER_MAX - SLIDER_MIN) } as CSSProperties}>
+                                    {formatShortDuration(mins)}{mins === SLIDER_MAX ? "+" : ""}
+                                </span>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -666,7 +664,7 @@ export function LimitEditorDialog({
                                                 updateDayMinutes(focusedDay, String(h * 60 + activeFocusedM));
                                             }}
                                         />
-                                        <span className="duration-unit">h</span>
+                                        <span className="duration-unit">{t("time.short.h")}</span>
                                     </div>
                                     <span className="duration-separator">:</span>
                                     <div className="duration-input-group">
@@ -681,7 +679,7 @@ export function LimitEditorDialog({
                                                 updateDayMinutes(focusedDay, String(activeFocusedH * 60 + m));
                                             }}
                                         />
-                                        <span className="duration-unit">m</span>
+                                        <span className="duration-unit">{t("time.short.m")}</span>
                                     </div>
                                 </div>
 
