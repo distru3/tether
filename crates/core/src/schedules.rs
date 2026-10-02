@@ -26,6 +26,23 @@ pub struct DowntimeSchedule {
     pub enabled: bool,
 }
 
+/// The local wall-clock minute of day (0..1440) and Monday-first weekday
+/// (0..7) for `now`, both derived from the *same* local instant.
+///
+/// Downtime schedules are wall-clock windows ("22:00–07:00 on school nights"),
+/// so they must not use [`DayKey`](crate::daykey::DayKey)'s weekday: the day
+/// key honours the configurable day-start offset, and mixing it with a
+/// wall-clock minute evaluated overnight windows against the wrong weekday
+/// bit whenever the day start was not midnight.
+pub fn local_minute_and_weekday(now: DateTime<Utc>, tz_offset_secs: i32) -> (u32, u32) {
+    use chrono::{Datelike, Timelike};
+    let local = now.naive_utc() + chrono::Duration::seconds(tz_offset_secs as i64);
+    (
+        local.hour() * 60 + local.minute(),
+        local.weekday().num_days_from_monday(),
+    )
+}
+
 /// Check if `weekday_mask` has the bit for `weekday_index` set.
 /// `weekday_index`: 0 = Monday .. 6 = Sunday.
 pub fn weekday_mask_contains(mask: u8, weekday_index: u32) -> bool {
@@ -216,5 +233,36 @@ mod tests {
         let after = start + chrono::Duration::minutes(26);
         assert!(!session.is_active(after));
         assert_eq!(session.remaining_seconds(after), 0);
+    }
+
+    #[test]
+    fn local_minute_and_weekday_use_one_local_instant() {
+        // 2026-08-18 is a Tuesday. 01:30Z at UTC+2 is 03:30 Tuesday local.
+        let now = DateTime::parse_from_rfc3339("2026-08-18T01:30:00Z")
+            .expect("valid")
+            .with_timezone(&Utc);
+        assert_eq!(local_minute_and_weekday(now, 2 * 3600), (3 * 60 + 30, 1));
+        // West of UTC the local date is still Monday.
+        assert_eq!(local_minute_and_weekday(now, -5 * 3600), (20 * 60 + 30, 0));
+    }
+
+    #[test]
+    fn an_overnight_window_covers_the_small_hours_regardless_of_day_start() {
+        // Monday-only 22:00-07:00. At 02:00 Tuesday local it must be active:
+        // the morning half belongs to Monday's window. (A 04:00 day start used
+        // to make the enforcer look up Sunday's bit here.)
+        let monday_night = DowntimeSchedule {
+            id: 1,
+            name: "Bedtime".into(),
+            weekday_mask: 0b000_0001,
+            start_minute: 22 * 60,
+            end_minute: 7 * 60,
+            enabled: true,
+        };
+        let now = DateTime::parse_from_rfc3339("2026-08-18T02:00:00Z")
+            .expect("valid")
+            .with_timezone(&Utc);
+        let (minute, weekday) = local_minute_and_weekday(now, 0);
+        assert!(is_schedule_active(&monday_night, minute, weekday));
     }
 }

@@ -90,7 +90,8 @@ pub(super) fn authorize(ctx: &Ctx, request: &Request) -> Result<(), Denied> {
         | Request::SetLimit { pin, .. }
         | Request::DeleteLimit { pin, .. }
         | Request::CancelPendingLimit { pin, .. }
-        | Request::RemoveManualBlock { pin, .. } => require_pin(ctx, pin),
+        | Request::RemoveManualBlock { pin, .. }
+        | Request::VerifyPin { pin } => require_pin(ctx, pin),
 
         Request::GrantOverride { pin, .. } => {
             if read_recover(&ctx.policy, "policy").strict_mode {

@@ -45,6 +45,8 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
 
 ### PIN Vault
 
+`VerifyPin { pin }` → `Accepted` or `bad_pin`. It changes nothing and is used for UI-only reveals (the hidden adult-domain list). It counts against the same brute-force throttle as every other credential check.
+
 | Request Variant | Parameters | Response Variant | Invariants |
 | :--- | :--- | :--- | :--- |
 | `SetPin` | `new_pin: String`, `current_pin: Option<String>` | `PinVault { recovery_code }` | Plaintext recovery code is returned ONCE on creation/rotation. Stored only as Argon2 hash. |
@@ -56,8 +58,8 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
 | Request Variant | Parameters | Response Variant | Description |
 | :--- | :--- | :--- | :--- |
 | `ListManualBlocks` | None | `ManualBlocks { domains }` | Returns all manually blocked domains. |
-| `AddManualBlock` | `domain: String` | `Accepted { ... }` | Adds a domain to manual block list. |
-| `RemoveManualBlock`| `domain: String`, `pin: String` | `Accepted { ... }` | Removes domain; PIN-gated if PIN is configured. |
+| `AddManualBlock` | `domain: String` | `Accepted { ... }` | Adds a domain to the manual block list. The domain is normalised; adding an already-blocked domain is a no-op; invalid input is `bad_request`. Tightening, so no PIN. |
+| `RemoveManualBlock`| `domain: String`, `pin: String` | `Accepted { ... }` | Removes every manual rule for the normalised domain; PIN-gated if a PIN is configured. `not_found` when the domain isn't blocked, `bad_request` when it isn't a valid domain. |
 
 ### Schedules, Allowlist & Focus Sessions
 

@@ -8,8 +8,11 @@ license.workspace = true
 [lib]
 name = "st_win32"
 
-# No non-Windows dependencies: every item here is Win32-only, so the crate is
-# expected to be pulled in behind `target.'cfg(windows)'` by its consumers.
+# Every item here is Win32-only, so the crate is expected to be pulled in
+# behind `target.'cfg(windows)'` by its consumers.
+[dependencies]
+tracing.workspace = true
+
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
     "Win32_Foundation",

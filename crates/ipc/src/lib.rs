@@ -239,6 +239,12 @@ pub enum Request {
     EndFocusSession {
         pin: Option<String>,
     },
+    /// Check a PIN without changing anything, for UI-only reveals (e.g. the
+    /// hidden adult-domain list). Answers `Accepted` or `bad_pin`, and counts
+    /// against the same brute-force throttle as every other credential check.
+    VerifyPin {
+        pin: String,
+    },
     /// Register applications discovered on the local system (proactive app discovery).
     RegisterDiscoveredApps {
         apps: Vec<DiscoveredAppDto>,

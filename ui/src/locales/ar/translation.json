@@ -224,7 +224,8 @@
     "remove": "إزالة",
     "removeDomain": "إزالة {{domain}}",
     "searchPlaceholder": "البحث في النطاقات المحظورة...",
-    "unlockHidden": "إلغاء قفل النطاقات المخفية للبالغين"
+    "unlockHidden": "إلغاء قفل النطاقات المخفية للبالغين",
+    "importSummary": "تم استيراد {{added}} نطاقاً؛ وتم تخطي {{skipped}} لأنها ليست أسماء نطاقات صالحة."
   },
   "categorize": {
     "title": "تصنيف التطبيق",

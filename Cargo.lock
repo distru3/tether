@@ -3090,6 +3090,7 @@ dependencies = [
  "serde_json",
  "st-core",
  "st-ipc",
+ "st-win32",
  "tauri",
  "tauri-build",
  "tauri-plugin-shell",
@@ -3570,6 +3571,7 @@ dependencies = [
 name = "st-win32"
 version = "0.2.0-beta"
 dependencies = [
+ "tracing",
  "windows 0.58.0",
 ]
 

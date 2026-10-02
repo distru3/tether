@@ -48,7 +48,9 @@ use st_ipc::{
 };
 use st_storage::{Db, LimitRow};
 
+use crate::family_dns::{self, DnsBackend};
 use crate::locks::{lock_db, lock_recover, read_recover, write_recover};
+pub use crate::policy::Policy;
 
 mod auth;
 use crate::persist;
@@ -112,29 +114,6 @@ pub struct StatusInfo {
     pub self_sampling: bool,
     // Hosts-file filtering cannot intercept DoH/DoT; be honest about it.
     pub blocks_encrypted_dns: bool,
-}
-
-/// Policy knobs read from the database. Captured at startup; M4 makes these
-/// live-editable and reloadable.
-#[derive(Debug, Clone)]
-pub struct Policy {
-    /// Hours before a loosened limit takes effect.
-    pub limit_cooldown_hours: i64,
-    /// When true, "+15 minutes" overrides are refused outright.
-    pub strict_mode: bool,
-    /// Minutes after local midnight at which the day rolls over. Overrides
-    /// must be attributed to exactly the day the enforcer/sampler compute.
-    pub day_start_minutes: i64,
-    /// Idle seconds beyond which focused time stops accruing.
-    pub idle_threshold_secs: i64,
-    /// Whether to show the remaining time HUD on limited apps.
-    pub show_hud_overlay: bool,
-    /// Whether to allow the floating HUD over full-screen games (may break driver FPS limits).
-    pub show_hud_in_fullscreen: bool,
-    /// Remapable global hotkey to peek the HUD when dormant in games (default "Ctrl+Alt+T").
-    pub hud_peek_hotkey: String,
-    /// Alert chime audio volume from 0 to 100 (default 80).
-    pub alert_volume: i64,
 }
 
 /// Runtime-updated facts shared between IPC workers and the main loop.
@@ -205,6 +184,22 @@ pub struct Ctx {
     processes: Arc<Mutex<Box<dyn ProcessController>>>,
     clock: Arc<dyn Clock>,
     live: Arc<Live>,
+    /// Family DNS adapter configuration; a fake in tests.
+    dns: Arc<dyn DnsBackend>,
+    /// Where the DNS backup file lives. `None` in tests.
+    data_dir: Option<std::path::PathBuf>,
+}
+
+/// Everything [`spawn`] needs from the agent's startup.
+pub struct ServerDeps {
+    pub db: Arc<Mutex<Db>>,
+    pub status: StatusInfo,
+    /// Shared with the main loop, which reads it every tick.
+    pub policy: Arc<std::sync::RwLock<Policy>>,
+    pub processes: Arc<Mutex<Box<dyn ProcessController>>>,
+    pub clock: Arc<dyn Clock>,
+    pub dns: Arc<dyn DnsBackend>,
+    pub data_dir: Option<std::path::PathBuf>,
 }
 
 /// Slot accounting for the worker cap: a count plus a condvar the accept loop
@@ -292,22 +287,17 @@ unsafe impl Send for OwnedStream {}
 
 /// Run the IPC server: an accept loop plus up to [`MAX_WORKERS`] connection
 /// workers. Returns handles to coordinate shutdown and share runtime facts.
-pub fn spawn(
-    pipe_name: &'static str,
-    db: Arc<Mutex<Db>>,
-    status: StatusInfo,
-    policy: Policy,
-    processes: Arc<Mutex<Box<dyn ProcessController>>>,
-    clock: Arc<dyn Clock>,
-) -> IpcServerHandle {
+pub fn spawn(pipe_name: &'static str, deps: ServerDeps) -> IpcServerHandle {
     let live = Arc::new(Live::default());
     let ctx = Ctx {
-        db,
-        status: Arc::new(status),
-        policy: Arc::new(std::sync::RwLock::new(policy)),
-        processes,
-        clock,
+        db: deps.db,
+        status: Arc::new(deps.status),
+        policy: deps.policy,
+        processes: deps.processes,
+        clock: deps.clock,
         live: live.clone(),
+        dns: deps.dns,
+        data_dir: deps.data_dir,
     };
     let workers = Arc::new(WorkerCap::new());
 
@@ -405,41 +395,56 @@ fn list_manual_blocks(ctx: &Ctx) -> Response {
     }
 }
 
+/// Manual web blocks: rules with neither a blocklist nor a category.
+fn manual_rule_ids(db: &Db, domain: &str) -> st_storage::Result<Vec<i64>> {
+    Ok(db
+        .list_block_rules()?
+        .into_iter()
+        .filter(|r| r.blocklist_id.is_none() && r.category_id.is_none() && r.domain == domain)
+        .map(|r| r.id)
+        .collect())
+}
+
 fn add_manual_block(ctx: &Ctx, domain: &str) -> Response {
+    let Some(domain) = st_storage::normalize_domain(domain) else {
+        return bad_request(format!("not a valid domain: {domain}"));
+    };
     let db = lock_db(&ctx.db);
-    if let Err(e) = db.add_block_rule(None, None, domain, true, "block") {
-        tracing::error!(error = %e, "failed to add manual block");
-        return Response::Error {
-            code: ErrorCode::Internal,
-            message: "Database error".into(),
-        };
+    // Idempotent: a second add must not create a duplicate that a single
+    // remove would leave behind.
+    match manual_rule_ids(&db, &domain) {
+        Ok(ids) if !ids.is_empty() => return accepted(ctx.clock.now_utc()),
+        Ok(_) => {}
+        Err(e) => return error_internal(format!("list block rules: {e}")),
     }
-    Response::Accepted {
-        hud: None,
-        effective_utc: ctx.clock.now_utc().to_rfc3339(),
+    match db.add_block_rule(None, None, &domain, true, "block") {
+        Ok(_) => accepted(ctx.clock.now_utc()),
+        Err(e) => error_internal(format!("add block rule: {e}")),
     }
 }
 
 fn remove_manual_block(ctx: &Ctx, domain: &str) -> Response {
-    let db = lock_db(&ctx.db);
-    // Find the rule
-    let rule_id = match db.list_block_rules() {
-        Ok(rows) => rows
-            .into_iter()
-            .find(|r| r.blocklist_id.is_none() && r.domain == domain)
-            .map(|r| r.id),
-        Err(_) => None,
+    let Some(domain) = st_storage::normalize_domain(domain) else {
+        return bad_request(format!("not a valid domain: {domain}"));
     };
-
-    if let Some(id) = rule_id {
+    let db = lock_db(&ctx.db);
+    let ids = match manual_rule_ids(&db, &domain) {
+        Ok(ids) => ids,
+        Err(e) => return error_internal(format!("list block rules: {e}")),
+    };
+    if ids.is_empty() {
+        return Response::Error {
+            code: ErrorCode::NotFound,
+            message: format!("{domain} is not blocked"),
+        };
+    }
+    // Remove every copy, including duplicates written by older versions.
+    for id in ids {
         if let Err(e) = db.delete_block_rule(id) {
-            tracing::error!(error = %e, "failed to remove manual block");
+            return error_internal(format!("remove block rule: {e}"));
         }
     }
-    Response::Accepted {
-        hud: None,
-        effective_utc: ctx.clock.now_utc().to_rfc3339(),
-    }
+    accepted(ctx.clock.now_utc())
 }
 
 fn schedule_to_dto(s: &st_core::schedules::DowntimeSchedule) -> st_ipc::ScheduleDto {
@@ -614,89 +619,25 @@ fn set_setting(ctx: &Ctx, key: &str, value: &str) -> Response {
     };
     let now = ctx.clock.now_utc();
     if key == SettingKey::FamilyDns {
-        set_family_dns(ctx, value == "true");
-        return accepted(now);
+        // OS work runs without the database lock; see `family_dns`.
+        let data_dir = ctx.data_dir.as_deref();
+        let result = if value == "true" {
+            family_dns::enable(&ctx.db, &*ctx.dns, data_dir)
+        } else {
+            family_dns::disable(Some(&ctx.db), &*ctx.dns, data_dir)
+        };
+        return match result {
+            Ok(()) => accepted(now),
+            Err(e) => error_internal(format!("family DNS: {e}")),
+        };
     }
     if let Err(e) = lock_db(&ctx.db).set_setting(key.storage_key(), &value) {
         return error_internal(format!("save setting: {e}"));
     }
-    let mut p = write_recover(&ctx.policy, "policy");
-    // Numeric values were range-checked by `SettingKey::normalize`.
-    let number = || value.parse::<i64>().unwrap_or_default();
-    match key {
-        SettingKey::LimitCooldownHours => p.limit_cooldown_hours = number(),
-        SettingKey::StrictMode => p.strict_mode = value == "true",
-        SettingKey::DayStartMinutes => p.day_start_minutes = number(),
-        SettingKey::IdleThresholdSecs => p.idle_threshold_secs = number(),
-        SettingKey::ShowHudOverlay => p.show_hud_overlay = value == "true",
-        SettingKey::ShowHudInFullscreen => p.show_hud_in_fullscreen = value == "true",
-        SettingKey::HudPeekHotkey => p.hud_peek_hotkey = value,
-        SettingKey::AlertVolume => p.alert_volume = number(),
-        // Read once at startup by the tracker; takes effect on restart.
-        SettingKey::CaptureWindowTitles | SettingKey::FamilyDns => {}
-    }
+    // Window-title capture is read once by the tracker at startup; every
+    // other key takes effect immediately through the shared policy.
+    write_recover(&ctx.policy, "policy").apply(key, &value);
     accepted(now)
-}
-
-fn set_family_dns(ctx: &Ctx, enable: bool) {
-    let db_guard = lock_db(&ctx.db);
-    if enable {
-        let already = db_guard
-            .setting("family_dns_enabled")
-            .ok()
-            .flatten()
-            .as_deref()
-            == Some("true");
-        if !already {
-            if let Ok(ifaces) = st_dns::dns_config::capture() {
-                if let Ok(json) = serde_json::to_string(&ifaces) {
-                    let _ = db_guard.set_setting("original_dns_config", &json);
-                    if let Ok(dir) = crate::data_dir() {
-                        let _ = std::fs::create_dir_all(&dir);
-                        let _ = std::fs::write(dir.join("original_dns_backup.json"), &json);
-                    }
-                }
-                st_dns::dns_config::set_family_dns(&ifaces);
-            }
-            let _ = db_guard.set_setting("family_dns_enabled", "true");
-            st_dns::dns_config::set_registry_family_dns(true);
-        }
-    } else {
-        let mut restored = false;
-        let backup = db_guard.setting("original_dns_config").ok().flatten();
-        if let Some(json) = backup {
-            if let Ok(ifaces) = serde_json::from_str::<Vec<st_dns::dns_config::IfaceDns>>(&json) {
-                st_dns::dns_config::restore_all(&ifaces);
-                restored = true;
-            }
-        }
-        if !restored {
-            if let Ok(dir) = crate::data_dir() {
-                let backup_file = dir.join("original_dns_backup.json");
-                if let Ok(content) = std::fs::read_to_string(&backup_file) {
-                    if let Ok(ifaces) =
-                        serde_json::from_str::<Vec<st_dns::dns_config::IfaceDns>>(&content)
-                    {
-                        st_dns::dns_config::restore_all(&ifaces);
-                        restored = true;
-                    }
-                }
-            }
-        }
-        if !restored {
-            if let Ok(current) = st_dns::dns_config::capture() {
-                st_dns::dns_config::restore_all(&current);
-            }
-        }
-        if let Ok(dir) = crate::data_dir() {
-            let _ = std::fs::remove_file(dir.join("original_dns_backup.json"));
-        }
-        let _ = db_guard.set_setting("family_dns_enabled", "false");
-        let _ = db_guard
-            .conn()
-            .execute("DELETE FROM settings WHERE key = 'original_dns_config'", []);
-        st_dns::dns_config::set_registry_family_dns(false);
-    }
 }
 
 fn handle(ctx: &Ctx, request: Request) -> Response {
@@ -751,6 +692,8 @@ fn handle(ctx: &Ctx, request: Request) -> Response {
         } => categorize(ctx, app_id, primary, &tags),
         Request::RegisterDiscoveredApps { apps } => register_discovered_apps(ctx, apps, now),
         Request::ReportUsage { report } => report_usage(ctx, report),
+        // `auth` already verified the PIN; reaching here means it matched.
+        Request::VerifyPin { .. } => accepted(now),
         Request::ListManualBlocks => list_manual_blocks(ctx),
         Request::AddManualBlock { domain } => add_manual_block(ctx, &domain),
         Request::RemoveManualBlock { domain, .. } => remove_manual_block(ctx, &domain),
@@ -1748,6 +1691,21 @@ mod tests {
 
     // -- Handler-level fixtures. ---------------------------------------------
 
+    /// DNS backend that must never be reached by tests that don't script it.
+    struct NoDns;
+
+    impl DnsBackend for NoDns {
+        fn capture(&self) -> Result<String, String> {
+            Err("no DNS in tests".into())
+        }
+        fn apply(&self, _captured: &str) -> Result<(), String> {
+            Err("no DNS in tests".into())
+        }
+        fn restore(&self, _captured: Option<&str>) -> Result<(), String> {
+            Err("no DNS in tests".into())
+        }
+    }
+
     /// Records terminations so the overlay's Quit action can be asserted.
     struct FakeProcesses {
         pids: Vec<u32>,
@@ -1816,6 +1774,8 @@ mod tests {
             processes: Arc::new(Mutex::new(Box::new(FakeProcesses::default()))),
             clock: Arc::new(clock),
             live: Arc::new(Live::default()),
+            dns: Arc::new(NoDns),
+            data_dir: None,
         }
     }
 
@@ -1845,6 +1805,8 @@ mod tests {
             processes: Arc::new(Mutex::new(Box::new(FakeProcesses::default()))),
             clock: Arc::new(clock),
             live: Arc::new(Live::default()),
+            dns: Arc::new(NoDns),
+            data_dir: None,
         }
     }
 
@@ -2734,27 +2696,22 @@ mod tests {
     fn spawn_test_server(name: &'static str) -> IpcServerHandle {
         spawn(
             name,
-            Arc::new(Mutex::new(Db::open_in_memory().expect("db"))),
-            StatusInfo {
-                agent_version: "test".into(),
-                tracker_backend: "fake".into(),
-                enforcement_backend: "fake".into(),
-                filter_backend: "none".into(),
-                self_sampling: false,
-                blocks_encrypted_dns: false,
+            ServerDeps {
+                db: Arc::new(Mutex::new(Db::open_in_memory().expect("db"))),
+                status: StatusInfo {
+                    agent_version: "test".into(),
+                    tracker_backend: "fake".into(),
+                    enforcement_backend: "fake".into(),
+                    filter_backend: "none".into(),
+                    self_sampling: false,
+                    blocks_encrypted_dns: false,
+                },
+                policy: Arc::new(RwLock::new(Policy::default())),
+                processes: Arc::new(Mutex::new(Box::<FakeProcesses>::default())),
+                clock: Arc::new(TestClock::new(at("2026-08-20T12:00:00Z"), 0)),
+                dns: Arc::new(NoDns),
+                data_dir: None,
             },
-            Policy {
-                limit_cooldown_hours: 24,
-                strict_mode: false,
-                day_start_minutes: 0,
-                idle_threshold_secs: 60,
-                show_hud_overlay: true,
-                show_hud_in_fullscreen: false,
-                hud_peek_hotkey: "Ctrl+Alt+T".to_string(),
-                alert_volume: 80,
-            },
-            Arc::new(Mutex::new(Box::<FakeProcesses>::default())),
-            Arc::new(TestClock::new(at("2026-08-20T12:00:00Z"), 0)),
         )
     }
 
@@ -3325,5 +3282,56 @@ mod tests {
             ),
             Response::Accepted { .. }
         ));
+    }
+
+    #[test]
+    fn manual_blocks_normalise_dedupe_and_remove_every_copy() {
+        let ctx = test_ctx(
+            Db::open_in_memory().expect("db"),
+            TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+        );
+        let add = |d: &str| handle(&ctx, Request::AddManualBlock { domain: d.into() });
+        assert!(matches!(add("Example.COM."), Response::Accepted { .. }));
+        assert!(matches!(add("example.com"), Response::Accepted { .. }));
+        assert_eq!(
+            error_code(&add("not a domain!")),
+            Some(ErrorCode::BadRequest)
+        );
+        let Response::ManualBlocks { domains } = handle(&ctx, Request::ListManualBlocks) else {
+            panic!("expected ManualBlocks");
+        };
+        assert_eq!(domains, ["example.com"], "stored once, normalised");
+
+        // A duplicate written by an older version is removed too.
+        lock_db(&ctx.db)
+            .add_block_rule(None, None, "example.com", true, "block")
+            .expect("legacy duplicate");
+        let remove = |d: &str| {
+            handle(
+                &ctx,
+                Request::RemoveManualBlock {
+                    domain: d.into(),
+                    pin: String::new(),
+                },
+            )
+        };
+        assert!(matches!(remove("EXAMPLE.com"), Response::Accepted { .. }));
+        let Response::ManualBlocks { domains } = handle(&ctx, Request::ListManualBlocks) else {
+            panic!("expected ManualBlocks");
+        };
+        assert!(domains.is_empty());
+        assert_eq!(
+            error_code(&remove("example.com")),
+            Some(ErrorCode::NotFound)
+        );
+    }
+
+    #[test]
+    fn verify_pin_checks_against_the_vault() {
+        let ctx = ctx_with_pin("1234");
+        let verify = |pin: &str| handle(&ctx, Request::VerifyPin { pin: pin.into() });
+        assert_eq!(error_code(&verify("")), Some(ErrorCode::BadPin));
+        assert_eq!(error_code(&verify("0000")), Some(ErrorCode::BadPin));
+        assert!(matches!(verify("1234"), Response::Accepted { .. }));
     }
 }
