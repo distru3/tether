@@ -318,7 +318,7 @@ export function LimitsPanel({
                                 <div className="rich-limit-card-footer">
                                     <div className="limit-schedule-tag" title={varies ? `Per-day: ${varies}` : undefined}>
                                         <CalendarLucide size={14} color="var(--text-muted)" />
-                                        <span>{varies ? t("limits.weekdayOverridesActive") : t("limits.perDay", "Per Day")}</span>
+                                        <span>{varies ? t("limits.weekdayOverridesActive") : t("limits.perDay")}</span>
                                     </div>
                                     <div className="limit-footer-actions">
                                         <button
