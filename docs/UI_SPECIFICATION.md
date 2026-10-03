@@ -36,7 +36,7 @@ The visual and interaction contract is **[`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM
 - **Day stepper**: `<` / `>` and a "Today"/date label; only shown on Today (`visibility: hidden` elsewhere so the bar keeps its balance).
 
 ### Nav Items (`TabKey = "overview" | "limits" | "settings"`)
-1. **Today** (`overview`, `nav.overview`): the day's usage (Section 3).
+1. **Today** (`overview`, `nav.overview`): time left, the day strip and budget tiles (Section 3).
 2. **Limits** (`limits`, `nav.limits`): every rule in one place: budgets, schedules, websites (Section 4).
 3. **Settings** (`settings`): six short groups (Section 4).
 
@@ -44,50 +44,43 @@ There is no separate Web Filtering tab any more; websites live on Limits.
 
 ---
 
-## 3. Overview Tab Hierarchy (`overview`)
+## 3. Today (`overview`, `ui/src/pages/TodayPage.tsx`)
 
-The dashboard is a vertical stack. The **only** day picker is the one in the top bar; it is hidden (layout-preserving `visibility: hidden`) on every other tab.
+Phase 2 of `docs/DESIGN_SYSTEM.md`: time **left** first. The day picker in the top bar is the only date control; past days use the same screen.
 
 ```
 +-----------------------------------------------------------------------------------------+
 | .service-alert (only while the agent is unreachable; role="alert")                      |
-|   "Tether's background service isn't responding" + what that means + raw error          |
 +-----------------------------------------------------------------------------------------+
-| <ExecutiveHeader />                                                                     |
-|  +-------------------------------+---------------+----------------+------------------+  |
-|  | date eyebrow [Back to today]  | LONGEST       | CLOSEST LIMIT  | PROTECTION       |  |
-|  | 6h 11m  (display figure)      | STRETCH  39m  | 23m left       | Enforcing / Not  |  |
-|  | +7% vs 7-day average          | in Minecraft  | Games          | running          |  |
-|  | [Mostly Games · 37%]          |               | [n reached]    | 1 blocked · DNS  |  |
-|  +-------------------------------+---------------+----------------+------------------+  |
+| Hero card                                                                               |
+|  ( ring: time left of the total budget )  Headline ("You're on track today")            |
+|                                            "2h 55m used so far. Bedtime starts at 10 pm, |
+|                                             in 3h 18m."                                 |
+|                                            [day strip: day start -> +24 h, now line]    |
+|                                            legend: budgets · Everything else · Bedtime  |
 +-----------------------------------------------------------------------------------------+
-| <BlockedBanner /> (only when something is blocked)                                      |
-|   "1 app blocked until the day resets" · Resets in Xh Ym · [Allow 15 more minutes]      |
+| BlockedBanner (only while something is blocked): name + "Allow 15 more minutes"         |
 +-----------------------------------------------------------------------------------------+
-| .activity-ledger-container                                                              |
-|  +--------------------------------------------+  +-----------------------------------+  |
-|  | Timeline (eyebrow = viewed day)            |  | <UsageAside /> Most used (top 5)  |  |
-|  | <LedgerRule />: 24h band + legend          |  | [All apps]                        |  |
-|  +--------------------------------------------+  +-----------------------------------+  |
-| .analytics-trends-container                                                             |
-|  +--------------------------------------------+  +-----------------------------------+  |
-|  | This week: <WeeklyChart />                 |  | <CategoryMix /> Where time goes   |  |
-|  +--------------------------------------------+  +-----------------------------------+  |
+| Budget tiles (one per enabled app/category limit): tint fills to the share left,        |
+| status pill, "20m left" / "Back at 4 AM", apps that counted, Edit                       |
++-----------------------------------------------------------------------------------------+
+| Schedule card (active or next schedule)   |  Websites card (sites blocked, Family DNS)  |
++-----------------------------------------------------------------------------------------+
+| Most used (UsageAside)                    |  This week (WeeklyChart)                    |
 +-----------------------------------------------------------------------------------------+
 ```
 
-The header metrics are derived in `ui/src/dashboardMetrics.ts` (pure functions):
-- **Closest limit** (`limitOutlook`): uses the agent's per-row `limit_seconds`, defined so that `limit_seconds - seconds` is the time left on that row's own enabled limit. Weekday overrides are applied, and category rows count tagged apps. The total-screen-time limit is resolved from the catalog for the viewed weekday. Rows inside an active "+15 min" extension are skipped. (This replaced a "Daily allowance" figure that summed every limit's default minutes.)
-- **Longest stretch** (`longestStretch`): the longest single interval and its app.
-- **vs 7-day average** (`vsWeekAverage`): against the other active days of the week; hidden until there is a baseline.
-- **Protection** reflects *agent reachability*: when the poll fails it reads "Not running" in the danger style, never "Enforced".
+All numbers come from `ui/src/todayModel.ts` (pure functions, `now` passed in):
+- **`budgetStates`**: one entry per enabled app or category limit. Time left = the usage row's `limit_seconds - seconds` (the agent's own arithmetic, weekday overrides and tagged apps included); no row means nothing used. Status: `done` (nothing left), `low` (≤ 15 min or ≤ 20 % left), `extra` (a "+15 min" extension is running, until `timer_expires_utc`), else `plenty`. The apps listed are the day's apps that count toward it.
+- **`totalState`**: the total-screen-time limit for the viewed weekday; drives the ring. Without one the ring shows time used, with no arc.
+- **Headline** priority: total used up, a budget done, total low, a budget low, else "You're on track today" ("Here's your day so far" with no budgets). Past days show the date.
+- **`stripSegments`**: usage intervals placed on the agent's day (`dayWindowStart` = midnight + `day_start_minutes`), coloured by the budget the app counts toward (`hueForApp`: its own app limit, else a category limit on its primary category or a tag, else "Everything else"), merged when the same colour is less than 90 s apart.
+- **`scheduleBands` / `scheduleOutlook`**: enabled downtime schedules that overlap the day, hatched on the strip. An occurrence belongs to the weekday it starts on, as in `st_core::schedules` (Friday's 22:00-07:00 runs into Saturday morning). The subtitle names the schedule in force or the next one to start.
+- Strip labels sit at their real positions (start, +6 h, +12 h, +18 h, end, "now"); labels near "now" are hidden. In Arabic the strip runs right to left with the page.
 
-### Component Details
-- **`LedgerRule.tsx`**: Visual 24-hour timeline bar (00 to 24 hours). Slices each usage interval, maps `appId` to `primary_category`, and renders each slice in its distinct category color using `categoryColors.ts`. Displays category legend at the bottom.
-- **`UsageAside.tsx`**: Compact right-side card displaying strictly the top 5 ranked applications with visual progress bars colored by their category, live timer countdowns, dedicated category pills (`.usage-category-pill`), and streamlined vertical spacing (`overflow: hidden`) to eliminate scrollability completely within the card bounds.
-- **`WeeklyChart.tsx`**: 7-day bar chart showing day-by-day totals with week-over-week deltas.
-- **`CategoryMix.tsx`**: Circular conic-gradient donut chart showing time distribution by category using the high-contrast category color taxonomy.
-- **`categoryColors.ts`**: Unified high-contrast color mapping across 16+ distinct categories (Games `#8B5CF6`, Social Media `#3B82F6`, Short-Form Video `#EC4899`, Video & Streaming `#EF4444`, Music `#10B981`, News `#F97316`, Shopping `#F59E0B`, Communication `#06B6D4`, Productivity `#0EA5E9`, Creativity `#A855F7`, Education `#14B8A6`, Finance `#84CC16`, AI `#6366F1`, Development `#64748B`, Utilities `#475569`, Adult `#BE123C`, Gambling `#991B1B`, Uncategorized `#94A3B8`), plus a 12-color fallback palette and alpha styling helpers.
+Tiles use the budget hue tokens (`tt-hue-*`: `--hue`, `--hue-tile`, `--hue-fill`, `--hue-ink`). "Most used" bars use the same hue as the strip; the category is a neutral button that opens the categorize dialog (the old palette-coloured pills, an accessibility gap, are gone). "This week" bars are buttons that open that day; the viewed day is orange.
+
+Removed with this change: `ExecutiveHeader` (metric cards), `CategoryMix` (donut), `LedgerRule` (old 00-24 h timeline that ignored the day start), `dashboardMetrics.ts`, and ~180 translation keys and ~680 CSS lines they used.
 
 ---
 

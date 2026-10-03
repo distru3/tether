@@ -1,7 +1,6 @@
-import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { WeeklySummaryDto } from "../types/generated/WeeklySummaryDto";
-import { chartBarLabel, dayKeyToDate, formatDayLabel, formatDuration } from "../format";
+import { dayKeyToDate, formatDayLabel, formatDuration, weekdayShortNames } from "../format";
 
 interface WeeklyChartProps {
     week: WeeklySummaryDto | null;
@@ -10,36 +9,26 @@ interface WeeklyChartProps {
     onSelectDay?: (day: number) => void;
 }
 
-const DAY_COUNT = 7;
-const MAX_BAR_HEIGHT = 110;
-
+/**
+ * The last seven days as bars; the day being viewed is orange. Each bar is a
+ * button that opens that day.
+ */
 export function WeeklyChart({ week, viewDay, loading, onSelectDay }: WeeklyChartProps) {
     const { t } = useTranslation();
-    const [hoveredDay, setHoveredDay] = useState<number | null>(null);
-
-    const WEEKDAY_NAMES = [
-        t("weeklyChart.sun"), 
-        t("weeklyChart.mon"), 
-        t("weeklyChart.tue"), 
-        t("weeklyChart.wed"), 
-        t("weeklyChart.thu"), 
-        t("weeklyChart.fri"), 
-        t("weeklyChart.sat")
-    ];
+    const names = weekdayShortNames(); // Monday first
 
     if (week === null) {
-        if (!loading) return null;
         return (
-            <div className="weekly-chart-card glass-card skeleton-loading">
-                <div className="skeleton-line skeleton-title" />
-                <div className="week-bars-container">
-                    {Array.from({ length: DAY_COUNT }, (_, index) => (
-                        <div className="week-bar-column" key={index}>
-                            <div className="skeleton-bar" />
-                        </div>
+            <section className="tt-card tt-week" aria-labelledby="week-title" aria-busy={loading}>
+                <h2 id="week-title" className="tt-card-title">{t("weeklyChart.historyTitle")}</h2>
+                <div className="tt-week-bars" aria-hidden="true">
+                    {Array.from({ length: 7 }, (_, i) => (
+                        <span key={i} className="tt-week-col">
+                            <span className="tt-week-track skeleton-shimmer" />
+                        </span>
                     ))}
                 </div>
-            </div>
+            </section>
         );
     }
 
@@ -47,80 +36,57 @@ export function WeeklyChart({ week, viewDay, loading, onSelectDay }: WeeklyChart
     const total = days.reduce((sum, day) => sum + day.total_seconds, 0);
     const maxSeconds = days.reduce((max, day) => Math.max(max, day.total_seconds), 1);
     const delta =
-        week.previous_week_total > 0
-            ? Math.round(((total - week.previous_week_total) / week.previous_week_total) * 100)
-            : null;
-
+        week.previous_week_total > 0 ? Math.round(((total - week.previous_week_total) / week.previous_week_total) * 100) : null;
     const vsLastWeek = t("weeklyChart.vsLastWeek");
     const deltaLabel =
-        delta === null ? "—" : delta > 0 ? `+${delta}% ${vsLastWeek}` : delta < 0 ? `−${Math.abs(delta)}% ${vsLastWeek}` : `±0% ${vsLastWeek}`;
-    const deltaClass =
         delta === null
-            ? "delta-badge delta-neutral"
+            ? null
             : delta > 0
-                ? "delta-badge delta-worse"
-                : delta < 0
-                    ? "delta-badge delta-better"
-                    : "delta-badge delta-neutral";
+              ? `+${delta}% ${vsLastWeek}`
+              : delta < 0
+                ? `−${Math.abs(delta)}% ${vsLastWeek}`
+                : `±0% ${vsLastWeek}`;
 
     return (
-        <section className="weekly-chart-card glass-card" aria-label={t("weeklyChart.title")}>
-            <header className="chart-header">
-                <div className="chart-title-block">
-                    <h3 aria-level={2} className="chart-heading">{t("weeklyChart.title")}</h3>
-                    <div className="chart-metrics-row">
-                        <span className="chart-total-time font-mono">{formatDuration(total)}</span>
-                        <span className={deltaClass}>{deltaLabel}</span>
-                    </div>
-                </div>
-            </header>
-
-            <div className="week-bars-container">
+        <section className="tt-card tt-week" aria-labelledby="week-title">
+            <div className="tt-card-head">
+                <h2 id="week-title" className="tt-card-title">{t("weeklyChart.historyTitle")}</h2>
+                <span className="tt-week-total">
+                    {formatDuration(total)}
+                    {deltaLabel && (
+                        <span className={`tt-week-delta ${delta !== null && delta > 0 ? "tt-week-delta--up" : delta !== null && delta < 0 ? "tt-week-delta--down" : ""}`}>
+                            {deltaLabel}
+                        </span>
+                    )}
+                </span>
+            </div>
+            <div className="tt-week-bars">
                 {days.map((day) => {
-                    const isSelected = day.day === viewDay;
-                    const isHovered = day.day === hoveredDay;
-                    const zero = day.total_seconds === 0;
-                    const heightPercent = zero ? 4 : Math.max(8, Math.round((day.total_seconds / maxSeconds) * 100));
-                    const dayDate = dayKeyToDate(day.day);
-                    const weekdayName = WEEKDAY_NAMES[dayDate.getDay()];
-                    const fullDateStr = formatDayLabel(day.day);
-
+                    const selected = day.day === viewDay;
+                    const height = day.total_seconds === 0 ? 3 : Math.max(8, Math.round((day.total_seconds / maxSeconds) * 100));
+                    const date = dayKeyToDate(day.day);
+                    const weekday = names[(date.getDay() + 6) % 7] ?? "";
+                    const label = `${formatDayLabel(day.day)}: ${formatDuration(day.total_seconds)}`;
                     return (
-                        <div
-                            className={`week-bar-column ${isSelected ? "week-bar-column--active" : ""} ${onSelectDay ? "week-bar-column--clickable" : ""}`}
+                        <button
+                            type="button"
                             key={day.day}
+                            className={`tt-week-col${selected ? " tt-week-col--selected" : ""}`}
                             onClick={() => onSelectDay?.(day.day)}
-                            onMouseEnter={() => setHoveredDay(day.day)}
-                            onMouseLeave={() => setHoveredDay(null)}
-                            onFocus={() => setHoveredDay(day.day)}
-                            onBlur={() => setHoveredDay(null)}
-                            tabIndex={onSelectDay ? 0 : undefined}
-                            role={onSelectDay ? "button" : undefined}
-                            aria-label={`${weekdayName}, ${chartBarLabel(day.day)}: ${formatDuration(day.total_seconds)}`}
-                            onKeyDown={(e) => {
-                                if (onSelectDay && (e.key === "Enter" || e.key === " ")) {
-                                    e.preventDefault();
-                                    onSelectDay(day.day);
-                                }
-                            }}
+                            aria-label={label}
+                            aria-pressed={selected}
+                            title={label}
                         >
-                            {/* Hover / Focus Tooltip */}
-                            <div className={`chart-tooltip ${isHovered ? "chart-tooltip--visible" : ""}`}>
-                                <span className="chart-tooltip-date">{fullDateStr}</span>
-                                <span className="chart-tooltip-time font-mono">{formatDuration(day.total_seconds)}</span>
-                            </div>
-
-                            <div className="bar-track" style={{ height: `${MAX_BAR_HEIGHT}px` }}>
-                                <div
-                                    className={`bar-fill ${isSelected ? "bar-fill--selected" : ""}`}
-                                    style={{ height: `${heightPercent}%` }}
-                                >
-                                    <div className="bar-glow" />
-                                </div>
-                            </div>
-                            <span className="bar-label font-mono">{chartBarLabel(day.day)}</span>
-                            <span className="bar-sublabel font-sans">{weekdayName}</span>
-                        </div>
+                            <span className="tt-week-amount" aria-hidden="true">
+                                {selected ? formatDuration(day.total_seconds) : ""}
+                            </span>
+                            <span className="tt-week-track" aria-hidden="true">
+                                <span style={{ height: `${height}%` }} />
+                            </span>
+                            <span className="tt-week-day" aria-hidden="true">
+                                {weekday} {date.getDate()}
+                            </span>
+                        </button>
                     );
                 })}
             </div>

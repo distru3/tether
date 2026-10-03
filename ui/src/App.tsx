@@ -1,16 +1,11 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ShieldOff } from "lucide-react";
-import { formatDayLabel } from "./format";
-import { limitOutlook, longestStretch, vsWeekAverage } from "./dashboardMetrics";
-import { ExecutiveHeader } from "./components/ExecutiveHeader";
 import { UsageAside } from "./components/UsageAside";
-import { CategoryMix } from "./components/CategoryMix";
 
 import { BlockedBanner } from "./components/BlockedBanner";
 import { CategorizeDialog } from "./components/CategorizeDialog";
 import { AppDirectoryDialog } from "./components/AppDirectoryDialog";
-import { LedgerRule } from "./components/LedgerRule";
 import { LimitEditorDialog } from "./components/LimitEditorDialog";
 import { SetupFlow } from "./components/setup/SetupFlow";
 import { PinGate } from "./components/PinGate";
@@ -22,6 +17,7 @@ import { TitleBar } from "./components/TitleBar";
 import { BlockOverlay } from "./components/BlockOverlay";
 import { LimitsPage } from "./pages/LimitsPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { TodayPage } from "./pages/TodayPage";
 import { useDashboard } from "./hooks/useDashboard";
 import { useLedgerActions } from "./hooks/useLedgerActions";
 import { useNowMinute } from "./hooks/useNowMinute";
@@ -143,7 +139,6 @@ function MainDashboard() {
 
   const loading = phase === "connecting" && summary === null;
   const total = summary?.total_seconds ?? 0;
-  const categories = (summary?.categories ?? []).filter((row) => row.seconds > 0);
   const apps = (summary?.apps ?? []).filter((row) => row.seconds > 0);
   const blocked = (summary?.apps ?? []).filter((row) => row.blocked);
   const blockedCount = blocked.length;
@@ -158,9 +153,6 @@ function MainDashboard() {
 
   const activeLimitsCount = catalog ? catalog.limits.filter(l => l.enabled).length : 0;
 
-  const outlook = limitOutlook(summary, catalog, viewDay);
-  const stretch = longestStretch(summary);
-  const vsAverage = vsWeekAverage(total, week, viewDay);
 
   // Show onboarding overlay on first run
   if (showOnboarding) {
@@ -209,69 +201,49 @@ function MainDashboard() {
             )}
 
             {activeTab === "overview" && (
-              <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)", display: "flex", flexDirection: "column", gap: "20px" }}>
-                <h1 className="sr-only">{t("nav.overview", "Dashboard")}</h1>
-                <ExecutiveHeader
-                  total={total}
-                  categories={categories}
+              <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
+                <TodayPage
+                  summary={summary}
+                  catalog={catalog}
+                  statusInfo={statusInfo}
                   viewDay={viewDay}
                   isViewingToday={isViewingToday}
-                  goToday={goToday}
-                  longestStretchSeconds={stretch.seconds}
-                  longestStretchApp={stretch.app}
-                  vsAveragePercent={vsAverage}
-                  limits={outlook}
-                  hasLimits={catalog === null ? null : activeLimitsCount > 0}
-                  agentReachable={phase === "live"}
-                  familyDnsEnabled={statusInfo?.family_dns_enabled ?? false}
-                  blockedCount={blockedCount}
-                />
-
-                {blocked.length > 0 && (
-                  <BlockedBanner
-                    blocked={blocked}
-                    busy={actions.busy}
-                    onOverride={actions.override}
-                    catalog={catalog}
-                    dayStartMinutes={statusInfo?.day_start_minutes ?? 0}
-                    strictMode={statusInfo?.strict_mode ?? false}
-                  />
-                )}
-                
-                <div className="activity-ledger-container">
-                  <div className="activity-ledger-timeline">
-                    <div className="timeline-panel__header">
-                      <div>
-                        <p className="panel-eyebrow">{isViewingToday ? t("hero.today") : formatDayLabel(viewDay)}</p>
-                        <h3 aria-level={2}>{t("timeline.title")}</h3>
-                      </div>
+                  loading={loading}
+                  now={now}
+                  actions={actions}
+                  onOpenLimits={() => selectTab("limits")}
+                  banner={
+                    blocked.length > 0 && (
+                      <BlockedBanner
+                        blocked={blocked}
+                        busy={actions.busy}
+                        onOverride={actions.override}
+                        catalog={catalog}
+                        dayStartMinutes={statusInfo?.day_start_minutes ?? 0}
+                        strictMode={statusInfo?.strict_mode ?? false}
+                      />
+                    )
+                  }
+                  more={
+                    <div className="tt-today-more">
+                      {pastDayEmpty ? (
+                        <section className="tt-card">
+                          <h2 className="tt-card-title">{t("usage.mostUsed")}</h2>
+                          <p className="tt-sub">{t("hero.noUsageDay")}</p>
+                        </section>
+                      ) : (
+                        <UsageAside
+                          entries={apps}
+                          total={total}
+                          catalog={catalog}
+                          onCategorize={actions.openCategorize}
+                          onOpenAppDirectory={() => setAppDirectoryOpen(true)}
+                        />
+                      )}
+                      <WeeklyChart week={week} viewDay={viewDay} loading={weekLoading} onSelectDay={setViewDay} />
                     </div>
-                    {pastDayEmpty ? (
-                      <p className="empty-day">{t("hero.noUsageDay")}</p>
-                    ) : (
-                      <LedgerRule summary={summary} loading={loading} now={now} catalog={catalog} isToday={isViewingToday} />
-                    )}
-                  </div>
-                  <div className="activity-ledger-aside">
-                    <UsageAside
-                      entries={apps}
-                      total={total}
-                      catalog={catalog}
-                      onCategorize={actions.openCategorize}
-                      onOpenAppDirectory={() => setAppDirectoryOpen(true)}
-                    />
-                  </div>
-                </div>
-
-                <div className="analytics-trends-container">
-                  <div className="analytics-trends-history">
-                    <h3 aria-level={2} className="analytics-trends-history-title">{t("weeklyChart.historyTitle")}</h3>
-                    <WeeklyChart week={week} viewDay={viewDay} loading={weekLoading} onSelectDay={setViewDay} />
-                  </div>
-                  <div className="analytics-trends-distribution">
-                    <CategoryMix categories={categories} total={total} />
-                  </div>
-                </div>
+                  }
+                />
               </div>
             )}
 
