@@ -26,12 +26,14 @@ impl OverlayBridgeState {
 /// Program names the bridge accepts commands from.
 const SESSION_EXE: [&str; 1] = ["screentime-session.exe"];
 
-/// Overlay window floor sizes. The PIN pad plus both action buttons need about
-/// 640px of height; at the old 480px floor they were cut off on small target
-/// windows, leaving no visible way to extend or quit.
+/// Overlay window floor sizes in logical pixels (scaled by the monitor's
+/// scale factor in `place_overlay`). The block screen with its PIN pad open
+/// needs about 800px of height and about 540px without it; below that the
+/// page scrolls and drops its badge, so "Close" stays reachable. (At the old
+/// 480 physical-pixel floor the actions were cut off.)
 const MIN_WIDTH: u32 = 520;
-const MIN_HEIGHT_PIN: u32 = 680;
-const MIN_HEIGHT_BUTTONS: u32 = 460;
+const MIN_HEIGHT_PIN: u32 = 820;
+const MIN_HEIGHT_BUTTONS: u32 = 560;
 
 /// Lock the shared overlay state, recovering from poisoning: a panic in one
 /// command must not take the block screen down with it.
@@ -143,30 +145,40 @@ fn place_overlay(
     rect: Option<st_ipc::OverlayRectDto>,
     pin_locked: bool,
 ) {
-    let min_height = if pin_locked {
-        MIN_HEIGHT_PIN
-    } else {
-        MIN_HEIGHT_BUTTONS
-    };
     let monitor = window
         .current_monitor()
         .ok()
         .flatten()
         .or_else(|| window.primary_monitor().ok().flatten());
+    // The target's rect and the window size are physical pixels; the floors
+    // are logical, so scale them for the monitor (1.5 at 150 %).
+    let scale = monitor
+        .as_ref()
+        .map(|m| m.scale_factor())
+        .or_else(|| window.scale_factor().ok())
+        .filter(|s| s.is_finite() && *s > 0.0)
+        .unwrap_or(1.0);
+    let physical = |logical: u32| (f64::from(logical) * scale).round() as u32;
+    let min_width = physical(MIN_WIDTH);
+    let min_height = physical(if pin_locked {
+        MIN_HEIGHT_PIN
+    } else {
+        MIN_HEIGHT_BUTTONS
+    });
     let (mut width, mut height, center_x, center_y) = match (rect, &monitor) {
         (Some(r), _) => (
-            (r.width.max(0) as u32).max(MIN_WIDTH),
+            (r.width.max(0) as u32).max(min_width),
             (r.height.max(0) as u32).max(min_height),
             r.x + r.width / 2,
             r.y + r.height / 2,
         ),
         (None, Some(mon)) => (
-            560,
+            physical(560),
             min_height,
             mon.position().x + mon.size().width as i32 / 2,
             mon.position().y + mon.size().height as i32 / 2,
         ),
-        (None, None) => (560, min_height, 400, 400),
+        (None, None) => (physical(560), min_height, 400, 400),
     };
     let mut x = center_x - width as i32 / 2;
     let mut y = center_y - height as i32 / 2;
