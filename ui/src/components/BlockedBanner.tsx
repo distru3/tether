@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { UsageRowDto } from "../types/generated/UsageRowDto";
 import type { CatalogDto } from "../types/generated/CatalogDto";
-import { colorForCategory } from "../categoryColors";
 import { BlockedIcon } from "./icons/Icons";
 
 interface BlockedBannerProps {
@@ -24,7 +23,7 @@ function minutesUntilReset(now: Date, dayStartMinutes: number): number {
     return Math.max(0, Math.floor((reset.getTime() - now.getTime()) / 60000));
 }
 
-export function BlockedBanner({ blocked, busy, onOverride, catalog, dayStartMinutes = 0, strictMode = false }: BlockedBannerProps) {
+export function BlockedBanner({ blocked, busy, onOverride, dayStartMinutes = 0, strictMode = false }: BlockedBannerProps) {
     const { t } = useTranslation();
     const [now, setNow] = useState(() => new Date());
 
@@ -40,54 +39,26 @@ export function BlockedBanner({ blocked, busy, onOverride, catalog, dayStartMinu
     const minutes = totalMinutes % 60;
 
     return (
-        <div className="glass-card blocked-banner-card" role="region" aria-label={t("banner.title", { count: blocked.length })}>
-            <div className="blocked-banner-header">
-                <div className="blocked-badge-group">
-                    <span className="pulse-indicator pulse-indicator--danger" aria-hidden="true" />
-                    <span className="badge badge--danger">{t("banner.title", { count: blocked.length })}</span>
-                </div>
-                <span className="blocked-reset-text font-mono">
-                    {t("banner.resetsIn", { hours, minutes })}
-                </span>
+        <section className="tt-card tt-blocked" aria-labelledby="blocked-title">
+            <div className="tt-card-head">
+                <h2 id="blocked-title" className="tt-card-title">{t("banner.title", { count: blocked.length })}</h2>
+                <span className="tt-sub">{t("banner.resetsIn", { hours, minutes })}</span>
             </div>
-
-            <div className="blocked-items-list">
-                {blocked.map((row, index) => {
-                    const appObj = catalog?.apps.find((a) => a.id === row.id);
-                    const category = appObj ? catalog?.categories.find((c) => c.id === appObj.primary_category) : null;
-                    const catName = category?.name ?? t("categorize.uncategorized", "Uncategorized");
-                    const catColor = colorForCategory(catName, category?.color ?? row.color, index);
-
-                    return (
-                        <div key={row.id} className="blocked-item-row">
-                            <div className="blocked-item-info">
-                                <BlockedIcon size={16} color="var(--accent-rose)" />
-                                <strong className="blocked-item-name">{row.label}</strong>
-                                <span 
-                                    className="usage-category-pill"
-                                    style={{
-                                        color: catColor,
-                                        backgroundColor: `${catColor}1c`,
-                                        borderColor: `${catColor}38`,
-                                    }}
-                                >
-                                    {catName}
-                                </span>
-                            </div>
-                            {!strictMode && (
-                                <button
-                                    type="button"
-                                    className="btn btn-danger btn-sm"
-                                    disabled={busy}
-                                    onClick={() => onOverride(row)}
-                                >
-                                    {t("banner.override")}
-                                </button>
-                            )}
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
+            <ul className="tt-list">
+                {blocked.map((row) => (
+                    <li key={row.id} className="tt-row tt-blocked-row">
+                        <span className="tt-blocked-name">
+                            <BlockedIcon size={16} aria-hidden="true" />
+                            <strong>{row.label}</strong>
+                        </span>
+                        {!strictMode && (
+                            <button type="button" className="tt-btn tt-btn--outline tt-btn--sm" disabled={busy} onClick={() => onOverride(row)}>
+                                {t("banner.override")}
+                            </button>
+                        )}
+                    </li>
+                ))}
+            </ul>
+        </section>
     );
 }

@@ -185,236 +185,9 @@ body {
 
 /* ---- Weekly Chart ---- */
 
-.weekly-chart-card {
-  min-height: 160px;
-}
-
-.chart-header {
-  margin-bottom: 16px;
-}
-
-.chart-title-block {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.chart-heading {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin: 0;
-}
-
-.chart-metrics-row {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-}
-
-.chart-total-time {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-}
-
-.delta-badge {
-  font-size: 12px;
-  font-weight: 500;
-  padding: 2px 8px;
-  border-radius: var(--radius-sm);
-}
-
-.delta-worse {
-  color: var(--color-danger-text);
-  background-color: var(--bg-danger);
-}
-
-.delta-better {
-  color: var(--color-success-text);
-  background-color: var(--accent-emerald-subtle);
-}
-
-.delta-neutral {
-  color: var(--text-muted);
-  background-color: var(--bg-recessed);
-}
-
-.week-bars-container {
-  display: flex;
-  gap: 6px;
-  padding-top: 36px;
-}
-
-.week-bar-column {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding-top: 24px;
-  position: relative;
-  cursor: default;
-}
-
-.week-bar-column--clickable {
-  cursor: pointer;
-}
-
-.week-bar-column--active .bar-fill {
-  background-color: var(--color-primary) !important;
-}
-
-.bar-track {
-  width: 100%;
-  display: flex;
-  align-items: flex-end;
-  background-color: var(--bg-card);
-  border-radius: var(--radius-xs);
-  overflow: hidden;
-}
-
-.bar-fill {
-  width: 100%;
-  background-color: var(--text-muted);
-  border-radius: var(--radius-xs) var(--radius-xs) 0 0;
-  transition: height 0.5s ease;
-  min-height: 3px;
-  position: relative;
-}
-
-.bar-fill--selected {
-  background-color: var(--color-primary);
-}
-
-.bar-glow {
-  display: none;
-}
-
-.bar-label {
-  font-size: 11px;
-  font-family: var(--font-mono);
-  color: var(--text-secondary);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  margin-top: 2px;
-}
-
-.bar-sublabel {
-  font-size: 10px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.chart-tooltip {
-  position: absolute;
-  top: -8px;
-  left: 50%;
-  transform: translateX(-50%) translateY(-100%);
-  background-color: var(--bg-card-elevated);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  padding: 6px 10px;
-  display: none;
-  flex-direction: column;
-  align-items: center;
-  gap: 2px;
-  white-space: nowrap;
-  z-index: 10;
-  box-shadow: var(--shadow-card);
-  pointer-events: none;
-}
-
-.chart-tooltip--visible {
-  display: flex;
-}
-
-.chart-tooltip-date {
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.chart-tooltip-time {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
 /* ---- Usage Rows (LedgerSection) ---- */
 
-.usage-rank {
-  flex-shrink: 0;
-  width: 20px;
-  font-size: 13px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
-
 /* ---- Blocked Banner ---- */
-.blocked-banner-card {
-  border: 1px solid var(--border-danger);
-  background-color: var(--bg-danger);
-  padding: 16px 20px;
-}
-
-.blocked-banner-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-}
-
-.blocked-badge-group {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pulse-indicator {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.pulse-indicator--danger {
-  background-color: var(--color-danger);
-  animation: pulse-dot 2s infinite;
-}
-
-.blocked-reset-text {
-  font-size: 12px;
-  color: var(--color-danger-text);
-}
-
-.blocked-items-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.blocked-item-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.blocked-item-info {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.blocked-item-name {
-  font-size: 14px;
-  color: var(--text-primary);
-}
 
 /* ---- Badges ---- */
 .badge {
@@ -427,12 +200,6 @@ body {
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.04em;
-}
-
-.badge--danger {
-  background-color: var(--bg-danger);
-  color: var(--color-danger-text);
-  border: 1px solid var(--border-danger);
 }
 
 .badge--indigo {
@@ -488,10 +255,6 @@ body {
   background-color: var(--bg-recessed);
   color: var(--text-primary);
 }
-
-.btn-danger { background-color: var(--bg-danger); border-color: var(--border-danger); color: var(--color-danger-text); }
-
-.btn-danger:hover { background-color: #FFE4E6; }
 
 .btn-sm {
   font-size: 12px;
@@ -957,10 +720,6 @@ body {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-.font-sans {
-  font-family: var(--font-sans);
-}
-
 .empty-hint {
   color: var(--text-muted);
   font-style: italic;
@@ -1136,68 +895,6 @@ button:not([disabled]):active {
   gap: 8px;
   padding: 0 12px;
   margin-bottom: 24px;
-}
-
-.ledger-band {
-  display: flex;
-  height: 12px;
-  border-radius: var(--radius-full);
-  background-color: var(--bg-recessed);
-  overflow: hidden;
-  position: relative;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.ledger-seg {
-  height: 100%;
-}
-
-.ledger-now {
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background-color: var(--color-primary);
-  box-shadow: 0 0 8px var(--color-primary);
-  z-index: 2;
-  transform: translateX(-50%);
-}
-
-.ledger-now::after {
-  content: "";
-  position: absolute;
-  top: -4px;
-  left: -3px;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background-color: var(--color-primary);
-}
-
-.ledger-scale {
-  display: flex;
-  justify-content: space-between;
-  padding: 0 4px;
-}
-
-.ledger-scale-step {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 4px;
-  position: relative;
-}
-
-.ledger-scale-mark {
-  width: 1px;
-  height: 4px;
-  background-color: var(--border-strong);
-}
-
-.ledger-scale-label {
-  font-size: 11px;
-  color: var(--text-muted);
-  font-family: var(--font-mono);
 }
 
 /* ---- Select Input ---- */
