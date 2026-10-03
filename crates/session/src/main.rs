@@ -180,7 +180,7 @@ pub static RTSSHooksCompatibility: u32 = 0x00000000;
 fn ensure_rtss_exclusion() {
     // Best effort only: the RTSS profile folder is under Program Files, which
     // this unprivileged helper normally cannot write. The NSIS installer
-    // (`ui/src-tauri/installer_hooks.nsh`) writes the real profiles elevated;
+    // (`ui/src-tauri/installer/hooks.nsh`) writes the real profiles elevated;
     // this covers elevated development runs.
     // If RTSS is installed, drop an application profile ensuring EnableHooking=0
     let Some(program_files_x86) = std::env::var_os("ProgramFiles(x86)") else {

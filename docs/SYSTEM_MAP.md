@@ -130,7 +130,7 @@ All entry points (the `family_dns` setting from the Limits page or the setup flo
 1. **Preservation on Enable**: `st_dns::dns_config::capture()` reads all active network interfaces (`IfaceDns`), including their exact DNS server IP lists (or DHCP state). The snapshot is serialized to both SQLite `settings` (`original_dns_config`) and `{data_dir}/original_dns_backup.json`. **If a backup already exists** (e.g. after a crash mid-enable), it is reused rather than recaptured, so Family DNS itself is never saved as the "original". A capture failure aborts before anything changes.
 2. **Apply**: Active interfaces are pointed at Cloudflare Family DNS (`1.1.1.3`, `1.0.0.3`, `2606:4700:4700::1113`, `2606:4700:4700::1003`). The browser DoH policies and outbound DoT (port 853) firewall rules from `st_dns::lockdown` are applied on every enable path (previously only the CLI did this). `HKLM\Software\Screentime\FamilyDnsApplied` is set to `1`. If applying fails, the agent rolls back to the backup and reports the error, so the toggle never claims protection that is absent.
 3. **Restoration on Disable**: The agent reads the backup from SQLite, falling back to the JSON file, and restores each interface to its exact prior configuration (static IPs or DHCP). With no usable backup, every active adapter returns to DHCP. It then clears the lockdown, flushes the resolver cache, removes both backup copies and clears the registry flag.
-4. **Interactive Uninstaller Restoration**: The NSIS uninstaller (`installer_hooks.nsh`) provides a dedicated checkbox ("Restore previous network DNS configuration"). When selected, it executes `screentime-agent.exe --disable-family-dns`, seamlessly reverting adapters back to their original DHCP or static servers.
+4. **Interactive Uninstaller Restoration**: While Family DNS is on (`FamilyDnsApplied = 1`), the uninstaller's confirm page offers "Turn off Family DNS and restore the previous network DNS", ticked by default (`ui/src-tauri/installer/installer.nsi`). When ticked, `NSIS_HOOK_PREUNINSTALL` (`installer/hooks.nsh`) runs `screentime-agent.exe --disable-family-dns`. The box is hidden when Family DNS is off, because with no backup that command would reset a custom DNS to automatic.
 5. **Emergency reset** (`screentime-agent --reset-network`): clears the lockdown, returns every active adapter to DHCP (deliberately ignoring the backup, in case the backup is what is broken), removes the managed hosts-file block, and marks Family DNS off in the database.
 
 ### E. Application Discovery & Auto-Classification
@@ -182,7 +182,7 @@ All entry points (the `family_dns` setting from the Limits page or the setup flo
 
 ## 8. Installer, Uninstaller & Silent Process Execution
 
-Tether's Windows deployment uses Tauri 2's NSIS packager customized via `ui/src-tauri/installer.nsi` and `ui/src-tauri/installer_hooks.nsh`.
+Tether's Windows deployment uses Tauri 2's NSIS packager customized by the files in `ui/src-tauri/installer/` (see `packaging/README.md`): `installer.nsi` (Tauri 2.9 template plus Tether pages and wording), `hooks.nsh` (service, startup, RTSS and DNS steps), `style.nsh` (colours, embedded fonts, page tweaks), `strings.nsh` (English and Arabic wording) and `art/` (sidebar and header bitmaps drawn by `art/make_art.py`).
 
 1. **Zero-Console Silent Execution**:
    - All internal shell invocations in the installer hooks and Rust backend use hidden console attributes:
@@ -192,12 +192,11 @@ Tether's Windows deployment uses Tauri 2's NSIS packager customized via `ui/src-
    - `screentime-session.exe` runs per-user in interactive user sessions.
    - During uninstallation (`NSIS_HOOK_PREUNINSTALL`), before files are deleted:
      - `taskkill.exe /F /IM screentime-session.exe` and `taskkill.exe /F /IM screentime-ui.exe` forcefully terminate running user-space processes.
-     - `screentime-session.exe --autostart off` and explicit registry removals purge HKCU and HKLM Run keys.
+     - `screentime-session.exe --autostart off` and explicit registry removals purge HKCU and HKLM Run keys. (Install writes only the HKLM `ScreentimeSession` Run value, which starts the helper for every user; the helper's single-instance lock covers any leftover HKCU entry from older installs.)
      - A 500ms kernel quiescence pause (`Sleep 500`) allows Windows handle release, preventing file-in-use (`ERROR_ACCESS_DENIED`) locking during file removal.
      - The background Windows service (`ScreentimeAgent`) is cleanly stopped and uninstalled.
-3. **Interactive Network DNS Restore Option**:
-   - The uninstaller confirmation dialog features a dedicated checkbox:
-     `[x] Restore network DNS settings (disable DNS filtering)`
-     positioned dynamically beneath `Delete the application data`.
-   - The checkbox automatically initializes to checked if Family DNS is currently active (`HKLM\Software\Screentime\FamilyDnsApplied == 1`).
-   - If selected upon uninstallation, `screentime-agent.exe --disable-family-dns` executes prior to binary removal, restoring clean network adapter DNS configurations and purging firewall rules.
+3. **Uninstall options** (confirm page, placed under the folder field from its measured position, so they fit any font, DPI or RTL layout):
+   - `[ ] Also delete usage history and settings`: removes `%LOCALAPPDATA%\screentime`, `C:\ProgramData\screentime` and the app's WebView data.
+   - `[x] Turn off Family DNS and restore the previous network DNS`: only shown while `HKLM\Software\Screentime\FamilyDnsApplied == 1`. Passive and silent uninstalls restore DNS whenever that flag is set.
+4. **Starting tracking right after install**: the post-install hook starts `screentime-session.exe` with `nsis_tauri_utils::RunAsUser`, i.e. as the signed-in desktop user, not with the installer's elevated (possibly different, over-the-shoulder) admin token.
+5. **Language**: English and Arabic, picked from the Windows display language (no selector). The post-install hook records the language so the uninstaller never asks, including after a silent install.
