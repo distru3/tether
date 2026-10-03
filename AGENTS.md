@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance and mandatory operational rules for AI agents working in this repository. Updated and verified on **2026-10-02**.
+Guidance and mandatory operational rules for AI agents working in this repository. Updated and verified on **2026-10-03**.
 
 ---
 
@@ -10,7 +10,7 @@ A high-performance screen-time tracker, limit enforcer, and web filter for Windo
 
 1. `screentime-agent` (`crates/agent`) — privileged daemon (SYSTEM/elevated): SQLite database, limits engine, day rollover, native Windows hosts file enforcer, Cloudflare Family DNS adapter configurator, IPC server on named pipe `\\.\pipe\screentime`.
 2. `screentime-session` (`crates/session`) — per-user unprivileged sampling front: tracks foreground window and idle state, reports 1 Hz samples via `ReportUsage` over a persistent pipe connection, draws the native timer HUD (`hud.rs`/`mpo.rs`), and drives the block overlay by sending `Show`/`Hide` to the UI over `\\.\pipe\screentime_overlay_bridge`.
-3. `screentime-ui` (`ui/`) — Tauri 2 desktop shell and React 18 dashboard: one-shot pipe commands only, styled as a smoked-glass analytics workspace.
+3. `screentime-ui` (`ui/`) — Tauri 2 desktop shell and React 18 dashboard (Today · Limits · Settings, plus a first-run setup flow): one-shot pipe commands only, plum/orange light and dark themes per `docs/DESIGN_SYSTEM.md`.
 
 The agent alone does NOT track usage (Session-0 isolation). Dev fallback: `SCREENTIME_SELF_SAMPLE=1` re-enables in-agent sampling.
 
@@ -40,7 +40,7 @@ Violating these rules causes irreversible loss of user work and is strictly proh
      - Localization bundles (`ui/src/locales/en/translation.json`, `ui/src/locales/ar/translation.json`, etc.)
      - Component fallbacks and labels (`ui/src/App.tsx`, pages, controls)
      - Native platform renderers and fallback palettes (`crates/session/src/hud.rs`, `crates/session/src/mpo.rs`)
-     - Styles and CSS tokens (`ui/src/styles/tokens.css`, `redesign.css`)
+     - Styles and CSS tokens (`ui/src/styles/tokens.css`, `redesign.css`, `tether.css`)
      - Documentation (`docs/UI_SPECIFICATION.md`, release notes, user guides)
    - Never leave downstream files stale when introducing or renaming functionality.
 
@@ -52,10 +52,11 @@ Violating these rules causes irreversible loss of user work and is strictly proh
 2. **Single Source of Truth**:
    - IPC DTOs: Always verify against `ui/src/types/generated/*.ts` (or `crates/ipc/src/lib.rs`).
    - Tauri Commands: Always check `ui/src-tauri/src/lib.rs` and verify registration in `tauri::generate_handler![]`.
-   - UI Design & Classes: Always reference `docs/UI_SPECIFICATION.md` and `ui/src/styles/redesign.css`.
+   - UI Design & Classes: Always reference `docs/DESIGN_SYSTEM.md` (the v2 design contract: palette, type, components, voice), `docs/UI_SPECIFICATION.md`, `ui/src/styles/redesign.css` (theme tokens) and `ui/src/styles/tether.css` (`tt-` components of the v2 screens).
 3. **Reference On-Demand Documentation**:
    - Full Architecture & Data Flows: [`docs/SYSTEM_MAP.md`](docs/SYSTEM_MAP.md)
    - UI Redesign & Component Trees: [`docs/UI_SPECIFICATION.md`](docs/UI_SPECIFICATION.md)
+   - Design System (v2): [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md)
    - IPC Contracts & Tauri Bridge: [`docs/IPC_CATALOG.md`](docs/IPC_CATALOG.md)
 
 ---
