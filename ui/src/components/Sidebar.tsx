@@ -2,7 +2,6 @@ import { useTranslation } from "react-i18next";
 import type { StatusDto } from "../types/generated/StatusDto";
 import {
     LayoutDashboard,
-    ShieldAlert,
     Clock,
     Settings as SettingsLucide,
     ChevronLeft,
@@ -11,7 +10,8 @@ import {
 } from "lucide-react";
 import { formatDayLabel } from "../format";
 
-export type TabKey = "overview" | "limits" | "web-filtering" | "settings";
+/** Top-level pages. Websites live under Limits (docs/DESIGN_SYSTEM.md §2). */
+export type TabKey = "overview" | "limits" | "settings";
 
 interface SidebarProps {
     activeTab: TabKey;
@@ -51,6 +51,7 @@ export function Sidebar({
     return (
         <aside className="app-sidebar" aria-label={t("nav.main")}>
             <div className="sidebar-brand">
+                <span className="brand-mark" aria-hidden="true">T</span>
                 <span className="logo-title">Tether</span>
                 <div className={`status-pill ${isLive ? "status-pill--live" : "status-pill--offline"}`} role="status">
                     <span className={`status-dot ${isLive ? "status-dot--live" : "status-dot--offline"}`} aria-hidden="true" />
@@ -63,12 +64,12 @@ export function Sidebar({
                     type="button"
                     className={`nav-item ${activeTab === "overview" ? "nav-item--active" : ""}`}
                     onClick={() => onSelectTab("overview")}
-                    aria-label={t("nav.overview", "Dashboard")}
-                    title={t("nav.overview", "Dashboard")}
+                    aria-label={t("nav.overview")}
+                    title={t("nav.overview")}
                     aria-current={activeTab === "overview" ? "page" : undefined}
                 >
                     <LayoutDashboard size={15} className="nav-icon" />
-                    <span className="nav-text">{t("nav.overview", "Dashboard")}</span>
+                    <span className="nav-text">{t("nav.overview")}</span>
                     {blockedCount > 0 && (
                         <span className="nav-badge nav-badge--danger" title={t("hero.blockedNow", { count: blockedCount })}>
                             {blockedCount}
@@ -78,38 +79,26 @@ export function Sidebar({
 
                 <button
                     type="button"
-                    className={`nav-item ${activeTab === "web-filtering" ? "nav-item--active" : ""}`}
-                    onClick={() => onSelectTab("web-filtering")}
-                    aria-label={t("nav.webFiltering", "Web Filter")}
-                    title={t("nav.webFiltering", "Web Filter")}
-                    aria-current={activeTab === "web-filtering" ? "page" : undefined}
-                >
-                    <ShieldAlert size={15} className="nav-icon" />
-                    <span className="nav-text">{t("nav.webFiltering", "Web Filter")}</span>
-                </button>
-
-                <button
-                    type="button"
                     className={`nav-item ${activeTab === "limits" ? "nav-item--active" : ""}`}
                     onClick={() => onSelectTab("limits")}
-                    aria-label={t("nav.limits", "App Limits")}
-                    title={t("nav.limits", "App Limits")}
+                    aria-label={t("nav.limits")}
+                    title={t("nav.limits")}
                     aria-current={activeTab === "limits" ? "page" : undefined}
                 >
                     <Clock size={15} className="nav-icon" />
-                    <span className="nav-text">{t("nav.limits", "App Limits")}</span>
+                    <span className="nav-text">{t("nav.limits")}</span>
                 </button>
 
                 <button
                     type="button"
                     className={`nav-item ${activeTab === "settings" ? "nav-item--active" : ""}`}
                     onClick={() => onSelectTab("settings")}
-                    aria-label={t("nav.settings", "Settings")}
-                    title={t("nav.settings", "Settings")}
+                    aria-label={t("nav.settings")}
+                    title={t("nav.settings")}
                     aria-current={activeTab === "settings" ? "page" : undefined}
                 >
                     <SettingsLucide size={15} className="nav-icon" />
-                    <span className="nav-text">{t("nav.settings", "Settings")}</span>
+                    <span className="nav-text">{t("nav.settings")}</span>
                 </button>
             </nav>
 

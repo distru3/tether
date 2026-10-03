@@ -2,18 +2,10 @@ import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
-export type ThemePreference =
-  | "midnight-cobalt"
-  | "slate-charcoal"
-  | "clean-titanium"
-  | "nordic-frost"
-  | "system";
+/** Saved preference. "system" follows the OS light/dark setting. */
+export type ThemePreference = "light" | "dark" | "system";
 
-export type EffectiveTheme =
-  | "midnight-cobalt"
-  | "slate-charcoal"
-  | "clean-titanium"
-  | "nordic-frost";
+export type EffectiveTheme = "light" | "dark";
 
 const STORAGE_KEY = "tether_theme";
 const DEFAULT: ThemePreference = "system";
@@ -31,19 +23,26 @@ function isTauriAvailable(): boolean {
 
 function normalizePref(v: string | null | undefined): ThemePreference | null {
   if (!v) return null;
+  if (v === "light" || v === "dark" || v === "system") return v;
+  // Retired theme names (before the 2026-10 redesign) keep their light/dark
+  // side. Mirrored in index.html and the Tauri `normalize_theme`.
   if (
     v === "midnight-cobalt" ||
     v === "slate-charcoal" ||
+    v === "cyber-emerald" ||
+    v === "horizon-dark" ||
+    v === "classic-dark"
+  ) {
+    return "dark";
+  }
+  if (
     v === "clean-titanium" ||
     v === "nordic-frost" ||
-    v === "system"
+    v === "horizon-light" ||
+    v === "classic-light"
   ) {
-    return v;
+    return "light";
   }
-  // Backward compatibility for legacy values
-  if (v === "cyber-emerald") return "slate-charcoal";
-  if (v === "horizon-dark" || v === "classic-dark" || v === "dark") return "midnight-cobalt";
-  if (v === "horizon-light" || v === "classic-light" || v === "light") return "clean-titanium";
   return null;
 }
 
@@ -96,23 +95,17 @@ async function persistTheme(theme: ThemePreference): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function resolveEffective(pref: ThemePreference): EffectiveTheme {
-  if (pref === "midnight-cobalt") return "midnight-cobalt";
-  if (pref === "slate-charcoal") return "slate-charcoal";
-  if (pref === "clean-titanium") return "clean-titanium";
-  if (pref === "nordic-frost") return "nordic-frost";
-  // "system": follow the OS dark/light mode preference
+  if (pref !== "system") return pref;
   try {
-    const isDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-    return isDark ? "midnight-cobalt" : "clean-titanium";
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
   } catch {
-    return "midnight-cobalt";
+    return "dark";
   }
 }
 
 export function applyTheme(effective: EffectiveTheme) {
   document.documentElement.setAttribute("data-theme", effective);
-  const mode = effective === "clean-titanium" || effective === "nordic-frost" ? "light" : "dark";
-  document.documentElement.setAttribute("data-theme-mode", mode);
+  document.documentElement.setAttribute("data-theme-mode", effective);
 }
 
 // ---------------------------------------------------------------------------
@@ -169,7 +162,7 @@ export function useTheme() {
 
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = (e: MediaQueryListEvent) => {
-      const effective: EffectiveTheme = e.matches ? "midnight-cobalt" : "clean-titanium";
+      const effective: EffectiveTheme = e.matches ? "dark" : "light";
       setEffectiveTheme(effective);
       applyTheme(effective);
     };

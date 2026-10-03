@@ -74,13 +74,17 @@ export function formatClock(d: Date): string {
  * The tail of a limit-change toast: " Applied." when it took effect now, or
  * " Takes effect Tue 9:30 PM." when the anti-impulse cooldown queued it.
  */
+/** "Fri 10:42" in the UI language: when a queued change lands. */
+export function formatWhen(at: Date): string {
+    return at.toLocaleString(i18n.language, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+}
+
 export function effectClause(effectiveUtc: string | null | undefined): string {
     const t = effectiveUtc ? new Date(effectiveUtc) : null;
     if (t === null || Number.isNaN(t.getTime()) || t.getTime() <= Date.now()) {
         return " " + i18n.t("actions.applied");
     }
-    const when = t.toLocaleString(i18n.language, { weekday: "short", hour: "2-digit", minute: "2-digit" });
-    return " " + i18n.t("actions.takesEffect", { when });
+    return " " + i18n.t("actions.takesEffect", { when: formatWhen(t) });
 }
 
 export function targetLabel(target: LimitTargetDto, catalog: CatalogDto | null): string {

@@ -16,6 +16,7 @@ import {
     ChevronRight,
 } from "lucide-react";
 import { addManualBlock, describeError, listManualBlocks, removeManualBlock, verifyPin } from "../api";
+import { isHiddenDomain } from "../domains";
 
 /** Thrown `Error`s carry our own (already translated) text; invoke failures are wire errors. */
 function messageOf(e: unknown): string {
@@ -95,9 +96,7 @@ export function WebFilteringPanel({ onAttempt }: { onAttempt: (label: string, ru
         });
     };
 
-    const isNsfw = (domain: string) => {
-        return /(porn|xvideo|xnxx|xhamster|chaturbate|stripchat|onlyfans|redtube|tubegalore|eporner|spankbang|rule34|xxx)/i.test(domain);
-    };
+    const isNsfw = isHiddenDomain;
 
     const handleRemove = (domain: string) => {
         setError(null);
