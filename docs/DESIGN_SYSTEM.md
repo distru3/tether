@@ -117,6 +117,7 @@ Both fonts are bundled (fontsource); the Tauri CSP blocks remote fonts.
 | Block screen | Pause and choose | Phase 2 (borrowing/reasons need the agent, Phase 4) |
 | Timer and tray | Glance | Phase 2 |
 | Activity | The week against the limits | Later |
+| Installer | Say what gets installed, then hand over to setup | Done: NSIS, plum sidebar, Rubik/Unbounded embedded (`packaging/README.md`) |
 
 ## 8. Voice
 

@@ -60,8 +60,17 @@
     "windows": {
       "nsis": {
         "installMode": "perMachine",
-        "installerHooks": "installer_hooks.nsh",
-        "template": "installer.nsi"
+        "installerHooks": "installer/hooks.nsh",
+        "template": "installer/installer.nsi",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico",
+        "headerImage": "installer/art/header.bmp",
+        "sidebarImage": "installer/art/sidebar.bmp",
+        "languages": [
+          "English",
+          "Arabic"
+        ],
+        "displayLanguageSelector": false
       }
     },
     "resources": [

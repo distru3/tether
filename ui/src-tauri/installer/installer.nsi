@@ -164,9 +164,15 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !define MUI_LANGDLL_REGISTRY_KEY "${MANUPRODUCTKEY}"
 !define MUI_LANGDLL_REGISTRY_VALUENAME "Installer Language"
 
+; Tether: colours, fonts and header/sidebar art (style.nsh, next to hooks.nsh)
+!include "${TETHER_INSTALLER_DIR}\style.nsh"
+
 ; Installer pages, must be ordered as they appear
 ; 1. Welcome Page
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW Tether.WelcomeShow
+!define MUI_WELCOMEPAGE_TITLE "$(tetherWelcomeTitle)"
+!define MUI_WELCOMEPAGE_TEXT "$(tetherWelcomeText)"
 !insertmacro MUI_PAGE_WELCOME
 
 ; 2. License Page (if defined)
@@ -386,6 +392,9 @@ FunctionEnd
 
 ; 5. Choose install directory page
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!define MUI_PAGE_HEADER_TEXT "$(tetherDirTitle)"
+!define MUI_PAGE_HEADER_SUBTEXT "$(tetherDirSubtitle)"
+!define MUI_DIRECTORYPAGE_TEXT_TOP "$(tetherDirText)"
 !insertmacro MUI_PAGE_DIRECTORY
 
 ; 6. Start menu shortcut page
@@ -399,6 +408,12 @@ Var AppStartMenuFolder
 !insertmacro MUI_PAGE_STARTMENU Application $AppStartMenuFolder
 
 ; 7. Installation page
+!define MUI_PAGE_HEADER_TEXT "$(tetherInstallingTitle)"
+!define MUI_PAGE_HEADER_SUBTEXT "$(tetherInstallingSubtitle)"
+!define MUI_INSTFILESPAGE_FINISHHEADER_TEXT "$(tetherInstalledTitle)"
+!define MUI_INSTFILESPAGE_FINISHHEADER_SUBTEXT "$TetherInstalledSub"
+!define MUI_INSTFILESPAGE_ABORTHEADER_TEXT "$(tetherAbortedTitle)"
+!define MUI_INSTFILESPAGE_ABORTHEADER_SUBTEXT "$(tetherAbortedSubtitle)"
 !insertmacro MUI_PAGE_INSTFILES
 
 ; 8. Finish page
@@ -413,80 +428,102 @@ Var AppStartMenuFolder
 ; Show run app after installation.
 !define MUI_FINISHPAGE_RUN
 !define MUI_FINISHPAGE_RUN_FUNCTION RunMainBinary
+!define MUI_FINISHPAGE_RUN_TEXT "$(tetherOpenNow)"
+!define MUI_FINISHPAGE_TITLE "$(tetherFinishTitle)"
+!define MUI_FINISHPAGE_TEXT "$(tetherFinishText)"
+!define MUI_FINISHPAGE_TEXT_LARGE
 !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
+!define MUI_PAGE_CUSTOMFUNCTION_SHOW Tether.FinishShow
 !insertmacro MUI_PAGE_FINISH
 
 Function RunMainBinary
   nsis_tauri_utils::RunAsUser "$INSTDIR\${MAINBINARYNAME}.exe" ""
 FunctionEnd
 
+!insertmacro TETHER_PAGE_FUNCTIONS
+
 ; Uninstaller Pages
-; 1. Confirm uninstall page
+; 1. Confirm uninstall page, with two Tether options under the folder:
+;    - delete usage history and settings (off by default)
+;    - restore the previous network DNS, shown only while Family DNS is on
+;      (HKLM\Software\Screentime\FamilyDnsApplied, written by the agent), on
+;      by default. Without that flag, --disable-family-dns has nothing to
+;      restore and would reset any custom DNS to automatic.
 Var DeleteAppDataCheckbox
 Var DeleteAppDataCheckboxState
 Var RestoreDnsCheckbox
 Var RestoreDnsCheckboxState
+Var FamilyDnsApplied
 
 !define MUI_PAGE_CUSTOMFUNCTION_PRE un.SkipIfPassive
 !define MUI_PAGE_CUSTOMFUNCTION_SHOW un.ConfirmShow
 !define MUI_PAGE_CUSTOMFUNCTION_LEAVE un.ConfirmLeave
+!define MUI_PAGE_HEADER_TEXT "$(tetherUnTitle)"
+!define MUI_PAGE_HEADER_SUBTEXT "$(tetherUnSubtitle)"
+!define MUI_UNCONFIRMPAGE_TEXT_TOP "$(tetherUnText)"
 !insertmacro MUI_UNPAGE_CONFIRM
 
+; Creates a checkbox in the inner dialog $R0 at x=$R1, y=$R2, w=$R3, h=$R4
+; and leaves its handle on the stack.
+!macro TETHER_UN_CHECKBOX TEXT
+  System::Call 'user32::CreateWindowExW(i ${__NSD_CheckBox_EXSTYLE}, w "${__NSD_CheckBox_CLASS}", w "${TEXT}", i ${__NSD_CheckBox_STYLE}, i R1, i R2, i R3, i R4, p R0, p 0, p 0, p 0) p .s'
+!macroend
+
 Function un.ConfirmShow
-  ; Find inner dialog
-  FindWindow $0 "#32770" "" $HWNDPARENT
-  
-  ; Get DPI for high-DPI scaling
-  System::Call "user32::GetDpiForWindow(p r0) i .r2"
-  ${If} $2 <= 0
-    StrCpy $2 96
+  ; $R0 inner dialog; $R5 its font; $R6 DPI
+  StrCpy $R0 $mui.UnConfirmPage
+  SendMessage $R0 ${WM_GETFONT} 0 0 $R5
+  System::Call "user32::GetDpiForWindow(p R0) i .R6"
+  ${If} $R6 <= 0
+    StrCpy $R6 96
   ${EndIf}
 
-  ; Checkbox geometry scaled by DPI
-  ; x = 20px
-  IntOp $3 20 * $2
-  IntOp $3 $3 / 96
+  ; Place the boxes under the folder field, whatever the font and DPI make
+  ; its size: x and width from the field, y below it.
+  StrCpy $R7 $mui.UnConfirmPage.Directory
+  System::Call '*(i, i, i, i) p .R8'
+  System::Call 'user32::GetWindowRect(p R7, p R8)'
+  System::Call 'user32::MapWindowPoints(p 0, p R0, p R8, i 2)'
+  System::Call '*$R8(i .r1, i .r2, i .r3, i .r4)'
+  System::Free $R8
+  ; Mirrored (RTL) dialogs report left > right.
+  ${If} $1 > $3
+    StrCpy $5 $1
+    StrCpy $1 $3
+    StrCpy $3 $5
+  ${EndIf}
+  StrCpy $R1 $1
+  IntOp $R3 $3 - $1
+  IntOp $R4 22 * $R6
+  IntOp $R4 $R4 / 96
+  IntOp $R2 18 * $R6
+  IntOp $R2 $R2 / 96
+  IntOp $R2 $4 + $R2
 
-  ; y1 = 115px (comfortably below the install folder edit control)
-  IntOp $4 115 * $2
-  IntOp $4 $4 / 96
-
-  ; w = 410px
-  IntOp $5 410 * $2
-  IntOp $5 $5 / 96
-
-  ; h = 20px
-  IntOp $6 20 * $2
-  IntOp $6 $6 / 96
-
-  ; WS_CHILD (0x40000000) | WS_VISIBLE (0x10000000) | WS_TABSTOP (0x00010000) | BS_AUTOCHECKBOX (0x00000003) = 0x50010003
-  System::Call 'user32::CreateWindowEx(i 0, w "BUTTON", w "Delete all application data and database history", i 0x50010003, i r3, i r4, i r5, i r6, p r0, i 1050, i 0, i 0) p .s'
+  !insertmacro TETHER_UN_CHECKBOX "$(tetherUnDeleteData)"
   Pop $DeleteAppDataCheckbox
-
-  ; y2 = 140px
-  IntOp $4 140 * $2
-  IntOp $4 $4 / 96
-
-  System::Call 'user32::CreateWindowEx(i 0, w "BUTTON", w "Restore network DNS settings (disable DNS filtering)", i 0x50010003, i r3, i r4, i r5, i r6, p r0, i 1051, i 0, i 0) p .s'
-  Pop $RestoreDnsCheckbox
-
-  ; Set font from parent
-  SendMessage $HWNDPARENT 0x0031 0 0 $1
-  SendMessage $DeleteAppDataCheckbox 0x0030 $1 1
-  SendMessage $RestoreDnsCheckbox 0x0030 $1 1
-
-  ; Set initial state:
-  ; Restore DNS is checked by default (1)
-  ; Delete App Data is unchecked by default (0)
+  SendMessage $DeleteAppDataCheckbox ${WM_SETFONT} $R5 1
   StrCpy $DeleteAppDataCheckboxState 0
-  StrCpy $RestoreDnsCheckboxState 1
-  SendMessage $DeleteAppDataCheckbox 0x00F1 $DeleteAppDataCheckboxState 0
-  SendMessage $RestoreDnsCheckbox 0x00F1 $RestoreDnsCheckboxState 0
+  SendMessage $DeleteAppDataCheckbox ${BM_SETCHECK} $DeleteAppDataCheckboxState 0
+
+  ${If} $FamilyDnsApplied = 1
+    IntOp $R2 $R2 + $R4
+    IntOp $5 6 * $R6
+    IntOp $5 $5 / 96
+    IntOp $R2 $R2 + $5
+    !insertmacro TETHER_UN_CHECKBOX "$(tetherUnRestoreDns)"
+    Pop $RestoreDnsCheckbox
+    SendMessage $RestoreDnsCheckbox ${WM_SETFONT} $R5 1
+    StrCpy $RestoreDnsCheckboxState 1
+    SendMessage $RestoreDnsCheckbox ${BM_SETCHECK} $RestoreDnsCheckboxState 0
+  ${EndIf}
 FunctionEnd
 
 Function un.ConfirmLeave
-  SendMessage $DeleteAppDataCheckbox 0x00F0 0 0 $DeleteAppDataCheckboxState
-  SendMessage $RestoreDnsCheckbox 0x00F0 0 0 $RestoreDnsCheckboxState
+  SendMessage $DeleteAppDataCheckbox ${BM_GETCHECK} 0 0 $DeleteAppDataCheckboxState
+  ${If} $FamilyDnsApplied = 1
+    SendMessage $RestoreDnsCheckbox ${BM_GETCHECK} 0 0 $RestoreDnsCheckboxState
+  ${EndIf}
 FunctionEnd
 
 ; 2. Uninstalling Page
@@ -500,8 +537,12 @@ FunctionEnd
 {{#each language_files}}
   !include "{{this}}"
 {{/each}}
+!include /CHARSET=UTF8 "${TETHER_INSTALLER_DIR}\strings.nsh"
 
 Function .onInit
+  ; Register Rubik and Unbounded for this process before any dialog exists.
+  Call Tether.LoadFonts
+
   ${GetOptions} $CMDLINE "/P" $PassiveMode
   ${IfNot} ${Errors}
     StrCpy $PassiveMode 1
@@ -799,16 +840,20 @@ Function un.onInit
     StrCpy $UpdateMode 1
   ${EndIf}
 
-  ; Default DNS restoration in silent/passive mode if FamilyDnsApplied is 1
+  ; Restore DNS by default (and always in passive/silent mode) only while
+  ; Family DNS is on; un.ConfirmShow offers the choice.
   ClearErrors
   ReadRegDWORD $0 HKLM "Software\Screentime" "FamilyDnsApplied"
   ${If} ${Errors}
-    StrCpy $RestoreDnsCheckboxState 0
+    StrCpy $FamilyDnsApplied 0
   ${ElseIf} $0 = 1
-    StrCpy $RestoreDnsCheckboxState 1
+    StrCpy $FamilyDnsApplied 1
   ${Else}
-    StrCpy $RestoreDnsCheckboxState 0
+    StrCpy $FamilyDnsApplied 0
   ${EndIf}
+  StrCpy $RestoreDnsCheckboxState $FamilyDnsApplied
+
+  Call un.Tether.LoadFonts
 FunctionEnd
 
 Section Uninstall
