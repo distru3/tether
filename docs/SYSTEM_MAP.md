@@ -31,7 +31,7 @@ The system is partitioned into **three separate processes** due to Windows opera
 |  |  (crates/session)           |  |  (ui/ + ui/src-tauri)                  |  |
 |  |  - 1 Hz Foreground Tracker  |  |  - Tauri 2 Desktop Shell               |  |
 |  |  - Idle Detection           |  |  - React 18 / TypeScript Dashboard     |  |
-|  |  - Native timer HUD         |  |  - Smoked-Glass Analytics UI           |  |
+|  |  - Native timer HUD         |  |  - Today / Limits / Settings UI        |  |
 |  |  - Block-overlay driver     |  |  - Settings, Limits & Filtering Admin  |  |
 |  +-----------------------------+  +----------------------------------------+  |
 +-------------------------------------------------------------------------------+
@@ -73,7 +73,7 @@ crates/
 
 ui/
 ├── src-tauri/        Tauri 2 backend: thin adapter translating Tauri invoke -> IPC named pipe.
-└── src/              React 18 frontend: Smoked-glass analytics workspace.
+└── src/              React 18 frontend: Today / Limits / Settings (docs/DESIGN_SYSTEM.md).
 ```
 
 ### Invariant Rules
@@ -126,7 +126,7 @@ SQLite database managed via append-only migrations tracked by `PRAGMA user_versi
 3. System-wide adult content, malware, and security protection is provided at the network adapter level via Cloudflare Family DNS (`1.1.1.3` / `1.0.0.3`), configured cleanly via `netsh`.
 
 ### D. Family DNS Protection & Automatic Original DNS Restoration
-All entry points (the `family_dns` setting from UI Settings or Onboarding, CLI `--enable-family-dns` / `--disable-family-dns`) share one implementation: `crates/agent/src/family_dns.rs`. The OS work sits behind the `DnsBackend` trait (`WindowsDns` in production, a fake in tests). It runs **without the database lock held**, and failures are returned to the caller instead of being swallowed.
+All entry points (the `family_dns` setting from the Limits page or the setup flow, CLI `--enable-family-dns` / `--disable-family-dns`) share one implementation: `crates/agent/src/family_dns.rs`. The OS work sits behind the `DnsBackend` trait (`WindowsDns` in production, a fake in tests). It runs **without the database lock held**, and failures are returned to the caller instead of being swallowed.
 1. **Preservation on Enable**: `st_dns::dns_config::capture()` reads all active network interfaces (`IfaceDns`), including their exact DNS server IP lists (or DHCP state). The snapshot is serialized to both SQLite `settings` (`original_dns_config`) and `{data_dir}/original_dns_backup.json`. **If a backup already exists** (e.g. after a crash mid-enable), it is reused rather than recaptured, so Family DNS itself is never saved as the "original". A capture failure aborts before anything changes.
 2. **Apply**: Active interfaces are pointed at Cloudflare Family DNS (`1.1.1.3`, `1.0.0.3`, `2606:4700:4700::1113`, `2606:4700:4700::1003`). The browser DoH policies and outbound DoT (port 853) firewall rules from `st_dns::lockdown` are applied on every enable path (previously only the CLI did this). `HKLM\Software\Screentime\FamilyDnsApplied` is set to `1`. If applying fails, the agent rolls back to the backup and reports the error, so the toggle never claims protection that is absent.
 3. **Restoration on Disable**: The agent reads the backup from SQLite, falling back to the JSON file, and restores each interface to its exact prior configuration (static IPs or DHCP). With no usable backup, every active adapter returns to DHCP. It then clears the lockdown, flushes the resolver cache, removes both backup copies and clears the registry flag.

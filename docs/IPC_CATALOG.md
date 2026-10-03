@@ -26,7 +26,7 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
 | Request Variant | Parameters | Response Variant | Description |
 | :--- | :--- | :--- | :--- |
 | `Ping` | None | `Pong` | Liveness probe. |
-| `Status` | None | `Status(StatusDto)` | Agent version, backends, tracking availability, PIN configuration, strict mode. |
+| `Status` | None | `Status(StatusDto)` | Agent version, backends, tracking availability, PIN configuration, strict mode, `profile` (`self`/`guardian`; `#[serde(default)]`, so an older agent reads as `self`). |
 | `DaySummary` | `day: DayKey` | `DaySummary(DaySummaryDto)` | Per-app and per-category usage rollups and chronological intervals for one day. |
 | `WeeklySummary`| `end_day: DayKey` | `WeeklySummary(WeeklySummaryDto)` | 7-day usage array ending at `end_day`, plus previous week's total seconds. |
 | `Catalog` | None | `Catalog(CatalogDto)` | Full list of apps, categories, current limits, and pending cooldown limits. |
@@ -42,7 +42,7 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
 | `GrantOverride` | `target: LimitTargetDto`, `seconds: i64`, `pin: String` | `Accepted { effective_utc, hud }` | Grants +15m override. Rejected outright in strict mode or with invalid PIN. |
 | `Categorize` | `app_id: i64`, `primary: Option<i64>`, `tags: Vec<i64>`, `pin?: String` | `Accepted { effective_utc, hud }` | Reclassifies app. Primary drives reporting; tags affect limit matching. **PIN always** (moving an app to an unlimited category is a bypass). |
 | `CloseApps` | `app_id: i64`, `pin: String` | `Accepted { ... }` | User-initiated app termination from the block overlay. **No PIN when the app is currently blocked** (quitting only tightens); closing any other app needs the PIN. |
-| `SetSetting` | `key: String`, `value: String`, `pin?: String` | `Accepted { ... }` | Only keys in `st_core::settings::SettingKey` are accepted (unknown keys, including `pin_hash`, are `bad_request`); values are range-checked and stored in canonical form, then applied to the live policy. **PIN when loosening**: `strict_mode`/`family_dns` → `false`, lowering `limit_cooldown_hours`, any change to `day_start_minutes` or `idle_threshold_secs`. HUD, volume, hotkey and `capture_window_titles` never need it. Ranges: cooldown 0–168 h, day start 0–1439 min, idle 5–3600 s, volume 0–100, hotkey ≤ 32 chars. |
+| `SetSetting` | `key: String`, `value: String`, `pin?: String` | `Accepted { ... }` | Only keys in `st_core::settings::SettingKey` are accepted (unknown keys, including `pin_hash`, are `bad_request`); values are range-checked and stored in canonical form, then applied to the live policy. **PIN when loosening**: `strict_mode`/`family_dns` → `false`, lowering `limit_cooldown_hours`, any change to `day_start_minutes`, `idle_threshold_secs` or `profile`. HUD, volume, hotkey and `capture_window_titles` never need it. Ranges: cooldown 0–168 h, day start 0–1439 min, idle 5–3600 s, volume 0–100, hotkey ≤ 32 chars, `profile` ∈ {`self`, `guardian`} (default `self`; who Tether is for, chosen in setup — it changes copy and whether the PIN step can be skipped, not enforcement). |
 
 ### PIN Vault
 
