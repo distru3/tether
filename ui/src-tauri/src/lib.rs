@@ -420,22 +420,16 @@ fn set_allowlist(
 }
 
 /// Selectable themes, mirroring `ThemePreference` in `ui/src/hooks/useTheme.ts`.
-const THEMES: [&str; 5] = [
-    "midnight-cobalt",
-    "slate-charcoal",
-    "clean-titanium",
-    "nordic-frost",
-    "system",
-];
+const THEMES: [&str; 3] = ["light", "dark", "system"];
 
 /// Map a stored preference to a current theme. Retired names written by
 /// earlier versions migrate instead of being rejected, matching `useTheme`'s
 /// `normalizePref` and the bootstrap script in `index.html`.
 fn normalize_theme(t: &str) -> Option<&'static str> {
     let migrated = match t {
-        "cyber-emerald" => "slate-charcoal",
-        "horizon-dark" | "classic-dark" | "dark" => "midnight-cobalt",
-        "horizon-light" | "classic-light" | "light" => "clean-titanium",
+        "midnight-cobalt" | "slate-charcoal" | "cyber-emerald" | "horizon-dark"
+        | "classic-dark" => "dark",
+        "clean-titanium" | "nordic-frost" | "horizon-light" | "classic-light" => "light",
         other => other,
     };
     THEMES.into_iter().find(|known| *known == migrated)
@@ -628,11 +622,14 @@ mod tests {
 
     #[test]
     fn current_themes_pass_through_and_retired_ones_migrate() {
-        assert_eq!(normalize_theme("nordic-frost"), Some("nordic-frost"));
+        assert_eq!(normalize_theme("light"), Some("light"));
+        assert_eq!(normalize_theme("dark"), Some("dark"));
         assert_eq!(normalize_theme("system"), Some("system"));
-        assert_eq!(normalize_theme("cyber-emerald"), Some("slate-charcoal"));
-        assert_eq!(normalize_theme("classic-light"), Some("clean-titanium"));
-        assert_eq!(normalize_theme("dark"), Some("midnight-cobalt"));
+        // Retired names keep their light/dark side.
+        assert_eq!(normalize_theme("midnight-cobalt"), Some("dark"));
+        assert_eq!(normalize_theme("slate-charcoal"), Some("dark"));
+        assert_eq!(normalize_theme("nordic-frost"), Some("light"));
+        assert_eq!(normalize_theme("classic-light"), Some("light"));
         assert_eq!(normalize_theme("neon-pink"), None);
     }
 }

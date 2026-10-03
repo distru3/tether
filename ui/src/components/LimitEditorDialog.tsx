@@ -2,7 +2,8 @@ import { useMemo, useState, useRef, useEffect, type CSSProperties, type FormEven
 import { useTranslation } from "react-i18next";
 import { Smartphone, Layers, LayoutGrid, Clock, Calendar, Check } from "lucide-react";
 import type { WeekdayMinutes } from "../api";
-import { formatDuration, targetLabel, WEEKDAY_SHORT, weekdayShortNames } from "../format";
+import { formatDuration, formatWhen, targetLabel, WEEKDAY_SHORT, weekdayShortNames } from "../format";
+import { waitsForCooldown } from "../limitRules";
 import { colorForCategory } from "../categoryColors";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
@@ -19,6 +20,8 @@ interface LimitEditorDialogProps {
     onSubmit: (target: LimitTargetDto, minutes: number, weekdayMinutes: WeekdayMinutes, enabled: boolean) => void;
     onClose: () => void;
     onCategorize?: (appId: number, appName: string, primaryId: number | null, tagIds: number[]) => void;
+    /** Hours a raised limit waits before it applies (status `limit_cooldown_hours`). */
+    cooldownHours: number;
 }
 
 interface DayOverrideState {
@@ -209,6 +212,7 @@ export function LimitEditorDialog({
     onSubmit,
     onClose,
     onCategorize,
+    cooldownHours,
 }: LimitEditorDialogProps) {
     const { t } = useTranslation();
 
@@ -393,6 +397,16 @@ export function LimitEditorDialog({
         }
         onSubmit(finalTarget, parsed, weekdayMinutes, enabled);
     };
+
+    // When saving would take effect (docs/DESIGN_SYSTEM.md §2.3): shown before
+    // the save button, so the cooldown is a promise rather than a surprise.
+    const parsedMinutes = Number.parseInt(minutes, 10);
+    const draftWeekdays = dayOverrides.map((day) => (day.override ? Number.parseInt(day.minutes, 10) || 0 : null));
+    const waits =
+        cooldownHours > 0 &&
+        Number.isFinite(parsedMinutes) &&
+        waitsForCooldown(limit, parsedMinutes, draftWeekdays, enabled);
+    const appliesAt = formatWhen(new Date(Date.now() + cooldownHours * 3600 * 1000));
 
     // Active focused day inspection math
     const activeFocusedDay = dayOverrides[focusedDay];
@@ -753,6 +767,25 @@ export function LimitEditorDialog({
                     <span className="limit-enforce-label">{t("limitEditor.inForce", "Enable limit enforcement")}</span>
                 </label>
 
+                {waits ? (
+                    <div className="tt-note" role="note">
+                        <span>
+                            <Clock size={18} className="tt-note-icon" aria-hidden="true" />
+                            <span>
+                                <strong>{t("limitEditor.appliesAt", { when: appliesAt })}</strong>
+                                {t("limitEditor.appliesAtWhy", { count: cooldownHours })}
+                            </span>
+                        </span>
+                    </div>
+                ) : (
+                    <div className="tt-note tt-note--calm" role="note">
+                        <span>
+                            <Clock size={18} className="tt-note-icon" aria-hidden="true" />
+                            <span>{t("limitEditor.appliesNow")}</span>
+                        </span>
+                    </div>
+                )}
+
                 {error !== null && (
                     <div className="dialog-error">
                         {error}
@@ -771,7 +804,11 @@ export function LimitEditorDialog({
                     </button>
                     <button type="submit" className="btn btn--primary" disabled={busy}>
                         {busy && <LoadingSpinner size="xs" />}
-                        {busy ? t("limitEditor.setting", "Saving...") : t("limitEditor.saveOrder", "Save Limit")}
+                        {busy
+                            ? t("limitEditor.setting")
+                            : waits
+                              ? t("limitEditor.saveLater")
+                              : t("limitEditor.saveOrder")}
                     </button>
                 </div>
             </form>
