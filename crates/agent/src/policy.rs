@@ -30,6 +30,8 @@ pub struct Policy {
     pub hud_peek_hotkey: String,
     /// Alert chime audio volume from 0 to 100 (default 80).
     pub alert_volume: i64,
+    /// Who Tether is set up for: "self" or "guardian" (UI wording/defaults).
+    pub profile: String,
 }
 
 impl Default for Policy {
@@ -44,6 +46,7 @@ impl Default for Policy {
             show_hud_in_fullscreen: false,
             hud_peek_hotkey: String::new(),
             alert_volume: 0,
+            profile: String::new(),
         };
         for key in SettingKey::ALL {
             policy.apply(key, key.default_value());
@@ -93,6 +96,7 @@ impl Policy {
             SettingKey::ShowHudInFullscreen => self.show_hud_in_fullscreen = value == "true",
             SettingKey::HudPeekHotkey => self.hud_peek_hotkey = value.to_string(),
             SettingKey::AlertVolume => self.alert_volume = number(),
+            SettingKey::Profile => self.profile = value.to_string(),
             SettingKey::FamilyDns | SettingKey::CaptureWindowTitles => {}
         }
     }

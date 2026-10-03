@@ -121,16 +121,7 @@ fn test_ctx_with_db_handle(db: &Arc<Mutex<Db>>, clock: TestClock) -> Ctx {
             self_sampling: false,
             blocks_encrypted_dns: false,
         }),
-        policy: Arc::new(RwLock::new(Policy {
-            limit_cooldown_hours: 24,
-            strict_mode: false,
-            day_start_minutes: 0,
-            idle_threshold_secs: 60,
-            show_hud_overlay: true,
-            show_hud_in_fullscreen: false,
-            hud_peek_hotkey: "Ctrl+Alt+T".to_string(),
-            alert_volume: 80,
-        })),
+        policy: Arc::new(RwLock::new(Policy::default())),
         processes: Arc::new(Mutex::new(Box::new(FakeProcesses::default()))),
         clock: Arc::new(clock),
         live: Arc::new(Live::default()),
@@ -140,16 +131,7 @@ fn test_ctx_with_db_handle(db: &Arc<Mutex<Db>>, clock: TestClock) -> Ctx {
 }
 
 fn test_ctx_with_policy(db: Db, clock: TestClock, tweak: impl FnOnce(&mut Policy)) -> Ctx {
-    let mut policy = Policy {
-        limit_cooldown_hours: 24,
-        strict_mode: false,
-        day_start_minutes: 0,
-        idle_threshold_secs: 60,
-        show_hud_overlay: true,
-        show_hud_in_fullscreen: false,
-        hud_peek_hotkey: "Ctrl+Alt+T".to_string(),
-        alert_volume: 80,
-    };
+    let mut policy = Policy::default();
     tweak(&mut policy);
     Ctx {
         db: Arc::new(Mutex::new(db)),
@@ -1415,6 +1397,39 @@ fn loosening_settings_need_the_pin_and_tightening_ones_do_not() {
         stored_setting(&ctx, "limit_cooldown_hours").as_deref(),
         Some("0")
     );
+}
+
+#[test]
+fn profile_is_free_before_a_pin_exists_and_gated_after() {
+    // First run: no PIN yet, so setup can record who Tether is for.
+    let fresh = test_ctx(
+        Db::open_in_memory().expect("db"),
+        TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+    );
+    assert!(matches!(
+        handle(&fresh, set_setting_req("profile", "guardian", None)),
+        Response::Accepted { .. }
+    ));
+    assert_eq!(read_recover(&fresh.policy, "policy").profile, "guardian");
+    assert_eq!(
+        error_code(&handle(&fresh, set_setting_req("profile", "parent", None))),
+        Some(ErrorCode::BadRequest)
+    );
+
+    // With a PIN, switching profile either way needs it.
+    let ctx = ctx_with_pin("1234");
+    assert_eq!(
+        error_code(&handle(&ctx, set_setting_req("profile", "guardian", None))),
+        Some(ErrorCode::BadPin)
+    );
+    assert!(matches!(
+        handle(&ctx, set_setting_req("profile", "guardian", Some("1234"))),
+        Response::Accepted { .. }
+    ));
+    match handle(&ctx, Request::Status) {
+        Response::Status(status) => assert_eq!(status.profile, "guardian"),
+        other => panic!("unexpected {other:?}"),
+    }
 }
 
 #[test]
