@@ -1,37 +1,23 @@
 /* ==========================================================================
-   BlockOverlay.css - Hardware-accelerated entrance/exit & theme styles
+   Block screen ("pause and choose", docs/DESIGN_SYSTEM.md). Always the dark
+   palette: it sits over a game or video. The window covers the blocked app,
+   so the backdrop is opaque.
    ========================================================================== */
 
 @keyframes overlayBackdropIn {
-  from {
-    opacity: 0;
-    backdrop-filter: blur(0px);
-    -webkit-backdrop-filter: blur(0px);
-  }
-  to {
-    opacity: 1;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes overlayBackdropOut {
-  from {
-    opacity: 1;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
-  to {
-    opacity: 0;
-    backdrop-filter: blur(0px);
-    -webkit-backdrop-filter: blur(0px);
-  }
+  from { opacity: 1; }
+  to { opacity: 0; }
 }
 
 @keyframes overlayCardIn {
   from {
     opacity: 0;
-    transform: scale(0.95) translateY(16px) translateZ(0);
+    transform: scale(0.97) translateY(12px) translateZ(0);
   }
   to {
     opacity: 1;
@@ -46,68 +32,339 @@
   }
   to {
     opacity: 0;
-    transform: scale(0.95) translateY(16px) translateZ(0);
+    transform: scale(0.97) translateY(12px) translateZ(0);
   }
 }
 
-.block-overlay-container,
 .tether-overlay-backdrop {
   position: fixed;
   inset: 0;
-  width: 100vw;
-  height: 100vh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 24px 20px;
   box-sizing: border-box;
-  background: var(--bg-modal-backdrop, rgba(0, 0, 0, 0.75));
-  animation: overlayBackdropIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  will-change: opacity, backdrop-filter;
-  user-select: none;
-}
-
-.block-overlay-container.is-exiting,
-.tether-overlay-backdrop.tether-overlay-backdrop--exiting {
-  animation: overlayBackdropOut 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-}
-
-.block-overlay-card,
-.tether-overlay-card {
-  width: 480px;
-  max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 32px);
-  background: var(--bg-panel, var(--bg-card));
-  border: 1px solid var(--border-card, var(--border-subtle));
-  border-radius: 16px;
-  box-shadow: 0 24px 64px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--border-subtle);
   /* Scroll rather than clip: on a small target window the actions must stay
      reachable even if the host could not size the overlay large enough. */
   overflow-y: auto;
-  padding: 32px 28px;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
+  background: radial-gradient(70% 60% at 50% 28%, #35204F 0%, #1C1229 70%);
   color: var(--text-primary);
-  animation: overlayCardIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  will-change: transform, opacity;
-  box-sizing: border-box;
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  animation: overlayBackdropIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  user-select: none;
 }
 
-.block-overlay-card.is-exiting,
-.tether-overlay-card.tether-overlay-card--exiting {
+.tether-overlay-backdrop--exiting {
+  animation: overlayBackdropOut 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.tt-block {
+  width: 100%;
+  max-width: 600px;
+  margin: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 22px;
+  text-align: center;
+  animation: overlayCardIn 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
+}
+
+.tether-overlay-card--exiting {
   animation: overlayCardOut 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-/* PIN dial input and buttons inside overlay */
+/* The empty budget: a squircle holding an empty ring. */
+.tt-block-badge {
+  width: 120px;
+  height: 120px;
+  border-radius: 38px;
+  background: var(--hue-tile, #2D2150);
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+}
+
+.tt-block-badge > span {
+  width: 82px;
+  height: 82px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 7px solid var(--hue-fill, #46337A);
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  color: var(--color-accent-text);
+}
+
+.tt-block-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tt-block-eyebrow {
+  font-size: 14px;
+  color: #C9B6F2;
+}
+
+.tt-block-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 34px;
+  line-height: 1.15;
+  color: var(--text-primary);
+}
+
+:lang(ar) .tt-block-title {
+  font-family: var(--font-sans);
+}
+
+.tt-block-body {
+  margin: 0;
+  color: #C9B6F2;
+  font-size: 17px;
+}
+
+/* Locked from now until the app comes back. */
+.tt-block-strip-wrap {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tt-block-strip {
+  position: relative;
+  height: 28px;
+  border-radius: 9px;
+  background: #2D2150;
+  overflow: hidden;
+}
+
+.tt-block-strip-past {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  background: #46337A;
+}
+
+.tt-block-strip-locked {
+  position: absolute;
+  inset-block: 0;
+  background: repeating-linear-gradient(135deg, var(--color-accent) 0 3px, transparent 3px 10px);
+}
+
+.tt-block-strip-now {
+  position: absolute;
+  inset-block: 0;
+  width: 3px;
+  background: var(--text-primary);
+}
+
+.tt-block-strip-scale {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.tt-block-strip-back {
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+.tt-block-actions {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tt-block-primary,
+.tt-block-secondary {
+  font: inherit;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.tt-block-primary {
+  background: var(--color-accent);
+  color: #1C1229;
+  border: 0;
+  padding: 17px;
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.tt-block-primary:hover:not(:disabled) {
+  filter: brightness(1.06);
+}
+
+.tt-block-secondary {
+  background: #2D2150;
+  color: var(--text-primary);
+  border: 1px solid var(--border-strong);
+  padding: 14px;
+  font-weight: 600;
+}
+
+.tt-block-secondary:hover:not(:disabled) {
+  background: #35255A;
+}
+
+.tt-block-primary:disabled,
+.tt-block-secondary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.tt-block-link {
+  font: inherit;
+  font-size: 15px;
+  background: none;
+  border: 0;
+  padding: 6px;
+  color: var(--color-accent-text);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.tt-block-note {
+  margin: 0;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+
+.tt-block-error {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-danger-text);
+}
+
+/* PIN pad. */
+.tt-block-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.tt-block-pin-label {
+  font-size: 15px;
+  color: #C9B6F2;
+}
+
+.tt-block-dots {
+  display: flex;
+  gap: 12px;
+  padding: 10px 20px;
+  border-radius: 14px;
+  background: #2D2150;
+  border: 1px solid var(--border-strong);
+}
+
+.tt-block-dots--wrong {
+  border-color: var(--color-danger-text);
+}
+
+.tt-block-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+}
+
+.tt-block-dot--on {
+  background: var(--text-primary);
+  border-color: var(--text-primary);
+}
+
+.tt-block-keypad {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  width: 100%;
+  max-width: 280px;
+}
+
+.tt-block-key {
+  height: 48px;
+  border-radius: 14px;
+  border: 1px solid var(--border-strong);
+  background: #2D2150;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 20px;
+  font-weight: 600;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.tt-block-key:hover:not(:disabled) {
+  background: #35255A;
+}
+
+.tt-block-key:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.tt-block-key--ok {
+  background: var(--text-primary);
+  color: #1C1229;
+  border-color: transparent;
+}
+
+.tt-block-key--ok:hover:not(:disabled) {
+  background: #FFFFFF;
+}
+
+.tt-block-key--clear {
+  color: var(--color-danger-text);
+}
+
+.tt-block-key:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.tt-block-hint {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.tt-block button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+@media (max-height: 640px) {
+  .tt-block {
+    gap: 14px;
+  }
+  .tt-block-badge {
+    display: none;
+  }
+  .tt-block-title {
+    font-size: 26px;
+  }
+}
 
 @media (prefers-reduced-motion: reduce) {
-  .block-overlay-container,
   .tether-overlay-backdrop,
-  .block-overlay-card,
-  .tether-overlay-card {
+  .tt-block,
+  .tether-overlay-card--exiting {
     animation: none !important;
     transition: none !important;
   }
 }
-

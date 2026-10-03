@@ -168,19 +168,16 @@ Shown on first run (`localStorage` `screentime_first_run_completed`). Four steps
   - Eliminates ghost click stealing and prevents focus oscillation loops where mouse clicks near the overlay area would reactivate `screentime-ui.exe`.
 - **No input hooks**: the block screen is an always-on-top window covering the app; there is no keyboard hook and the blocked window is not disabled (`EnableWindow` was documented here but never implemented). What keeps the block in place is the session re-asserting it:
 - **Self-healing delivery (2026-10)**: while the block holds and the app is focused, the session re-sends `Show` every 2 s (backoff 1 s → 10 s while unacknowledged) and relaunches the UI (`screentime-ui.exe` / `Tether.exe`) at most every 15 s if the bridge pipe is missing. `Show` is idempotent. `overlay_update` is re-emitted only when the target changes or the window was hidden, so a PIN being typed survives.
-- **Sizing**: at least 520×680 with the PIN pad (460 tall without), centered on the app and clamped to its monitor. The card scrolls instead of clipping, so "Allow 15 more minutes" and "Quit app" are always reachable. (The old 480px floor cut both off.)
+- **Sizing**: at least 520×820 logical pixels with a PIN (560 tall without), scaled by the monitor's scale factor (the floors used to be physical pixels, so at 150 % the window was two-thirds of the intended size), centered on the app and clamped to its monitor. The page scrolls instead of clipping and drops its badge below 640px, so "Close" is always reachable.
 - **Quit is honest**: the overlay hides only after the app actually closed (local close, or the agent's `CloseApps`, which needs no PIN for a *blocked* app). Otherwise it shows "Couldn’t close the app: …" and stays up.
 - **Peer verification**: both bridge ends check the other process is a genuine Tether binary from the same install (`st_win32::peer_is_trusted`).
-- **Visual Design (Solid Crisp Styling — No Glassmorphism)**:
-  - Full-window Backdrop: Solid high-opacity veil (`var(--bg-modal-backdrop, rgba(11, 13, 19, 0.92))`).
-  - Centered Solid Card: 480px card (`--bg-card, #131620`) with crisp 1px border (`--border-card, #202534`) and deep elevation shadow (`0 24px 64px rgba(0, 0, 0, 0.6)`).
-  - Header: Tether brand lock badge paired with `LIMIT REACHED` status pill.
-  - App Label: Bold display typography with category accent dot.
-  - Dual Input PIN Support:
-    - **Physical Keyboard**: Global listener intercepts digits `0–9`, `Backspace`, `Enter` (to submit), and `Escape` (to quit app).
-    - **3x4 Tactile On-Screen Keypad**: Tactile numeric grid with interactive hover, active scaling, and Clear (`C`) / Submit (`OK`) keys.
-    - **Masked Indicator Dots**: Glowing indicator bubbles with warm terracotta illumination and dynamic shake keyframe animation on invalid entry.
-  - Multi-Lingual & RTL: Full bilingual support in English and Arabic (`dir="rtl"`), ensuring native bidirectional layout and typography.
+- **"Pause and choose" design (Phase 2, `docs/DESIGN_SYSTEM.md`)**: always the dark palette (the root sets `data-theme="dark"`), an opaque plum backdrop, no card:
+  - **Why it is blocked**, re-derived by `ui/src/blockModel.ts` in the agent's own order (`enforcer.rs`): a downtime schedule in force (unless the app is always allowed), then the app's budget, then total screen time. The overlay loads status, catalog, today's summary, schedules and the allowlist itself; the bridge DTO only names the app.
+  - Badge (empty budget ring in the budget's hue, or a moon for downtime), eyebrow ("TikTok · 20m every day, all used" / "Downtime · 6:50 PM – 8:50 PM"), title ("Time's up for TikTok today" / "Homework time is on"), and "TikTok is waiting behind this screen, so nothing is lost."
+  - Strip of the agent's day, hatched orange from now until the app comes back ("back at 12 AM · in 4h 39m"): the day reset for budgets, the schedule's end for downtime.
+  - **Close {app}** (orange, primary). Extra time is offered only when it can work: never during downtime (the agent re-blocks every tick, an override does not lift a schedule) and not in strict mode. With a PIN it is a link ("A grown-up can add 15 minutes with the PIN" for the guardian profile, "Add 15 minutes with the PIN" for self) that opens the PIN pad; without one, a secondary "Allow 15 more minutes" button. During downtime a note says the schedule is changed on Limits.
+  - Keyboard: digits, Backspace and Enter drive the PIN pad once it is open; **Escape only closes the pad**. (It used to quit the blocked app, which a reflex press in a game would do by accident.)
+  - Not yet (needs agent support, Phase 4): asking why ("What were you about to do?") and borrowing from tomorrow.
 
 ---
 

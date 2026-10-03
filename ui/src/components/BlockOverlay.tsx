@@ -1,17 +1,77 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { Clock, ShieldAlert, Power, Delete, Check, Lock } from "lucide-react";
+import { Check, Delete, Moon } from "lucide-react";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useTheme } from "../hooks/useTheme";
+import { useNowMinute } from "../hooks/useNowMinute";
 import "./BlockOverlay.css";
 import {
+  getCatalog,
+  getDaySummary,
   getOverlayState,
+  getStatus,
+  listAllowlist,
+  listSchedules,
   overlayExtend,
   overlayQuit,
   describeError,
 } from "../api";
 import type { OverlayActiveStateDto } from "../api";
+import { blockReason, type BlockReason } from "../blockModel";
+import { formatDuration, setDayStartMinutes, targetLabel, todayKey } from "../format";
+import { clockLabel, limitRule } from "../limitText";
+import { dayWindowStart, nowPosition } from "../todayModel";
+import type { CatalogDto } from "../types/generated/CatalogDto";
+import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
+import type { ScheduleDto } from "../types/generated/ScheduleDto";
+import type { StatusDto } from "../types/generated/StatusDto";
+
+interface BlockContext {
+  status: StatusDto | null;
+  catalog: CatalogDto | null;
+  summary: DaySummaryDto | null;
+  schedules: ScheduleDto[];
+  allowlisted: number[];
+}
+
+const EMPTY_CONTEXT: BlockContext = { status: null, catalog: null, summary: null, schedules: [], allowlisted: [] };
+
+/** What the block screen says about the block: loaded fresh for each app. */
+function useBlockContext(appId: number | null): BlockContext {
+  const [ctx, setCtx] = useState<BlockContext>(EMPTY_CONTEXT);
+  useEffect(() => {
+    if (appId === null) return;
+    let live = true;
+    (async () => {
+      // Each source is optional: the screen still works with what loads.
+      const status = await getStatus().catch(() => null);
+      if (status) setDayStartMinutes(status.day_start_minutes);
+      const [catalog, summary, schedules, allow] = await Promise.all([
+        getCatalog().catch(() => null),
+        getDaySummary(todayKey()).catch(() => null),
+        listSchedules().catch(() => null),
+        listAllowlist().catch(() => null),
+      ]);
+      if (!live) return;
+      setCtx({
+        status,
+        catalog,
+        summary,
+        schedules: schedules?.schedules ?? [],
+        allowlisted: (allow?.items ?? []).filter((i) => i.subject_type === "app").map((i) => i.subject_id),
+      });
+    })();
+    return () => {
+      live = false;
+    };
+  }, [appId]);
+  return ctx;
+}
+
+function timeOf(d: Date): string {
+  return clockLabel(d.getHours() * 60 + d.getMinutes());
+}
 
 export function BlockOverlay() {
   const { t, i18n } = useTranslation();
@@ -203,9 +263,21 @@ export function BlockOverlay() {
     }
   }, [state, submitting, t]);
 
-  // Physical keyboard listener
+  const now = useNowMinute();
+  const ctx = useBlockContext(state?.app_id ?? null);
+  const [keypadOpen, setKeypadOpen] = useState(false);
+
+  // A new app on the screen starts with the keypad closed.
+  useEffect(() => {
+    setKeypadOpen(false);
+  }, [state?.app_id]);
+
+  // Keyboard: digits, Backspace and Enter work the PIN pad once it is open;
+  // Escape only closes the pad. (Escape used to quit the blocked app, which
+  // a reflex press in a game would do by accident.)
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
+      if (!keypadOpen) return;
       if (e.key >= "0" && e.key <= "9") {
         e.preventDefault();
         setPin((prev) => (prev.length < 8 ? prev + e.key : prev));
@@ -221,13 +293,13 @@ export function BlockOverlay() {
         handleExtend();
       } else if (e.key === "Escape") {
         e.preventDefault();
-        handleQuit();
+        setKeypadOpen(false);
+        setPin("");
       }
     }
-
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [handleExtend, handleQuit]);
+  }, [handleExtend, keypadOpen]);
 
   const handleKeypadPress = (val: string) => {
     if (val === "C") {
@@ -236,12 +308,10 @@ export function BlockOverlay() {
       setErrorMsg(null);
     } else if (val === "OK") {
       handleExtend();
-    } else {
-      if (pin.length < 8) {
-        setPin((prev) => prev + val);
-        setWrongPin(false);
-        setErrorMsg(null);
-      }
+    } else if (pin.length < 8) {
+      setPin((prev) => prev + val);
+      setWrongPin(false);
+      setErrorMsg(null);
     }
   };
 
@@ -250,315 +320,140 @@ export function BlockOverlay() {
   }
 
   const isRtl = i18n.dir() === "rtl";
+  const dayKey = todayKey(now);
+  const dayStart = ctx.status?.day_start_minutes ?? 0;
+  const reason: BlockReason = blockReason({
+    appId: state.app_id,
+    catalog: ctx.catalog,
+    summary: ctx.summary,
+    schedules: ctx.schedules,
+    allowlisted: ctx.allowlisted,
+    dayKey,
+    dayStartMinutes: dayStart,
+    now,
+  });
+  const app = state.label || t("overlay.thisApp");
+  const guardian = ctx.status?.profile === "guardian";
+  const inSeconds = Math.max(60, Math.round((reason.until.getTime() - now.getTime()) / 1000));
+  const back = t("overlay.backAt", { time: timeOf(reason.until), in: formatDuration(inSeconds - (inSeconds % 60)) });
+
+  let eyebrow: string | null = null;
+  let title: string;
+  switch (reason.kind) {
+    case "downtime":
+      eyebrow = t("overlay.scheduleEyebrow", { from: timeOf(reason.band.start), to: timeOf(reason.band.end) });
+      title = t("overlay.titleDowntime", { name: reason.band.schedule.name });
+      break;
+    case "budget": {
+      const name = targetLabel(reason.limit.target, ctx.catalog);
+      eyebrow = t("overlay.budgetEyebrow", { name, rule: limitRule(reason.limit) });
+      title = t("overlay.titleBudget", { name });
+      break;
+    }
+    case "total":
+      eyebrow = t("overlay.totalEyebrow", { rule: limitRule(reason.limit) });
+      title = t("overlay.titleTotal");
+      break;
+    default:
+      title = t("overlay.titleUnknown", { app });
+  }
+
+  // Strip: the agent's day, locked from now until the app comes back.
+  const winStart = dayWindowStart(dayKey, dayStart).getTime();
+  const nowAt = nowPosition(dayKey, dayStart, now) ?? 0;
+  const untilAt = Math.min(1, Math.max(nowAt, (reason.until.getTime() - winStart) / 86_400_000));
+  // Extra time does not lift a schedule (the agent re-blocks), so it is not offered then.
+  const canAddTime = reason.kind !== "downtime" && !(ctx.status?.strict_mode ?? false);
 
   return (
     <div
       id="tether-block-overlay"
       role="main"
       dir={isRtl ? "rtl" : "ltr"}
+      data-theme="dark"
+      data-theme-mode="dark"
       className={`tether-overlay-backdrop ${exiting ? "tether-overlay-backdrop--exiting" : ""}`}
     >
-      <div
-        className={`tether-overlay-card solid-card ${exiting ? "tether-overlay-card--exiting" : ""}`}
-      >
-        {/* Top Header Row */}
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-            <div
-              style={{
-                width: "28px",
-                height: "28px",
-                borderRadius: "6px",
-                background: "var(--color-primary)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                color: "#fff",
-              }}
-            >
-              <Lock size={15} />
-            </div>
-            <span
-              style={{
-                fontSize: "12px",
-                fontWeight: 700,
-                letterSpacing: "0.1em",
-                textTransform: "uppercase",
-                color: "var(--text-muted)",
-                fontFamily: "var(--font-mono, monospace)",
-              }}
-            >
-              Tether
-            </span>
-          </div>
+      <div className={`tt-block ${exiting ? "tether-overlay-card--exiting" : ""}`}>
+        <div className={`tt-block-badge${reason.kind === "budget" ? ` tt-hue-${reason.hue}` : ""}`} aria-hidden="true">
+          <span>{reason.kind === "downtime" ? <Moon size={28} /> : formatDuration(0)}</span>
+        </div>
 
-          <div
-            style={{
-              display: "inline-flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "4px 10px",
-              borderRadius: "20px",
-              background: "var(--bg-danger)",
-              border: "1px solid var(--border-danger)",
-              color: "var(--color-danger-text)",
-              fontSize: "11px",
-              fontWeight: 700,
-              letterSpacing: "0.06em",
-              textTransform: "uppercase",
-            }}
-          >
-            <ShieldAlert size={13} />
-            <span>{t("overlay.limitReached")}</span>
+        <div className="tt-block-head">
+          {eyebrow && <span className="tt-block-eyebrow">{eyebrow}</span>}
+          <h1 className="tt-block-title">{title}</h1>
+          <p className="tt-block-body">{t("overlay.waiting", { app })}</p>
+        </div>
+
+        <div className="tt-block-strip-wrap" role="img" aria-label={t("overlay.stripAria", { now: timeOf(now), back })}>
+          <div className="tt-block-strip">
+            <span className="tt-block-strip-past" style={{ width: `${nowAt * 100}%` }} />
+            <span className="tt-block-strip-locked" style={{ insetInlineStart: `${nowAt * 100}%`, width: `${(untilAt - nowAt) * 100}%` }} />
+            <span className="tt-block-strip-now" style={{ insetInlineStart: `${nowAt * 100}%` }} />
+          </div>
+          <div className="tt-block-strip-scale" aria-hidden="true">
+            <span>{timeOf(new Date(winStart))}</span>
+            <span className="tt-block-strip-back">{back}</span>
           </div>
         </div>
 
-        {/* Blocked App Info */}
-        <div style={{ textAlign: "center", marginTop: "4px" }}>
-          <h2
-            style={{
-              fontSize: "24px",
-              fontWeight: 700,
-              color: "var(--text-primary)",
-              margin: "0 0 8px",
-              letterSpacing: "-0.01em",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "10px",
-            }}
-          >
-            <span
-              style={{
-                width: "10px",
-                height: "10px",
-                borderRadius: "50%",
-                background: "var(--color-danger)",
-                display: "inline-block",
-                flexShrink: 0,
-              }}
-            />
-            {state?.label || t("overlay.headline")}
-          </h2>
-          <p
-            style={{
-              fontSize: "13.5px",
-              color: "var(--text-secondary)",
-              margin: 0,
-              lineHeight: 1.5,
-            }}
-          >
-            {t("overlay.reasonLimit")}
-          </p>
-        </div>
-
-        {/* PIN Entry Area (if PIN is configured) */}
-        {state?.pin_locked && (
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              gap: "14px",
-              marginTop: "4px",
-            }}
-          >
-            <span
-              style={{
-                fontSize: "12px",
-                fontWeight: 600,
-                color: "var(--text-muted)",
-                textTransform: "uppercase",
-                letterSpacing: "0.05em",
-              }}
-            >
-              {t("overlay.enterPin")}
-            </span>
-
-            {/* Masked Dots */}
-            <div
-              style={{
-                display: "flex",
-                gap: "12px",
-                padding: "10px 20px",
-                borderRadius: "10px",
-                background: "var(--bg-recessed)",
-                border: wrongPin
-                  ? "1px solid var(--color-danger)"
-                  : "1px solid var(--border-subtle)",
-                transition: "border-color 0.2s ease",
-              }}
-            >
-              {[0, 1, 2, 3].map((idx) => {
-                const filled = idx < pin.length;
-                return (
-                  <div
-                    key={idx}
-                    style={{
-                      width: "14px",
-                      height: "14px",
-                      borderRadius: "50%",
-                      border: filled
-                        ? "2px solid var(--color-primary)"
-                        : "2px solid var(--border-strong)",
-                      background: filled ? "var(--color-primary)" : "transparent",
-                      boxShadow: filled ? "0 0 8px var(--color-primary-subtle)" : "none",
-                      transition: "all 0.15s ease",
-                    }}
-                  />
-                );
-              })}
-            </div>
-
-            {/* Error message */}
-            {wrongPin && (
-              <span
-                style={{
-                  fontSize: "12px",
-                  color: "var(--color-danger-text)",
-                  fontWeight: 600,
-                }}
-              >
-                {errorMsg || t("overlay.incorrectPin")}
-              </span>
-            )}
-
-            {/* 3x4 Tactile Keypad */}
-            <div
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, 1fr)",
-                gap: "8px",
-                width: "100%",
-                maxWidth: "280px",
-                marginTop: "4px",
-              }}
-            >
-              {["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "OK"].map((key) => {
-                const isAction = key === "C" || key === "OK";
-                return (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => handleKeypadPress(key)}
-                    aria-label={key === "C" ? t("overlay.clearPin") : key === "OK" ? t("overlay.submitPin") : undefined}
-                    style={{
-                      height: "44px",
-                      borderRadius: "8px",
-                      border: "1px solid var(--border-card)",
-                      background: isAction
-                        ? key === "OK"
-                          ? "var(--color-primary)"
-                          : "var(--bg-danger)"
-                        : "var(--bg-recessed)",
-                      color: isAction
-                        ? key === "OK"
-                          ? "#FFFFFF"
-                          : "var(--color-danger)"
-                        : "var(--text-primary)",
-                      fontSize: isAction ? "13px" : "18px",
-                      fontWeight: 700,
-                      fontFamily: isAction ? "inherit" : "var(--font-mono, monospace)",
-                      cursor: "pointer",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      transition: "all 0.12s ease",
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.borderColor = "var(--border-hover)";
-                      e.currentTarget.style.background = isAction
-                        ? key === "OK"
-                          ? "var(--color-primary-hover)"
-                          : "var(--bg-danger)"
-                        : "var(--bg-surface-hover)";
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.borderColor = "var(--border-card)";
-                      e.currentTarget.style.background = isAction
-                        ? key === "OK"
-                          ? "var(--color-primary)"
-                          : "var(--bg-danger)"
-                        : "var(--bg-recessed)";
-                    }}
-                    onMouseDown={(e) => {
-                      e.currentTarget.style.transform = "scale(0.96)";
-                    }}
-                    onMouseUp={(e) => {
-                      e.currentTarget.style.transform = "scale(1)";
-                    }}
-                  >
-                    {key === "C" ? <Delete size={18} /> : key === "OK" ? <Check size={18} /> : key}
-                  </button>
-                );
-              })}
-            </div>
-
-            <span
-              style={{
-                fontSize: "11px",
-                color: "var(--text-muted)",
-                marginTop: "2px",
-              }}
-            >
-              {t("overlay.keyboardHint")}
-            </span>
-          </div>
-        )}
-
-        {/* Non-PIN failures (e.g. the app could not be closed) */}
         {errorMsg && !wrongPin && (
-          <p role="alert" style={{ margin: 0, fontSize: "12px", color: "var(--color-danger-text)", fontWeight: 600, textAlign: "center" }}>
+          <p role="alert" className="tt-block-error">
             {errorMsg}
           </p>
         )}
 
-        {/* Action Buttons */}
-        <div style={{ display: "flex", gap: "12px", marginTop: "8px" }}>
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleExtend}
-            disabled={submitting || (state?.pin_locked && pin.length === 0)}
-            style={{
-              flex: 1,
-              height: "46px",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-            }}
-          >
-            <Clock size={16} />
-            <span>{t("overlay.extend15")}</span>
+        <div className="tt-block-actions">
+          <button type="button" className="tt-block-primary" onClick={handleQuit} disabled={submitting}>
+            {t("overlay.closeApp", { app })}
           </button>
-
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={handleQuit}
-            disabled={submitting}
-            style={{
-              flex: 1,
-              height: "46px",
-              borderRadius: "10px",
-              fontSize: "14px",
-              fontWeight: 600,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: "8px",
-              borderColor: "var(--border-danger)",
-              color: "var(--color-danger-text)",
-            }}
-          >
-            <Power size={16} />
-            <span>{t("overlay.quitApp")}</span>
-          </button>
+          {canAddTime && !state.pin_locked && (
+            <button type="button" className="tt-block-secondary" onClick={handleExtend} disabled={submitting}>
+              {t("overlay.extend15")}
+            </button>
+          )}
         </div>
+
+        {canAddTime && state.pin_locked && !keypadOpen && (
+          <button type="button" className="tt-block-link" onClick={() => setKeypadOpen(true)}>
+            {guardian ? t("overlay.pinLinkGuardian") : t("overlay.pinLinkSelf")}
+          </button>
+        )}
+
+        {canAddTime && state.pin_locked && keypadOpen && (
+          <div className="tt-block-pin">
+            <span className="tt-block-pin-label" id="tt-block-pin-label">{t("overlay.enterPin")}</span>
+            <div className={`tt-block-dots${wrongPin ? " tt-block-dots--wrong" : ""}`} aria-hidden="true">
+              {Array.from({ length: Math.max(4, pin.length) }, (_, idx) => (
+                <span key={idx} className={idx < pin.length ? "tt-block-dot tt-block-dot--on" : "tt-block-dot"} />
+              ))}
+            </div>
+            {wrongPin && (
+              <span role="alert" className="tt-block-error">
+                {errorMsg || t("overlay.incorrectPin")}
+              </span>
+            )}
+            <div className="tt-block-keypad" role="group" aria-labelledby="tt-block-pin-label">
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9", "C", "0", "OK"].map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => handleKeypadPress(key)}
+                  className={key === "OK" ? "tt-block-key tt-block-key--ok" : key === "C" ? "tt-block-key tt-block-key--clear" : "tt-block-key"}
+                  aria-label={key === "C" ? t("overlay.clearPin") : key === "OK" ? t("overlay.submitPin") : undefined}
+                  disabled={key === "OK" && (submitting || pin.length === 0)}
+                >
+                  {key === "C" ? <Delete size={18} aria-hidden="true" /> : key === "OK" ? <Check size={18} aria-hidden="true" /> : key}
+                </button>
+              ))}
+            </div>
+            <span className="tt-block-hint">{t("overlay.keyboardHint")}</span>
+          </div>
+        )}
+
+        {reason.kind === "downtime" && (
+          <p className="tt-block-note">{guardian ? t("overlay.downtimeNoteGuardian") : t("overlay.downtimeNoteSelf")}</p>
+        )}
       </div>
     </div>
   );
