@@ -15,4 +15,8 @@ wildcard_domains: boolean,
  * The active filter can block individual URL paths. Always false, since
  * neither `hosts` nor DNS can see a path; only a browser extension can.
  */
-path_level: boolean, family_dns_enabled: boolean, };
+path_level: boolean, family_dns_enabled: boolean, 
+/**
+ * Who Tether is set up for: "self" or "guardian" (first-run choice).
+ */
+profile: string, };

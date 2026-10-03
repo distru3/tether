@@ -18,6 +18,7 @@
 //! | `strict_mode`, `family_dns` | switching on | switching off |
 //! | `limit_cooldown_hours` | raising | lowering |
 //! | `day_start_minutes`, `idle_threshold_secs` | — | any change (either direction can be gamed) |
+//! | `profile` (who Tether is for) | — | any change |
 //! | HUD, volume, hotkey, window titles | always | — |
 //!
 //! A value equal to the current one is never loosening, so idempotent saves
@@ -37,7 +38,13 @@ pub enum SettingKey {
     HudPeekHotkey,
     AlertVolume,
     CaptureWindowTitles,
+    /// Who Tether is set up for: `self` or `guardian`. Chosen on first run;
+    /// it sets wording and defaults in the UI (docs/DESIGN_SYSTEM.md §1).
+    Profile,
 }
+
+/// Values accepted for [`SettingKey::Profile`].
+pub const PROFILES: [&str; 2] = ["self", "guardian"];
 
 /// Inclusive bounds for the numeric settings.
 pub const COOLDOWN_HOURS_RANGE: (i64, i64) = (0, 168);
@@ -48,7 +55,7 @@ pub const ALERT_VOLUME_RANGE: (i64, i64) = (0, 100);
 pub const HOTKEY_MAX_LEN: usize = 32;
 
 impl SettingKey {
-    pub const ALL: [SettingKey; 10] = [
+    pub const ALL: [SettingKey; 11] = [
         SettingKey::StrictMode,
         SettingKey::FamilyDns,
         SettingKey::LimitCooldownHours,
@@ -59,6 +66,7 @@ impl SettingKey {
         SettingKey::HudPeekHotkey,
         SettingKey::AlertVolume,
         SettingKey::CaptureWindowTitles,
+        SettingKey::Profile,
     ];
 
     /// The key as it appears on the wire (`SetSetting.key`).
@@ -74,6 +82,7 @@ impl SettingKey {
             SettingKey::HudPeekHotkey => "hud_peek_hotkey",
             SettingKey::AlertVolume => "alert_volume",
             SettingKey::CaptureWindowTitles => "capture_window_titles",
+            SettingKey::Profile => "profile",
         }
     }
 
@@ -104,6 +113,7 @@ impl SettingKey {
             SettingKey::HudPeekHotkey => "Ctrl+Alt+T",
             SettingKey::AlertVolume => "80",
             SettingKey::CaptureWindowTitles => "false",
+            SettingKey::Profile => "self",
         }
     }
 
@@ -124,6 +134,13 @@ impl SettingKey {
             SettingKey::DayStartMinutes => in_range(self, raw, DAY_START_MINUTES_RANGE),
             SettingKey::IdleThresholdSecs => in_range(self, raw, IDLE_THRESHOLD_SECS_RANGE),
             SettingKey::AlertVolume => in_range(self, raw, ALERT_VOLUME_RANGE),
+            SettingKey::Profile => {
+                if PROFILES.contains(&raw) {
+                    Ok(raw.to_string())
+                } else {
+                    Err("profile must be self or guardian".to_string())
+                }
+            }
             SettingKey::HudPeekHotkey => {
                 if raw.is_empty() || raw.len() > HOTKEY_MAX_LEN || raw.chars().any(char::is_control)
                 {
@@ -157,6 +174,9 @@ impl SettingKey {
             // lower idle threshold stops accruing usage sooner. Either
             // direction can be gamed, so any change is gated.
             SettingKey::DayStartMinutes | SettingKey::IdleThresholdSecs => true,
+            // Switching between "me" and "someone I look after" changes how
+            // strict the UI's defaults are; only whoever holds the PIN may.
+            SettingKey::Profile => true,
             SettingKey::ShowHudOverlay
             | SettingKey::ShowHudInFullscreen
             | SettingKey::HudPeekHotkey
@@ -280,6 +300,16 @@ mod tests {
             assert!(!key.is_loosening(Some(current), current));
             assert!(key.is_loosening(Some(current), "300"));
         }
+    }
+
+    #[test]
+    fn profile_accepts_two_values_and_any_change_needs_the_pin() {
+        let key = SettingKey::Profile;
+        assert_eq!(key.normalize(" guardian ").as_deref(), Ok("guardian"));
+        assert!(key.normalize("parent").is_err());
+        assert!(key.is_loosening(None, "guardian"), "default is self");
+        assert!(key.is_loosening(Some("guardian"), "self"));
+        assert!(!key.is_loosening(Some("self"), "self"));
     }
 
     #[test]

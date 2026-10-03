@@ -537,6 +537,13 @@ pub struct StatusDto {
     /// neither `hosts` nor DNS can see a path; only a browser extension can.
     pub path_level: bool,
     pub family_dns_enabled: bool,
+    /// Who Tether is set up for: "self" or "guardian" (first-run choice).
+    #[serde(default = "default_profile")]
+    pub profile: String,
+}
+
+fn default_profile() -> String {
+    "self".into()
 }
 
 fn default_hud_peek_hotkey() -> String {

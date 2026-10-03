@@ -36,6 +36,7 @@ pub(super) fn status_response(ctx: &Ctx) -> Response {
         path_level: false,
         wildcard_domains: false,
         family_dns_enabled,
+        profile: policy.profile.clone(),
     })
 }
 
