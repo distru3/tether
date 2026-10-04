@@ -1,4 +1,4 @@
-//! System tray icon and emergency safety controls for Screentime.
+//! System tray icon and emergency safety controls for Tether.
 //!
 //! Provides a taskbar notification area ("show hidden icons") tray icon that
 //! allows the user to:
@@ -181,18 +181,18 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let reset_item = MenuItem::with_id(
         app,
         "reset_net",
-        "Emergency Reset Network",
+        "Reset network settings",
         true,
         None::<&str>,
     )?;
     let stop_item = MenuItem::with_id(
         app,
         "stop_all",
-        "Exit & Stop All Services",
+        "Stop Tether and its service",
         true,
         None::<&str>,
     )?;
-    let quit_item = MenuItem::with_id(app, "quit", "Quit Tether", true, None::<&str>)?;
+    let quit_item = MenuItem::with_id(app, "quit", "Close the Tether app", true, None::<&str>)?;
 
     let menu = Menu::with_items(app, &[&open_item, &reset_item, &stop_item, &quit_item])?;
 
@@ -203,7 +203,7 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
 
     let _tray = TrayIconBuilder::new()
         .icon(icon)
-        .tooltip("Screentime")
+        .tooltip("Tether")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

@@ -132,14 +132,12 @@ Shown on first run (`localStorage` `screentime_first_run_completed`). Four steps
 ## 5. Overlays: Win32 Draggable HUD & Hardware-Accelerated Block Overlay
 
 ### A. Timer HUD Overlay (`crates/session/src/hud.rs` & `crates/session/src/mpo.rs`)
-- **Visual Design**: Solid, high-contrast 92x28 pill (14px corner radius) with zero glassmorphism.
-  - Dark Theme: Solid Obsidian `#0B0D13` background, `#202534` 1px border, `#F3F4F6` digits.
-  - Light Theme: Solid Titanium `#FFFFFF` background, `#E5E7EB` 1px border, `#111827` digits.
-  - Dynamic Status Dot:
-    - Normal Active Tracking: Electric Cobalt `#3B82F6` (D2D / GDI).
-    - +15m Extension Timer: Amber Gold `#F59E0B`.
-    - Warning (≤60 seconds): Rose Coral `#F43F5E`.
-  - Digits: Bold monospace ClearType `Consolas` tabular time readout.
+- **Visual Design** (Phase 2): 92x28 pill, colours from one pure module, `crates/session/src/hud_palette.rs` (`hud_colors`, unit-tested), shared by the Direct2D (`mpo.rs`) and GDI (`hud.rs`) renderers so they cannot drift.
+  - Dark: plum `#1C1229`, border `#3A2752`, digits `#F4EEFB`, lilac dot `#C9B6F2`.
+  - Light: white, border `#E7E0F0`, digits `#23163A`, violet dot `#8F6CE6`.
+  - A running "+15 min" extension shows an orange dot `#F08A3C`.
+  - Last minute (≤ 60 s): the whole pill turns orange with plum digits.
+  - Digits: Segoe UI bold (tabular figures; Consolas before).
 - **Direct Dragging & Multi-Monitor Window Clamping**:
   - Registered with `WS_EX_NOACTIVATE` so mouse dragging never steals keyboard focus or activates the overlay over fullscreen games or typing apps.
   - Dragging uses Win32 `SetCapture` / `ReleaseCapture` upon `WM_LBUTTONDOWN`, `WM_MOUSEMOVE`, and `WM_LBUTTONUP`.
@@ -152,7 +150,7 @@ Shown on first run (`localStorage` `screentime_first_run_completed`). Four steps
   - Adaptive trajectory: If positioned in the top half of the window, gracefully slides **down** from `target_y - 24` to `target_y`. If positioned in the bottom half, gracefully slides **up** from `target_y + 24` to `target_y`.
   - Drag interruption: If the user begins dragging while the animation is playing, the animation cancels cleanly and mouse drag takes immediate precedence.
 - **Theme Synchronization**:
-  - Overlays continuously adapt to the user's active theme by synchronizing with `%LOCALAPPDATA%\screentime\theme.txt`.
+  - Overlays continuously adapt to the user's active theme by synchronizing with `%LOCALAPPDATA%\screentime\theme.txt` (`light`, `dark` or `system`; `theme_is_light`). `system` follows Windows' app mode (`HKCU\...\Themes\Personalize\AppsUseLightTheme`); it used to be read as dark.
 
 ### B. Hardware-Accelerated Tauri 2 React Block Overlay (`BlockOverlay.tsx` & `overlay_bridge.rs`)
 - **Architecture**: Hardware-accelerated transparent secondary webview window in Tauri 2 commanded over named pipe `\\.\pipe\screentime_overlay_bridge`.
@@ -413,3 +411,16 @@ Implements Phase 1 of `docs/DESIGN_SYSTEM.md`:
 - **Removed**: `OnboardingSlider`, `LimitsPanel`, `FilterTabs` (and their CSS), about 470 lines of CSS that no longer matched any element.
 - **Accessibility** (axe-core over every screenshot scenario, light and dark, plus Arabic and narrow): no new findings. Light success text darkened to `#176A52`. The known gap (category pills drawn in their palette colour on Today) remains until Phase 2.
 - **Not yet**: Today restyle (ring, day strip, budget tiles), the "pause and choose" block screen, timer/tray restyle (Phase 2); budgets for custom app groups, borrowing time, reasons and suggestions from last week (need agent work, Phase 4); Activity.
+
+---
+
+## 17. Redesign Phase 2 (2026-10-04)
+
+- **Today** (Section 3): ring, day strip, budget tiles, schedule and website cards; `todayModel.ts`.
+- **Block screen** (Section 5B): "pause and choose", reason re-derived by `blockModel.ts`, extra time only when it can work, Escape no longer quits the app, DPI-scaled window floors.
+- **Timer HUD** (Section 5A): plum palette shared by both renderers, orange last minute, `system` theme resolved.
+- **Tray**: plain labels ("Reset network settings", "Stop Tether and its service", "Close the Tether app"), tooltip "Tether".
+- **Installer**: styled NSIS installer, see `packaging/README.md`.
+- The category-pill contrast gap from Phase 1 is gone (neutral category buttons).
+- **Not yet**: a tray panel (the mockup's popup with the ring and budgets needs a new window), Activity, and Phase 4 agent work (custom budget groups, borrowing, reasons, suggestions).
+

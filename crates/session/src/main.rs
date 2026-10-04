@@ -78,6 +78,8 @@ use logging::*;
 #[cfg(windows)]
 mod hud;
 #[cfg(windows)]
+mod hud_palette;
+#[cfg(windows)]
 mod mpo;
 #[cfg(windows)]
 mod overlay;

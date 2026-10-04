@@ -1,3 +1,4 @@
+use crate::hud_palette::{hud_colors, theme_is_light, Rgb};
 use serde::{Deserialize, Serialize};
 use std::ffi::c_void;
 use std::path::PathBuf;
@@ -39,20 +40,10 @@ const fn rgb(r: u8, g: u8, b: u8) -> COLORREF {
     COLORREF(r as u32 | ((g as u32) << 8) | ((b as u32) << 16))
 }
 
-// Midnight Cobalt / Slate Charcoal Dark tokens
-const BG_DARK: COLORREF = rgb(0x0B, 0x0E, 0x17);
-const BORDER_DARK: COLORREF = rgb(0x1E, 0x26, 0x38);
-const TEXT_DARK: COLORREF = rgb(0xF8, 0xFA, 0xFC);
-
-// Clean Titanium / Nordic Frost Light tokens
-const BG_LIGHT: COLORREF = rgb(0xF8, 0xFA, 0xFC);
-const BORDER_LIGHT: COLORREF = rgb(0xE2, 0xE8, 0xF0);
-const TEXT_LIGHT: COLORREF = rgb(0x0F, 0x17, 0x2A);
-
-// Indicator dot states
-const DOT_COBALT: COLORREF = rgb(0x4F, 0x46, 0xE5); // Electric Cobalt
-const DOT_AMBER: COLORREF = rgb(0xF5, 0x9E, 0x0B);
-const DOT_CORAL: COLORREF = rgb(0xF4, 0x3F, 0x5E);
+/// A palette colour as GDI wants it.
+fn colorref(c: Rgb) -> COLORREF {
+    rgb(c.0, c.1, c.2)
+}
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 pub struct HudPosConfig {
@@ -86,20 +77,37 @@ fn save_hud_config(cfg: &HudPosConfig) {
     }
 }
 
+/// Whether the HUD should be light: `theme.txt` holds the app's choice
+/// (`light`, `dark` or `system`); `system` follows Windows' app mode.
 fn is_light_theme() -> bool {
-    let path = std::env::var_os("LOCALAPPDATA")
-        .map(|d| PathBuf::from(d).join("screentime").join("theme.txt"));
-    if let Some(p) = path {
-        if let Ok(content) = std::fs::read_to_string(p) {
-            let trimmed = content.trim();
-            return trimmed.contains("clean-titanium")
-                || trimmed.contains("nordic-frost")
-                || trimmed.contains("light")
-                || trimmed.contains("titanium")
-                || trimmed.contains("frost");
-        }
+    let content = std::env::var_os("LOCALAPPDATA")
+        .map(|d| PathBuf::from(d).join("screentime").join("theme.txt"))
+        .and_then(|p| std::fs::read_to_string(p).ok());
+    match content {
+        Some(c) => theme_is_light(&c, windows_apps_use_light_theme),
+        None => false,
     }
-    false
+}
+
+/// `HKCU\...\Themes\Personalize\AppsUseLightTheme` (missing means light,
+/// Windows' default).
+fn windows_apps_use_light_theme() -> bool {
+    use windows::Win32::System::Registry::{RegGetValueW, HKEY_CURRENT_USER, RRF_RT_REG_DWORD};
+    let mut value: u32 = 1;
+    let mut size = std::mem::size_of::<u32>() as u32;
+    // SAFETY: `value` and `size` outlive the call and describe a u32 buffer.
+    let status = unsafe {
+        RegGetValueW(
+            HKEY_CURRENT_USER,
+            w!("Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize"),
+            w!("AppsUseLightTheme"),
+            RRF_RT_REG_DWORD,
+            None,
+            Some(&mut value as *mut u32 as *mut c_void),
+            Some(&mut size),
+        )
+    };
+    status.is_err() || value != 0
 }
 
 pub const PHASE_ENTERING: u8 = 0;
@@ -751,20 +759,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                 return LRESULT(0);
             }
 
-            let bg_color = if st.is_light { BG_LIGHT } else { BG_DARK };
-            let border_color = if st.is_light {
-                BORDER_LIGHT
-            } else {
-                BORDER_DARK
-            };
-            let text_color = if st.is_light { TEXT_LIGHT } else { TEXT_DARK };
-            let dot_color = if st.remaining_secs <= 60 {
-                DOT_CORAL
-            } else if st.is_timer {
-                DOT_AMBER
-            } else {
-                DOT_COBALT
-            };
+            let colors = hud_colors(st.is_light, st.remaining_secs, st.is_timer);
+            let bg_color = colorref(colors.bg);
+            let border_color = colorref(colors.border);
+            let text_color = colorref(colors.text);
+            let dot_color = colorref(colors.dot);
 
             let hbrush = CreateSolidBrush(bg_color);
             let hpen = CreatePen(PS_SOLID, 1, border_color);
@@ -795,7 +794,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let _ = DeleteObject(HGDIOBJ(dot_brush.0));
             let _ = DeleteObject(HGDIOBJ(dot_pen.0));
 
-            // Monospace tabular countdown digits
+            // Countdown digits (Segoe UI figures are tabular)
             let font = CreateFontW(
                 -13,
                 0,
@@ -810,7 +809,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
                 0,
                 5, // CLEARTYPE_QUALITY
                 0,
-                w!("Consolas"),
+                w!("Segoe UI"),
             );
             let old_font = SelectObject(hdc, HGDIOBJ(font.0));
             SetBkMode(hdc, TRANSPARENT);
