@@ -34,4 +34,4 @@ pin?: string, } | { "type": "list_manual_blocks" } | { "type": "add_manual_block
  * Required (once a PIN is configured) when the change loosens
  * enforcement; see `st_core::settings` and the agent's `auth` module.
  */
-pin?: string, } | { "type": "verify_pin", pin: string, } | { "type": "register_discovered_apps", apps: Array<DiscoveredAppDto>, };
+pin?: string, } | { "type": "verify_pin", pin: string, } | { "type": "register_discovered_apps", apps: Array<DiscoveredAppDto>, } | { "type": "record_block_reason", app_id: number, reason: string, } | { "type": "block_reasons", from_day: DayKey, to_day: DayKey, };

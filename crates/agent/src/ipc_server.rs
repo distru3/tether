@@ -66,6 +66,7 @@ mod dashboard;
 mod downtime;
 mod ingest;
 mod limits;
+mod reasons;
 mod settings;
 #[cfg(test)]
 mod tests;
@@ -498,6 +499,10 @@ fn handle_from(ctx: &Ctx, peer: auth::Peer, request: Request) -> Response {
             allowed,
             ..
         } => set_allowlist(ctx, &subject_type, subject_id, allowed),
+        Request::RecordBlockReason { app_id, reason } => {
+            reasons::record_block_reason(ctx, app_id, &reason, now)
+        }
+        Request::BlockReasons { from_day, to_day } => reasons::block_reasons(ctx, from_day, to_day),
     }
 }
 

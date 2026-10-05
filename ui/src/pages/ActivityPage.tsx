@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import i18n from "../i18n";
-import { getDaySummary, getWeeklySummary } from "../api";
+import { blockReasons, getDaySummary, getWeeklySummary } from "../api";
 import type { BudgetHue } from "../budgetHue";
 import { dayKeyToDate, formatDuration, shiftDay, targetLabel, weekdayShortNames } from "../format";
 import {
@@ -17,6 +17,7 @@ import {
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import type { WeeklySummaryDto } from "../types/generated/WeeklySummaryDto";
+import type { BlockReasonCountDto } from "../types/generated/BlockReasonCountDto";
 
 interface ActivityPageProps {
     catalog: CatalogDto | null;
@@ -42,6 +43,7 @@ export function ActivityPage({ catalog, today, now, onOpenDay }: ActivityPagePro
     const [week, setWeek] = useState<WeeklySummaryDto | null>(null);
     const [summaries, setSummaries] = useState<Map<number, DaySummaryDto>>(new Map());
     const [loading, setLoading] = useState(true);
+    const [reasons, setReasons] = useState<BlockReasonCountDto[]>([]);
 
     // Follow the day rollover while showing the current week.
     useEffect(() => {
@@ -54,15 +56,17 @@ export function ActivityPage({ catalog, today, now, onOpenDay }: ActivityPagePro
         let live = true;
         setLoading(true);
         (async () => {
-            const [w, ...daySummaries] = await Promise.all([
+            const [w, why, ...daySummaries] = await Promise.all([
                 getWeeklySummary(endDay).catch(() => null),
+                blockReasons(days[0] ?? endDay, endDay).catch(() => null),
                 ...days.map((d) => getDaySummary(d).catch(() => null)),
             ]);
             if (!live) return;
+            setReasons(why?.counts ?? []);
             const map = new Map<number, DaySummaryDto>();
             daySummaries.forEach((s, i) => {
                 const day = days[i];
-                if (s && day !== undefined) map.set(day, s);
+                if (s && day !== undefined && "apps" in s) map.set(day, s);
             });
             setWeek(w);
             setSummaries(map);
@@ -239,6 +243,25 @@ export function ActivityPage({ catalog, today, now, onOpenDay }: ActivityPagePro
                                     ))}
                                 </tbody>
                             </table>
+                        )}
+                    </section>
+                    <section className="tt-card" aria-labelledby="act-why">
+                        <h2 id="act-why" className="tt-card-title">{t("activity.whyTitle")}</h2>
+                        <p className="tt-sub">{t("activity.whyBody")}</p>
+                        {reasons.length === 0 ? (
+                            <p className="tt-sub">{t("activity.whyEmpty")}</p>
+                        ) : (
+                            <ul className="tt-act-why">
+                                {reasons.map((r) => (
+                                    <li key={r.reason}>
+                                        <span>{t(`overlay.reason.${r.reason}`)}</span>
+                                        <span className="tt-act-why-bar" aria-hidden="true">
+                                            <span style={{ width: `${(r.count / Math.max(1, reasons[0]?.count ?? 1)) * 100}%` }} />
+                                        </span>
+                                        <span>{r.count}</span>
+                                    </li>
+                                ))}
+                            </ul>
                         )}
                     </section>
                     <section className="tt-card" aria-labelledby="act-apps">

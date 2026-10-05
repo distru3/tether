@@ -345,7 +345,13 @@
     "pinLinkGuardian": "A grown-up can add 15 minutes with the PIN",
     "pinLinkSelf": "Add 15 minutes with the PIN",
     "downtimeNoteGuardian": "A grown-up can change the schedule on the Limits page.",
-    "downtimeNoteSelf": "You can change the schedule on the Limits page."
+    "downtimeNoteSelf": "You can change the schedule on the Limits page.",
+    "reasonQuestion": "What were you about to do? You can skip this.",
+    "reason": {
+      "finish": "Finish what I was doing",
+      "bored": "I was bored",
+      "habit": "Just habit"
+    }
   },
   "offline": {
     "title": "Tether’s background service isn’t responding",
@@ -615,6 +621,9 @@
     "ranOut": "Ran out",
     "days_one": "{{count}} day",
     "days_other": "{{count}} days",
-    "topApps": "Most used this week"
+    "topApps": "Most used this week",
+    "whyTitle": "When time ran out",
+    "whyBody": "What the block screen was told about what came next:",
+    "whyEmpty": "No answers this week."
   }
 }

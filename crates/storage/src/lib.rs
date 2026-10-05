@@ -21,6 +21,7 @@
 mod enforcement;
 mod limits;
 mod migrations;
+mod reasons;
 mod reporting;
 mod schedules;
 mod settings;

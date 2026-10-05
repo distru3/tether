@@ -102,7 +102,8 @@ The week against the limits. Loads the weekly totals plus each of the seven days
 - **Screen time by day**: stacked bars split by budget colour (`dayByHue`, the same `hueForApp` as the Today strip), a dashed line at the total budget, hour gridlines; days over the total budget in danger text. Each bar is a button that opens that day on Today. The chart is a labelled group with a text summary for screen readers.
 - **Budgets this week** (`budgetWeek`): per enabled app/category budget, the daily average and the days it ran out, over the days that loaded.
 - **Most used this week** (`weekTopApps`).
-- Not yet: "When time ran out" (reasons from the block screen) and borrowing, which need the agent (Phase 4).
+- **When time ran out**: counts of the block-screen answers for the week (`BlockReasons`), as bars.
+- Not yet: borrowing.
 
 ### Budget editor (`LimitEditorDialog.tsx`)
 Target picker (app / category / total), duration slider + h/m inputs + presets, weekday overrides. **Before the save button it says when the change applies**:
@@ -184,7 +185,8 @@ Shown on first run (`localStorage` `screentime_first_run_completed`). Four steps
   - Strip of the agent's day, hatched orange from now until the app comes back ("back at 12 AM · in 4h 39m"): the day reset for budgets, the schedule's end for downtime.
   - **Close {app}** (orange, primary). Extra time is offered only when it can work: never during downtime (the agent re-blocks every tick, an override does not lift a schedule) and not in strict mode. With a PIN it is a link ("A grown-up can add 15 minutes with the PIN" for the guardian profile, "Add 15 minutes with the PIN" for self) that opens the PIN pad; without one, a secondary "Allow 15 more minutes" button. During downtime a note says the schedule is changed on Limits.
   - Keyboard: digits, Backspace and Enter drive the PIN pad once it is open; **Escape only closes the pad**. (It used to quit the blocked app, which a reflex press in a game would do by accident.)
-  - Not yet (needs agent support, Phase 4): asking why ("What were you about to do?") and borrowing from tomorrow.
+  - **"What were you about to do? You can skip this."**: three chips (Finish what I was doing / I was bored / Just habit, `aria-pressed`) recorded with `RecordBlockReason`; optional, a failure to save is silent.
+  - Not yet: borrowing from tomorrow (needs a decision on the PIN, see `docs/DESIGN_SYSTEM.md`).
 
 ---
 

@@ -21,6 +21,7 @@ pub mod limits;
 pub mod model;
 pub mod pin;
 pub mod platform;
+pub mod reasons;
 pub mod schedules;
 pub mod settings;
 

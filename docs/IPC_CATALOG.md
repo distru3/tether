@@ -76,6 +76,15 @@ This document is the exhaustive catalog of the local named pipe IPC interface (`
 
 ---
 
+### Block-screen reasons
+
+| Request | Arguments | Response | Notes |
+|---|---|---|---|
+| `RecordBlockReason` | `app_id: i64`, `reason: "finish" \| "bored" \| "habit"` | `Accepted { ... }` | The block screen's "What were you about to do?". No PIN (never changes enforcement). Accepted only while the app is blocked (`not_found` otherwise); unknown reasons are `bad_request`. Filed under the agent's own current day; one answer per app per day, a second answer replaces the first (table `block_reasons`, migration 0005). |
+| `BlockReasons` | `from_day: DayKey`, `to_day: DayKey` | `BlockReasons(BlockReasonsDto { counts: [{ reason, count }] })` | Most common first; range 1-366 days, oldest first, else `bad_request`. Used by Activity's "When time ran out". |
+
+Tauri commands: `record_block_reason(app_id, reason)` and `block_reasons(from_day, to_day)`.
+
 ## 3. Error Codes (`ErrorCode`)
 
 When a request fails, the agent responds with `Response::Error { code, message }`. Tauri normalizes this into `{ code: String, message: String }` for the UI:

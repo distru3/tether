@@ -365,6 +365,27 @@ fn list_schedules() -> CmdResult<st_ipc::SchedulesDto> {
     }
 }
 
+/// The block screen's answer to "What were you about to do?".
+#[tauri::command]
+fn record_block_reason(app_id: i64, reason: String) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::RecordBlockReason { app_id, reason })
+}
+
+/// Counts of block-screen reasons between two day keys (inclusive).
+#[tauri::command]
+fn block_reasons(from_day: i32, to_day: i32) -> CmdResult<st_ipc::BlockReasonsDto> {
+    let request = st_ipc::Request::BlockReasons {
+        from_day: st_core::daykey::DayKey(from_day),
+        to_day: st_core::daykey::DayKey(to_day),
+    };
+    match ipc_client::request(request) {
+        Ok(Response::BlockReasons(dto)) => Ok(dto),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
 #[tauri::command]
 fn create_schedule(
     name: String,
@@ -581,6 +602,8 @@ pub fn run() {
             overlay_bridge::overlay_quit,
             overlay_bridge::hide_overlay_window,
             run_tray_action,
+            record_block_reason,
+            block_reasons,
             tray_panel::open_dashboard
         ])
         .setup(|app| {

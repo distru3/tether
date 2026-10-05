@@ -1814,3 +1814,76 @@ fn usage_reports_from_other_programs_are_refused() {
         Some(ErrorCode::BadRequest)
     );
 }
+
+#[test]
+fn block_reasons_are_recorded_for_blocked_apps_without_a_pin_and_counted_by_day() {
+    let mut db = Db::open_in_memory().expect("db");
+    let blocked = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
+    let free = seed_game_app(&mut db, "C:\\games\\other\\other.exe");
+    db.set_block(
+        SubjectRef::App(blocked),
+        "limit",
+        at("2026-08-20T12:00:00Z"),
+        None,
+    )
+    .expect("block");
+    let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+    // A PIN is set: recording a reason must still not ask for it.
+    expect_vault(handle(
+        &ctx,
+        Request::SetPin {
+            new_pin: "4826".into(),
+            current_pin: None,
+        },
+    ));
+
+    let record = |app_id, reason: &str| {
+        handle(
+            &ctx,
+            Request::RecordBlockReason {
+                app_id,
+                reason: reason.into(),
+            },
+        )
+    };
+    expect_accepted(record(blocked, "finish"), at("2026-08-20T12:00:00Z"));
+    // Answering again the same day replaces the answer.
+    expect_accepted(record(blocked, "habit"), at("2026-08-20T12:00:00Z"));
+
+    // Only a blocked app has a block screen to answer from.
+    match record(free, "bored") {
+        Response::Error { code, .. } => assert_eq!(code, ErrorCode::NotFound),
+        other => panic!("expected not_found, got {other:?}"),
+    }
+    match record(blocked, "because") {
+        Response::Error { code, .. } => assert_eq!(code, ErrorCode::BadRequest),
+        other => panic!("expected bad_request, got {other:?}"),
+    }
+
+    let day = DayKey(20260820);
+    match handle(
+        &ctx,
+        Request::BlockReasons {
+            from_day: day,
+            to_day: day,
+        },
+    ) {
+        Response::BlockReasons(dto) => {
+            assert_eq!(dto.counts.len(), 1);
+            assert_eq!(dto.counts[0].reason, "habit");
+            assert_eq!(dto.counts[0].count, 1);
+        }
+        other => panic!("expected counts, got {other:?}"),
+    }
+    // Backwards or absurd ranges are refused.
+    match handle(
+        &ctx,
+        Request::BlockReasons {
+            from_day: day,
+            to_day: DayKey(20260801),
+        },
+    ) {
+        Response::Error { code, .. } => assert_eq!(code, ErrorCode::BadRequest),
+        other => panic!("expected bad_request, got {other:?}"),
+    }
+}

@@ -1711,3 +1711,87 @@ body {
 [dir="rtl"] .tt-week-stepper svg {
   transform: scaleX(-1);
 }
+
+/* Block screen: "What were you about to do?" */
+.tt-block-reasons {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.tt-block-reasons legend {
+  padding: 0;
+  margin-bottom: 12px;
+  color: #C9B6F2;
+  font-size: 15px;
+}
+
+.tt-block-reasons > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.tt-block-reasons button {
+  font: inherit;
+  font-size: 15px;
+  padding: 10px 18px;
+  border-radius: 99px;
+  border: 1px solid var(--border-strong);
+  background: #2D2150;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.tt-block-reasons button[aria-pressed="true"] {
+  background: var(--text-primary);
+  color: #1C1229;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.tt-block-reasons button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+/* Activity: when time ran out */
+.tt-act-why {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.tt-act-why li {
+  display: grid;
+  grid-template-columns: minmax(0, 9em) minmax(0, 1fr) 2ch;
+  gap: 10px;
+  align-items: center;
+}
+
+.tt-act-why-bar {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--ring-track);
+  overflow: hidden;
+}
+
+.tt-act-why-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--color-accent);
+}
+
+.tt-act-why li > span:last-child {
+  text-align: end;
+}

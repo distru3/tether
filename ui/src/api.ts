@@ -1,3 +1,4 @@
+import type { BlockReasonsDto } from "./types/generated/BlockReasonsDto";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { ErrorCode } from "./types/generated/ErrorCode";
@@ -71,6 +72,16 @@ export function verifyPin(pin: string): Promise<void> {
  */
 export function runTrayAction(action: string, pin?: string): Promise<void> {
     return invoke("run_tray_action", { action, pin });
+}
+
+/** The block screen's "What were you about to do?" (`finish`, `bored`, `habit`). */
+export function recordBlockReason(appId: number, reason: string): Promise<void> {
+    return invoke("record_block_reason", { appId, reason });
+}
+
+/** How often each block-screen reason was given between two day keys. */
+export function blockReasons(fromDay: number, toDay: number): Promise<BlockReasonsDto> {
+    return invoke("block_reasons", { fromDay, toDay });
 }
 
 /** Dismantle the vault; the credential may be the PIN or the recovery code. */

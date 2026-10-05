@@ -24,6 +24,9 @@
 //!   other than the session helper ([`Peer`]).
 //! * The vault requests (`SetPin`, `RecoverPin`, `RemovePin`) carry their own
 //!   credential semantics and call [`verify_credential`] from their handlers.
+//! * Block-screen reasons (`RecordBlockReason`, `BlockReasons`) are free: they
+//!   never change enforcement, and the handler accepts a reason only for an
+//!   app that is blocked right now.
 //!
 //! No PIN configured means every check passes: the product lets a household
 //! use the app before choosing a PIN.

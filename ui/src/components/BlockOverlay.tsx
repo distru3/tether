@@ -15,6 +15,7 @@ import {
   listSchedules,
   overlayExtend,
   overlayQuit,
+  recordBlockReason,
   describeError,
 } from "../api";
 import type { OverlayActiveStateDto } from "../api";
@@ -266,11 +267,21 @@ export function BlockOverlay() {
   const now = useNowMinute();
   const ctx = useBlockContext(state?.app_id ?? null);
   const [keypadOpen, setKeypadOpen] = useState(false);
+  const [answered, setAnswered] = useState<string | null>(null);
 
-  // A new app on the screen starts with the keypad closed.
+  // A new app on the screen starts with the keypad closed and no answer.
   useEffect(() => {
     setKeypadOpen(false);
+    setAnswered(null);
   }, [state?.app_id]);
+
+  // The answer is optional and only feeds Activity, so a failure to save it
+  // is not worth interrupting anyone for.
+  const answer = (value: string) => {
+    if (!state) return;
+    setAnswered(value);
+    recordBlockReason(state.app_id, value).catch(() => {});
+  };
 
   // Keyboard: digits, Backspace and Enter work the PIN pad once it is open;
   // Escape only closes the pad. (Escape used to quit the blocked app, which
@@ -396,6 +407,22 @@ export function BlockOverlay() {
             <span className="tt-block-strip-back">{back}</span>
           </div>
         </div>
+
+        <fieldset className="tt-block-reasons">
+          <legend>{t("overlay.reasonQuestion")}</legend>
+          <div>
+            {(["finish", "bored", "habit"] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                aria-pressed={answered === r}
+                onClick={() => answer(r)}
+              >
+                {t(`overlay.reason.${r}`)}
+              </button>
+            ))}
+          </div>
+        </fieldset>
 
         {errorMsg && !wrongPin && (
           <p role="alert" className="tt-block-error">

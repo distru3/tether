@@ -240,6 +240,21 @@ pub enum Request {
     RegisterDiscoveredApps {
         apps: Vec<DiscoveredAppDto>,
     },
+    /// The block screen's "What were you about to do?" for a blocked app:
+    /// `finish`, `bored` or `habit` (`st_core::reasons::BlockReason`). The
+    /// agent files it under its own current day; one answer per app per day.
+    /// Never changes enforcement, so it needs no PIN.
+    RecordBlockReason {
+        #[ts(as = "i32")]
+        app_id: i64,
+        reason: String,
+    },
+    /// How often each block-screen reason was given between two days
+    /// (inclusive). Answers [`Response::BlockReasons`].
+    BlockReasons {
+        from_day: DayKey,
+        to_day: DayKey,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -347,6 +362,22 @@ pub enum Response {
     ManualBlocks {
         domains: Vec<String>,
     },
+    /// Counts for [`Request::BlockReasons`], most common first.
+    BlockReasons(BlockReasonsDto),
+}
+
+/// One block-screen reason and how often it was given.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BlockReasonCountDto {
+    /// `finish`, `bored` or `habit`.
+    pub reason: String,
+    pub count: u32,
+}
+
+/// The payload of `Response::BlockReasons`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BlockReasonsDto {
+    pub counts: Vec<BlockReasonCountDto>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
