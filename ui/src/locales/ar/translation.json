@@ -8,7 +8,8 @@
     "limits": "الحدود",
     "settings": "الإعدادات",
     "main": "التنقل الرئيسي",
-    "sections": "الأقسام"
+    "sections": "الأقسام",
+    "activity": "النشاط"
   },
   "banner": {
     "resetsIn": "يُعاد الضبط خلال ⁨{{hours}}س {{minutes}}د⁩",
@@ -626,5 +627,34 @@
     "noBudgets": "لا توجد ميزانيات بعد. أضف واحدة في Tether.",
     "offline": "خدمة Tether لا تستجيب.",
     "used": "استُخدم ⁨{{amount}}⁩"
+  },
+  "activity": {
+    "title": "النشاط",
+    "weekTotal": "⁨{{amount}}⁩ هذا الأسبوع",
+    "lessThanLast": "أقل بـ ⁨{{amount}}⁩ من الأسبوع الماضي",
+    "moreThanLast": "أكثر بـ ⁨{{amount}}⁩ من الأسبوع الماضي",
+    "stayedUnder_zero": "بقي تحت ⁨{{budget}}⁩ في ⁨{{count}}⁩ من ⁨{{days}}⁩ أيام.",
+    "stayedUnder_one": "بقي تحت ⁨{{budget}}⁩ في يوم واحد من ⁨{{days}}⁩ أيام.",
+    "stayedUnder_two": "بقي تحت ⁨{{budget}}⁩ في يومين من ⁨{{days}}⁩ أيام.",
+    "stayedUnder_few": "بقي تحت ⁨{{budget}}⁩ في ⁨{{count}}⁩ أيام من ⁨{{days}}⁩.",
+    "stayedUnder_many": "بقي تحت ⁨{{budget}}⁩ في ⁨{{count}}⁩ يومًا من ⁨{{days}}⁩.",
+    "stayedUnder_other": "بقي تحت ⁨{{budget}}⁩ في ⁨{{count}}⁩ يوم من ⁨{{days}}⁩.",
+    "prevWeek": "الأسبوع السابق",
+    "nextWeek": "الأسبوع التالي",
+    "byDay": "وقت الشاشة حسب اليوم",
+    "openDay": "⁨{{day}}⁩: ⁨{{amount}}⁩. افتح هذا اليوم في صفحة اليوم.",
+    "limitLine": "⁨{{budget}}⁩ يوميًا (إجمالي وقت الشاشة)",
+    "budgetsTitle": "الميزانيات هذا الأسبوع",
+    "noBudgets": "لا توجد ميزانيات بعد. أضف واحدة من صفحة الحدود.",
+    "budget": "الميزانية",
+    "dailyAvg": "المتوسط اليومي",
+    "ranOut": "نفدت",
+    "days_zero": "لا أيام",
+    "days_one": "يوم واحد",
+    "days_two": "يومان",
+    "days_few": "⁨{{count}}⁩ أيام",
+    "days_many": "⁨{{count}}⁩ يومًا",
+    "days_other": "⁨{{count}}⁩ يوم",
+    "topApps": "الأكثر استخدامًا هذا الأسبوع"
   }
 }

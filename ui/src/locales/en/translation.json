@@ -8,7 +8,8 @@
     "limits": "Limits",
     "settings": "Settings",
     "main": "Main navigation",
-    "sections": "Sections"
+    "sections": "Sections",
+    "activity": "Activity"
   },
   "banner": {
     "resetsIn": "Resets in {{hours}}h {{minutes}}m",
@@ -594,5 +595,26 @@
     "noBudgets": "No budgets yet. Add one in Tether.",
     "offline": "Tether's service isn't responding.",
     "used": "{{amount}} used"
+  },
+  "activity": {
+    "title": "Activity",
+    "weekTotal": "{{amount}} this week",
+    "lessThanLast": "{{amount}} less than last week",
+    "moreThanLast": "{{amount}} more than last week",
+    "stayedUnder_one": "Stayed under {{budget}} on {{count}} of {{days}} days.",
+    "stayedUnder_other": "Stayed under {{budget}} on {{count}} of {{days}} days.",
+    "prevWeek": "Previous week",
+    "nextWeek": "Next week",
+    "byDay": "Screen time by day",
+    "openDay": "{{day}}: {{amount}}. Open this day on Today.",
+    "limitLine": "{{budget}} a day (total screen time)",
+    "budgetsTitle": "Budgets this week",
+    "noBudgets": "No budgets yet. Add one on Limits.",
+    "budget": "Budget",
+    "dailyAvg": "Daily average",
+    "ranOut": "Ran out",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "topApps": "Most used this week"
   }
 }

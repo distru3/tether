@@ -97,7 +97,7 @@ Both fonts are bundled (fontsource); the Tauri CSP blocks remote fonts.
   left" (white). Edit button bottom corner.
 - **Budget row** (Limits): swatch squircle, name, schedule and apps, today's
   usage bar, Edit.
-- **Pill nav**: Today · Limits · (Activity, later) · Settings; selected item is
+- **Pill nav**: Today · Limits · Activity · Settings; selected item is
   a filled plum pill.
 - **Switch**: plum track with an orange knob when on; knob moves toward the
   inline end (RTL aware).
@@ -116,7 +116,7 @@ Both fonts are bundled (fontsource); the Tauri CSP blocks remote fonts.
 | Today | Time left, day strip, budget tiles | Done (Phase 2) |
 | Block screen | Pause and choose | Done (Phase 2); borrowing and reasons need the agent (Phase 4) |
 | Timer and tray | Glance | Done (Phase 2): timer palette, tray panel |
-| Activity | The week against the limits | Later |
+| Activity | The week against the limits | Done (reasons and borrowing wait for Phase 4) |
 | Installer | Say what gets installed, then hand over to setup | Done: NSIS, plum sidebar, Rubik/Unbounded embedded (`packaging/README.md`) |
 
 ## 8. Voice

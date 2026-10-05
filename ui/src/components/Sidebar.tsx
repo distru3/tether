@@ -3,6 +3,7 @@ import type { StatusDto } from "../types/generated/StatusDto";
 import {
     LayoutDashboard,
     Clock,
+    BarChart3,
     Settings as SettingsLucide,
     ChevronLeft,
     ChevronRight,
@@ -11,7 +12,7 @@ import {
 import { formatDayLabel } from "../format";
 
 /** Top-level pages. Websites live under Limits (docs/DESIGN_SYSTEM.md §2). */
-export type TabKey = "overview" | "limits" | "settings";
+export type TabKey = "overview" | "limits" | "activity" | "settings";
 
 interface SidebarProps {
     activeTab: TabKey;
@@ -87,6 +88,18 @@ export function Sidebar({
                 >
                     <Clock size={15} className="nav-icon" />
                     <span className="nav-text">{t("nav.limits")}</span>
+                </button>
+
+                <button
+                    type="button"
+                    className={`nav-item ${activeTab === "activity" ? "nav-item--active" : ""}`}
+                    onClick={() => onSelectTab("activity")}
+                    aria-label={t("nav.activity")}
+                    title={t("nav.activity")}
+                    aria-current={activeTab === "activity" ? "page" : undefined}
+                >
+                    <BarChart3 size={15} className="nav-icon" />
+                    <span className="nav-text">{t("nav.activity")}</span>
                 </button>
 
                 <button

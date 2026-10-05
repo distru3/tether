@@ -1501,3 +1501,213 @@ button.tt-usage-cat:hover {
 body {
   font-variant-numeric: tabular-nums;
 }
+
+/* ---- Activity ---- */
+.tt-week-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 99px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.tt-week-stepper > span {
+  padding: 0 8px;
+}
+
+.tt-week-stepper button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg-recessed);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.tt-week-stepper button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tt-act-chart {
+  display: flex;
+  gap: 10px;
+  height: 240px;
+}
+
+.tt-act-axis {
+  position: relative;
+  width: 44px;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tt-act-axis > span {
+  position: absolute;
+  inset-inline-end: 0;
+  translate: 0 50%;
+}
+
+.tt-act-plot {
+  position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+  padding-inline: 6px;
+  border-bottom: 1px solid var(--border-card);
+}
+
+.tt-act-grid {
+  position: absolute;
+  inset-inline: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tt-act-limit {
+  position: absolute;
+  inset-inline: 0;
+  border-top: 2px dashed var(--color-accent);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.tt-act-bar {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column-reverse;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+}
+
+.tt-act-bar > span {
+  display: block;
+  flex: none;
+  background: var(--hue);
+}
+
+.tt-act-bar > span:last-child {
+  border-radius: 8px 8px 0 0;
+}
+
+.tt-act-bar:hover:not(:disabled) > span {
+  filter: brightness(1.08);
+}
+
+.tt-act-bar:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.tt-act-bar--today {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 3px;
+}
+
+.tt-act-bar:disabled {
+  cursor: default;
+}
+
+.tt-act-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 14px;
+  padding-inline: 60px 6px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+[dir="rtl"] .tt-act-days {
+  padding-inline: 60px 6px;
+}
+
+.tt-act-day--over {
+  color: var(--color-danger-text);
+  font-weight: 600;
+}
+
+.tt-act-day--today {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tt-act-limit-key {
+  width: 14px;
+  border-top: 2px dashed var(--color-accent);
+}
+
+.tt-act-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.tt-act-table th,
+.tt-act-table td {
+  padding: 6px 0;
+  text-align: end;
+  font-weight: 400;
+}
+
+.tt-act-table thead th {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tt-act-table th:first-child {
+  text-align: start;
+}
+
+.tt-act-table tbody th {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tt-act-table td {
+  padding-inline-start: 16px;
+  white-space: nowrap;
+}
+
+.tt-act-apps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.tt-act-apps li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tt-act-apps li > span:last-child {
+  color: var(--text-secondary);
+}
+
+.tt-head > .tt-week-stepper {
+  flex-direction: row;
+  align-items: center;
+}
+
+[dir="rtl"] .tt-week-stepper svg {
+  transform: scaleX(-1);
+}

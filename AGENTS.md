@@ -10,7 +10,7 @@ A high-performance screen-time tracker, limit enforcer, and web filter for Windo
 
 1. `screentime-agent` (`crates/agent`) — privileged daemon (SYSTEM/elevated): SQLite database, limits engine, day rollover, native Windows hosts file enforcer, Cloudflare Family DNS adapter configurator, IPC server on named pipe `\\.\pipe\screentime`.
 2. `screentime-session` (`crates/session`) — per-user unprivileged sampling front: tracks foreground window and idle state, reports 1 Hz samples via `ReportUsage` over a persistent pipe connection, draws the native timer HUD (`hud.rs`/`mpo.rs`), and drives the block overlay by sending `Show`/`Hide` to the UI over `\\.\pipe\screentime_overlay_bridge`.
-3. `screentime-ui` (`ui/`) — Tauri 2 desktop shell and React 18 dashboard (Today · Limits · Settings, plus a first-run setup flow): one-shot pipe commands only, plum/orange light and dark themes per `docs/DESIGN_SYSTEM.md`.
+3. `screentime-ui` (`ui/`) — Tauri 2 desktop shell and React 18 dashboard (Today · Limits · Activity · Settings, a first-run setup flow, the block screen and a tray panel): one-shot pipe commands only, plum/orange light and dark themes per `docs/DESIGN_SYSTEM.md`.
 
 The agent alone does NOT track usage (Session-0 isolation). Dev fallback: `SCREENTIME_SELF_SAMPLE=1` re-enables in-agent sampling.
 

@@ -21,9 +21,9 @@ The visual and interaction contract is **[`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM
 | [TitleBar] Tether (34px, custom drag region, minimize/maximize/close)                   |
 +-----------------------------------------------------------------------------------------+
 | [Top bar: .app-sidebar]                                                                 |
-|  [squircle mark] Tether [Live] |  ( Today ) ( Limits ) ( Settings )  |  (< Today >)      |
+|  [mark] Tether [Live] | ( Today ) ( Limits ) ( Activity ) ( Settings ) | (< Today >)      |
 +-----------------------------------------------------------------------------------------+
-| [Main content: .app-main-content]   overview | limits | settings                        |
+| [Main content: .app-main-content]   overview | limits | activity | settings             |
 +-----------------------------------------------------------------------------------------+
 ```
 
@@ -35,10 +35,11 @@ The visual and interaction contract is **[`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM
 - **Pill nav** (`.sidebar-nav`, radius 99px on `--bg-card`): the active item (`.nav-item--active`, `aria-current="page"`) is a filled `--color-primary` pill with `--color-on-primary` text. At ≤980px labels hide (each item keeps its `aria-label`); at ≤700px the bar wraps.
 - **Day stepper**: `<` / `>` and a "Today"/date label; only shown on Today (`visibility: hidden` elsewhere so the bar keeps its balance).
 
-### Nav Items (`TabKey = "overview" | "limits" | "settings"`)
+### Nav Items (`TabKey = "overview" | "limits" | "activity" | "settings"`)
 1. **Today** (`overview`, `nav.overview`): time left, the day strip and budget tiles (Section 3).
 2. **Limits** (`limits`, `nav.limits`): every rule in one place: budgets, schedules, websites (Section 4).
-3. **Settings** (`settings`): six short groups (Section 4).
+3. **Activity** (`activity`): the week against the limits (Section 4).
+4. **Settings** (`settings`): six short groups (Section 4).
 
 There is no separate Web Filtering tab any more; websites live on Limits.
 
@@ -94,6 +95,14 @@ One page for every rule. `View = "main" | "schedules" | "websites"`; the two sub
 - **Budgets card**: one `tt-budget` row per limit: hue swatch, name, the rule (`limitRule`: same every day / weekday overrides), today's use against the budget (`role="progressbar"` meter, over-budget text), an on/off switch (`actions.toggleLimit`) and **Edit** (`actions.openEditor`). Paused rows dim only the swatch and meter so text keeps its contrast. Rows stack under 760px.
 - **Schedules card** (side column): each downtime schedule with its clock range (`Intl` time format), days ("Every day" / "Weekdays" / "Weekends" / list from the bitmask), and a switch; **Manage** opens the Schedules subview (`DowntimeSection`: editor, delete, always-allowed apps).
 - **Websites card** (side column): add a site inline (`addManualBlock`), up to three blocked sites as chips (hidden adult-list domains excluded via `domains.ts` `isHiddenDomain`), "+N more", and the **Family DNS** switch (`family_dns` setting). **Manage** opens the Websites subview (`WebFilteringPanel`: bulk import, search, paging, hidden-domain reveal).
+
+### Activity (`ui/src/pages/ActivityPage.tsx`, `ui/src/activityModel.ts`)
+The week against the limits. Loads the weekly totals plus each of the seven days' summaries.
+- **Header**: "38h 22m this week, 7h 22m more than last week. Stayed under 6h on 5 of 7 days." (the last sentence only with a total-screen-time budget, using each weekday's budget), and a week stepper (previous / next, never past today; arrows mirror in Arabic).
+- **Screen time by day**: stacked bars split by budget colour (`dayByHue`, the same `hueForApp` as the Today strip), a dashed line at the total budget, hour gridlines; days over the total budget in danger text. Each bar is a button that opens that day on Today. The chart is a labelled group with a text summary for screen readers.
+- **Budgets this week** (`budgetWeek`): per enabled app/category budget, the daily average and the days it ran out, over the days that loaded.
+- **Most used this week** (`weekTopApps`).
+- Not yet: "When time ran out" (reasons from the block screen) and borrowing, which need the agent (Phase 4).
 
 ### Budget editor (`LimitEditorDialog.tsx`)
 Target picker (app / category / total), duration slider + h/m inputs + presets, weekday overrides. **Before the save button it says when the change applies**:
@@ -432,5 +441,6 @@ Implements Phase 1 of `docs/DESIGN_SYSTEM.md`:
 - **Tray**: plain labels ("Reset network settings", "Stop Tether and its service", "Close the Tether app"), tooltip "Tether".
 - **Installer**: styled NSIS installer, see `packaging/README.md`.
 - The category-pill contrast gap from Phase 1 is gone (neutral category buttons).
-- **Not yet**: Activity, and Phase 4 agent work (custom budget groups, borrowing, reasons, suggestions).
+- **Activity** page (Section 4).
+- **Not yet**: Phase 4 agent work (custom budget groups, borrowing, reasons, suggestions).
 

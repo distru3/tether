@@ -19,6 +19,8 @@ import { TrayPanel } from "./components/TrayPanel";
 import { LimitsPage } from "./pages/LimitsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TodayPage } from "./pages/TodayPage";
+import { ActivityPage } from "./pages/ActivityPage";
+import { todayKey } from "./format";
 import { useDashboard } from "./hooks/useDashboard";
 import { useLedgerActions } from "./hooks/useLedgerActions";
 import { useNowMinute } from "./hooks/useNowMinute";
@@ -298,6 +300,20 @@ function MainDashboard() {
                   notify={push}
                   onSetSetting={handleUpdateSetting}
                   settingPending={(key: string) => pendingSettings[key] ?? false}
+                />
+              </div>
+            )}
+
+            {activeTab === "activity" && (
+              <div className="tab-page" style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
+                <ActivityPage
+                  catalog={catalog}
+                  today={todayKey(now)}
+                  now={now}
+                  onOpenDay={(day) => {
+                    setViewDay(day);
+                    selectTab("overview");
+                  }}
                 />
               </div>
             )}
