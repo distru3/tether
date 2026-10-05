@@ -428,6 +428,7 @@ Implements Phase 1 of `docs/DESIGN_SYSTEM.md`:
 - **Today** (Section 3): ring, day strip, budget tiles, schedule and website cards; `todayModel.ts`.
 - **Block screen** (Section 5B): "pause and choose", reason re-derived by `blockModel.ts`, extra time only when it can work, Escape no longer quits the app, DPI-scaled window floors.
 - **Timer HUD** (Section 5A): plum palette shared by both renderers, orange last minute, `system` theme resolved.
+- **Dialogs and older screens**: shared dialog styles (`.dialog`, `.btn`, `.field`, `.pin-input`, `.linklike` in `app.css`) follow v2: pill buttons, sentence-case labels, Rubik. Monospace and uppercase labels were removed from the budget editor, the Websites and Schedules views and the metric cards; monospace stays only where it helps reading (recovery codes, file paths, domain names, raw error text). All numbers use tabular figures (`body` in `tether.css`). The PIN prompt says "PIN needed". The Websites view speaks of sites, not "domain rules".
 - **Tray**: plain labels ("Reset network settings", "Stop Tether and its service", "Close the Tether app"), tooltip "Tether".
 - **Installer**: styled NSIS installer, see `packaging/README.md`.
 - The category-pill contrast gap from Phase 1 is gone (neutral category buttons).

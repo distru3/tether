@@ -76,7 +76,7 @@ export function formatClock(d: Date): string {
  */
 /** "Fri 10:42" in the UI language: when a queued change lands. */
 export function formatWhen(at: Date): string {
-    return at.toLocaleString(i18n.language, { weekday: "short", hour: "2-digit", minute: "2-digit" });
+    return at.toLocaleString(i18n.language, { weekday: "short", hour: "numeric", minute: "2-digit" });
 }
 
 export function effectClause(effectiveUtc: string | null | undefined): string {

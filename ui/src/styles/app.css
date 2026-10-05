@@ -198,8 +198,6 @@ body {
   border-radius: var(--radius-sm);
   font-size: 11px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .badge--indigo {
@@ -219,12 +217,12 @@ body {
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 7px 14px;
-  border-radius: var(--radius-sm);
+  padding: 9px 18px;
+  border-radius: 99px;
   border: 1px solid transparent;
   font-family: var(--font-sans);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
   transition: all var(--transition-fast);
   white-space: nowrap;
@@ -302,8 +300,6 @@ body {
   align-self: flex-start;
   font-size: 10px;
   font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
   padding: 2px 6px;
   border-radius: var(--radius-xs);
 }
@@ -382,19 +378,16 @@ body {
 }
 
 .dialog-eyebrow {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  letter-spacing: 0.14em;
-  text-transform: uppercase;
-  color: var(--color-accent-text);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
 }
 
 .dialog-title {
   margin: 6px 0 8px;
   font-size: 22px;
-  font-weight: 700;
+  font-weight: 600;
   color: var(--text-primary);
-  letter-spacing: -0.02em;
 }
 
 .dialog-error {
@@ -421,23 +414,20 @@ body {
 }
 
 .field-label {
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.02em;
-  text-transform: none;
-  color: var(--text-muted);
-  font-weight: 600;
+  font-size: 13px;
+  color: var(--text-secondary);
+  font-weight: 500;
 }
 
 .field input[type="number"], .field input[type="password"], .field input[type="text"], .field select {
   width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--border-strong);
-  border-radius: 10px;
+  border-radius: 12px;
   background-color: var(--bg-input);
   color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: 13.5px;
+  font-family: var(--font-sans);
+  font-size: 15px;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
@@ -452,10 +442,10 @@ body {
   margin-top: 16px;
   padding: 14px 16px;
   border: 1px solid var(--border-strong);
-  border-radius: 12px;
+  border-radius: 14px;
   background-color: var(--bg-input);
-  color: var(--color-accent-text);
-  font-family: var(--font-mono);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
   font-size: 24px;
   letter-spacing: 0.45em;
   text-align: center;
@@ -488,7 +478,6 @@ body {
   border-radius: 10px;
   background-color: var(--bg-input);
   color: var(--text-primary);
-  font-family: var(--font-mono);
   font-size: 13.5px;
   cursor: pointer;
   text-align: left;
@@ -696,8 +685,8 @@ body {
   background-color: transparent;
   padding: 0;
   margin-top: 10px;
-  font-size: 13px;
-  color: var(--text-secondary);
+  font-size: 14px;
+  color: var(--color-accent-text);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -709,10 +698,6 @@ body {
 
 .linklike--danger {
   color: var(--color-danger-text);
-  font-family: var(--font-mono);
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 .font-mono {

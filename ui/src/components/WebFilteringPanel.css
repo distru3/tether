@@ -145,7 +145,6 @@
 .web-filter-count-badge {
     font-size: 11px;
     font-weight: 600;
-    font-family: var(--font-mono);
     color: var(--color-primary-text);
     background: var(--color-primary-subtle, rgba(165, 91, 75, 0.14));
     border: 1px solid var(--border-card);
@@ -221,10 +220,7 @@
 
 .web-filter-table th {
     padding: 13px 24px;
-    font-family: var(--font-mono);
     font-size: 11px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
     color: var(--color-primary-text);
     font-weight: 600;
     background: var(--bg-surface);
@@ -311,9 +307,6 @@
     border-radius: 6px;
     font-size: 10.5px;
     font-weight: 600;
-    font-family: var(--font-mono);
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
     background: var(--bg-danger);
     border: 1px solid var(--border-danger);
     color: var(--color-danger-text);
@@ -433,7 +426,6 @@
 
 .pagination-info {
     font-size: 12px;
-    font-family: var(--font-mono);
     color: var(--text-muted);
 }
 
@@ -481,7 +473,6 @@
 
 .pagination-page-indicator {
     font-size: 12px;
-    font-family: var(--font-mono);
     color: var(--text-secondary);
     padding: 0 4px;
 }

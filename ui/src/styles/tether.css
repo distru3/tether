@@ -1496,3 +1496,8 @@ button.tt-usage-cat:hover {
   outline: 2px solid var(--color-accent);
   outline-offset: 2px;
 }
+
+/* Numbers line up everywhere (docs/DESIGN_SYSTEM.md §4). */
+body {
+  font-variant-numeric: tabular-nums;
+}

@@ -253,7 +253,7 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
                                             </div>
 
                                             <div style={{ display: "flex", alignItems: "center", gap: "12px", marginTop: "6px" }}>
-                                                <div style={{ display: "flex", alignItems: "center", gap: "6px", fontFamily: "var(--font-mono)", fontSize: "13px", color: "var(--text-primary)" }}>
+                                                <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "13px", color: "var(--text-primary)" }}>
                                                     <Clock size={13} color="var(--text-muted)" />
                                                     <span>{formatDisplayTime(schedule.start_minute)}</span>
                                                     <span style={{ color: "var(--text-muted)" }}>–</span>
@@ -276,7 +276,6 @@ export function DowntimeSection({ catalog, notify, guarded }: DowntimeSectionPro
                                                                     borderRadius: "4px",
                                                                     fontSize: "10px",
                                                                     fontWeight: 600,
-                                                                    fontFamily: "var(--font-mono)",
                                                                     background: active ? "var(--accent-indigo)" : "var(--bg-surface-raised)",
                                                                     color: active ? "#ffffff" : "var(--text-muted)",
                                                                     opacity: active ? 1 : 0.45,
@@ -575,7 +574,6 @@ function ScheduleEditorModal({ schedule, onSave, onClose }: ScheduleEditorModalP
                                         color: isSelected ? "#ffffff" : "var(--text-secondary)",
                                         fontWeight: 600,
                                         fontSize: "13px",
-                                        fontFamily: "var(--font-mono)",
                                         cursor: "pointer",
                                         transition: "all 0.15s ease",
                                     }}

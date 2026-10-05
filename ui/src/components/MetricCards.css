@@ -51,10 +51,7 @@
 
 .metric-telemetry-label,
 .metric-label {
-    font-family: var(--font-mono);
     font-size: 10.5px;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
     color: var(--text-muted);
     font-weight: 600;
 }
@@ -78,7 +75,6 @@
     font-size: 22px;
     font-weight: 700;
     color: var(--text-primary);
-    font-family: var(--font-mono);
     letter-spacing: -0.02em;
 }
 
