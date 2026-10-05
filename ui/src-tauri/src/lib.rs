@@ -295,6 +295,25 @@ fn accepted_cmd(request: st_ipc::Request) -> CmdResult<()> {
     }
 }
 
+/// Run a tray action that loosens protection (`tray::TrayAction`), once the
+/// agent has checked the PIN with `VerifyPin`: allowed when no PIN is set,
+/// rate limited like every other PIN check. Fails closed when the agent
+/// cannot be reached, since nothing could check the PIN.
+#[tauri::command]
+fn run_tray_action(app: tauri::AppHandle, action: String, pin: Option<String>) -> CmdResult<()> {
+    let Some(action) = tray::TrayAction::parse(&action) else {
+        return Err(CommandError {
+            code: "bad_request".into(),
+            message: format!("unknown tray action: {action}"),
+        });
+    };
+    accepted_cmd(st_ipc::Request::VerifyPin {
+        pin: pin.unwrap_or_default(),
+    })?;
+    tray::run_action(&app, action);
+    Ok(())
+}
+
 #[tauri::command]
 fn categorize(
     app_id: i64,
@@ -559,7 +578,8 @@ pub fn run() {
             overlay_bridge::get_overlay_state,
             overlay_bridge::overlay_extend,
             overlay_bridge::overlay_quit,
-            overlay_bridge::hide_overlay_window
+            overlay_bridge::hide_overlay_window,
+            run_tray_action
         ])
         .setup(|app| {
             if let Some(overlay_win) = app.get_webview_window("overlay") {

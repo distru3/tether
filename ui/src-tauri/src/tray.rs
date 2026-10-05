@@ -4,13 +4,17 @@
 //! allows the user to:
 //! 1. Open / Focus the dashboard.
 //! 2. Run emergency network reset (undo all DNS, hosts, firewall, and browser changes) silently.
-//! 3. Stop all Screentime services and terminate the background agent/session silently.
+//! 3. Stop all Tether services and terminate the background agent/session silently.
+//!
+//! 2 and 3 loosen protection, so they go through the dashboard's PIN prompt
+//! and `run_tray_action` (the agent checks the PIN) instead of running from
+//! the menu directly.
 //! 4. Safely quit the application.
 
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager,
+    AppHandle, Emitter, Manager,
 };
 
 #[cfg(windows)]
@@ -30,7 +34,7 @@ fn silent_cmd(program: &str, args: &[&str]) {
 }
 
 /// Run emergency network cleanup from the UI host process completely silently.
-pub fn run_emergency_network_reset() {
+fn run_emergency_network_reset() {
     #[cfg(windows)]
     {
         // 1. Clean hosts file
@@ -156,7 +160,7 @@ pub fn run_emergency_network_reset() {
 }
 
 /// Stop all background processes (agent, session) and close the app silently without cmd flashing.
-pub fn stop_all_services(app: &AppHandle) {
+fn stop_all_services(app: &AppHandle) {
     // First reset network so no stale DNS/hosts locks remain.
     run_emergency_network_reset();
 
@@ -173,6 +177,50 @@ pub fn stop_all_services(app: &AppHandle) {
     }
 
     app.exit(0);
+}
+
+/// Tray actions that loosen protection. The menu does not run them: it asks
+/// the dashboard (`tray_action_requested`), which gets the PIN when one is
+/// set and calls `run_tray_action`, where the agent checks it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TrayAction {
+    ResetNetwork,
+    StopAll,
+}
+
+impl TrayAction {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            TrayAction::ResetNetwork => "reset_network",
+            TrayAction::StopAll => "stop_all",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Self> {
+        match s {
+            "reset_network" => Some(TrayAction::ResetNetwork),
+            "stop_all" => Some(TrayAction::StopAll),
+            _ => None,
+        }
+    }
+}
+
+/// Run an action whose PIN the agent has already accepted.
+pub fn run_action(app: &AppHandle, action: TrayAction) {
+    match action {
+        TrayAction::ResetNetwork => run_emergency_network_reset(),
+        TrayAction::StopAll => stop_all_services(app),
+    }
+}
+
+/// Show the dashboard and ask it to run `action` behind the PIN.
+fn request_action(app: &AppHandle, action: TrayAction) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        let _ = window.unminimize();
+        let _ = window.set_focus();
+        let _ = window.emit("tray_action_requested", action.as_str());
+    }
 }
 
 /// Initialize the system tray icon with menu actions and click handlers.
@@ -214,12 +262,8 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
                     let _ = window.set_focus();
                 }
             }
-            "reset_net" => {
-                run_emergency_network_reset();
-            }
-            "stop_all" => {
-                stop_all_services(app);
-            }
+            "reset_net" => request_action(app, TrayAction::ResetNetwork),
+            "stop_all" => request_action(app, TrayAction::StopAll),
             "quit" => {
                 app.exit(0);
             }
@@ -248,4 +292,18 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
         .build(app)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::TrayAction;
+
+    #[test]
+    fn tray_actions_round_trip_and_reject_unknown_names() {
+        for action in [TrayAction::ResetNetwork, TrayAction::StopAll] {
+            assert_eq!(TrayAction::parse(action.as_str()), Some(action));
+        }
+        assert_eq!(TrayAction::parse("quit"), None);
+        assert_eq!(TrayAction::parse(""), None);
+    }
 }

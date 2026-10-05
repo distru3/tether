@@ -607,5 +607,11 @@
     "websitesOpen": "المواقع غير مُرشَّحة",
     "familyDnsOn": "حماية DNS العائلية مفعّلة",
     "websitesHint": "احظر مواقع أو فعّل حماية DNS العائلية من صفحة الحدود"
+  },
+  "tray": {
+    "resetLabel": "إعادة ضبط إعدادات الشبكة",
+    "stopLabel": "إيقاف Tether وخدمته",
+    "resetDone": "أُعيد ضبط إعدادات الشبكة.",
+    "serviceDown": "خدمة Tether لا تستجيب، لذا لا يمكن التحقق من رمز PIN. يمكن للمسؤول تشغيل \"screentime-agent --reset-network\" بدلًا من ذلك."
   }
 }

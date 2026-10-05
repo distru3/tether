@@ -27,6 +27,8 @@ import { useToasts } from "./hooks/useToasts";
 const FIRST_RUN_KEY = "screentime_first_run_completed";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
+import { describeError, errorCode, runTrayAction } from "./api";
 
 export function App() {
   // Ensure theme is active and synced across all windows (dashboard & overlay)
@@ -116,6 +118,35 @@ function MainDashboard() {
       document.startViewTransition(() => setActiveTab(tab));
     }
   };
+
+  // Tray actions that loosen protection arrive here so they go through the
+  // PIN prompt; the host re-checks the PIN with the agent before running them.
+  const guarded = actions.guarded;
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    let live = true;
+    listen<string>("tray_action_requested", (event) => {
+      const action = event.payload;
+      const label = action === "stop_all" ? t("tray.stopLabel") : t("tray.resetLabel");
+      guarded(label, async (pin) => {
+        await runTrayAction(action, pin);
+        if (action === "reset_network") push("success", t("tray.resetDone"));
+      }).catch((e) => {
+        push("error", errorCode(e) === "unreachable" ? t("tray.serviceDown") : describeError(e));
+      });
+    })
+      .then((f) => {
+        if (live) unlisten = f;
+        else f();
+      })
+      .catch(() => {
+        // Not running inside Tauri (browser preview).
+      });
+    return () => {
+      live = false;
+      unlisten?.();
+    };
+  }, [guarded, push, t]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

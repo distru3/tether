@@ -575,5 +575,11 @@
     "websitesOpen": "Websites aren't filtered",
     "familyDnsOn": "Family DNS on",
     "websitesHint": "Block sites or turn on Family DNS on Limits"
+  },
+  "tray": {
+    "resetLabel": "Reset network settings",
+    "stopLabel": "Stop Tether and its service",
+    "resetDone": "Network settings reset.",
+    "serviceDown": "Tether's service isn't responding, so the PIN can't be checked. An administrator can run \"screentime-agent --reset-network\" instead."
   }
 }

@@ -65,6 +65,14 @@ export function verifyPin(pin: string): Promise<void> {
     return invoke("verify_pin", { pin });
 }
 
+/**
+ * Run a tray action that loosens protection (`reset_network`, `stop_all`).
+ * The host asks the agent to check the PIN first; `stop_all` exits the app.
+ */
+export function runTrayAction(action: string, pin?: string): Promise<void> {
+    return invoke("run_tray_action", { action, pin });
+}
+
 /** Dismantle the vault; the credential may be the PIN or the recovery code. */
 export function removePin(credential: string): Promise<void> {
     return invoke("remove_pin", { credential });
