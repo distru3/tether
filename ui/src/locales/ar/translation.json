@@ -613,5 +613,18 @@
     "stopLabel": "إيقاف Tether وخدمته",
     "resetDone": "أُعيد ضبط إعدادات الشبكة.",
     "serviceDown": "خدمة Tether لا تستجيب، لذا لا يمكن التحقق من رمز PIN. يمكن للمسؤول تشغيل \"screentime-agent --reset-network\" بدلًا من ذلك."
+  },
+  "trayPanel": {
+    "leftToday": "المتبقي اليوم",
+    "usedToday": "المستخدم اليوم",
+    "scheduleAt": "⁨{{name}}⁩ الساعة ⁨{{time}}⁩",
+    "scheduleUntil": "⁨{{name}}⁩ حتى ⁨{{time}}⁩",
+    "left": "متبقٍ ⁨{{amount}}⁩",
+    "done": "انتهى، يعود الساعة ⁨{{time}}⁩",
+    "extra": "وقت إضافي حتى ⁨{{time}}⁩",
+    "open": "افتح Tether",
+    "noBudgets": "لا توجد ميزانيات بعد. أضف واحدة في Tether.",
+    "offline": "خدمة Tether لا تستجيب.",
+    "used": "استُخدم ⁨{{amount}}⁩"
   }
 }

@@ -115,7 +115,7 @@ Both fonts are bundled (fontsource); the Tauri CSP blocks remote fonts.
 | Settings | Four short groups | Phase 1 |
 | Today | Time left, day strip, budget tiles | Done (Phase 2) |
 | Block screen | Pause and choose | Done (Phase 2); borrowing and reasons need the agent (Phase 4) |
-| Timer and tray | Glance | Timer palette done (Phase 2); tray popup panel later |
+| Timer and tray | Glance | Done (Phase 2): timer palette, tray panel |
 | Activity | The week against the limits | Later |
 | Installer | Say what gets installed, then hand over to setup | Done: NSIS, plum sidebar, Rubik/Unbounded embedded (`packaging/README.md`) |
 

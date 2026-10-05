@@ -179,6 +179,15 @@ Shown on first run (`localStorage` `screentime_first_run_completed`). Four steps
 
 ---
 
+### C. Tray panel (`TrayPanel.tsx`, `ui/src-tauri/src/tray_panel.rs`)
+- A left click on the tray icon opens a 360x380 window (`tray`, `?view=tray`) next to the taskbar: the ring (time left of the total budget, or time used), time used and the active or next schedule, one row per budget (time left, "Done, back at …" or "Extra time until …", a bar in the budget's hue), and **Open Tether** (`open_dashboard`). Right click still shows the menu.
+- Placement (`panel_origin`, unit-tested): opens from whichever side the taskbar is on (the side the click is outside the monitor's work area), centered on the click, clamped on screen; sizes are logical pixels scaled by the monitor.
+- Hides on Escape and when it loses focus; a click on the tray icon right after a focus-loss hide is ignored, so clicking the icon toggles it closed instead of reopening it.
+- Reloads its numbers every time it opens (`tray_panel_shown`) and every 30 s while open, with the same pure functions as Today (`todayModel.ts`). Follows the app theme; mirrors in Arabic.
+- The tray menu's "Reset network settings" and "Stop Tether and its service" go through the dashboard's PIN prompt (`run_tray_action`, see `docs/IPC_CATALOG.md`).
+
+---
+
 ## 6. Theme System & Component Standardization
 
 ### A. Light, Dark and Like Windows
@@ -422,5 +431,5 @@ Implements Phase 1 of `docs/DESIGN_SYSTEM.md`:
 - **Tray**: plain labels ("Reset network settings", "Stop Tether and its service", "Close the Tether app"), tooltip "Tether".
 - **Installer**: styled NSIS installer, see `packaging/README.md`.
 - The category-pill contrast gap from Phase 1 is gone (neutral category buttons).
-- **Not yet**: a tray panel (the mockup's popup with the ring and budgets needs a new window), Activity, and Phase 4 agent work (custom budget groups, borrowing, reasons, suggestions).
+- **Not yet**: Activity, and Phase 4 agent work (custom budget groups, borrowing, reasons, suggestions).
 

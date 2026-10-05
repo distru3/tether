@@ -1341,3 +1341,158 @@ button.tt-usage-cat:hover {
 .tt-week .tt-week-bars {
   flex: 1;
 }
+
+/* ---- Tray panel (window `tray`) ---- */
+.tt-tray {
+  /* The window is transparent; the card leaves room for its shadow. */
+  position: fixed;
+  inset: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  box-sizing: border-box;
+  border-radius: 24px;
+  border: 1px solid var(--border-card);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  user-select: none;
+}
+
+.tt-tray-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.tt-tray-ring {
+  position: relative;
+  width: 78px;
+  height: 78px;
+  flex: none;
+}
+
+.tt-tray-ring svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.tt-tray-ring circle {
+  fill: none;
+  stroke-width: 8;
+}
+
+.tt-tray-ring > span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.tt-tray-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tt-tray-title strong {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.tt-tray-title span,
+.tt-tray-note {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.tt-tray-note {
+  margin: 0;
+  flex: 1;
+}
+
+.tt-tray-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.tt-tray-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tt-tray-row-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tt-tray-row-line > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-tray-row-state {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.tt-tray-row--low .tt-tray-row-state {
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+.tt-tray-row--done .tt-tray-row-state {
+  color: var(--color-danger-text);
+}
+
+.tt-tray-bar {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--ring-track);
+  overflow: hidden;
+}
+
+.tt-tray-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--hue);
+}
+
+.tt-tray-open {
+  font: inherit;
+  font-weight: 600;
+  padding: 10px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  cursor: pointer;
+}
+
+.tt-tray-open:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}

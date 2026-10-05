@@ -19,6 +19,7 @@
 mod ipc_client;
 mod overlay_bridge;
 mod tray;
+mod tray_panel;
 
 #[cfg(windows)]
 mod corners {
@@ -536,7 +537,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .with_denylist(&["overlay"])
+                .with_denylist(&["overlay", "tray"])
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
@@ -579,7 +580,8 @@ pub fn run() {
             overlay_bridge::overlay_extend,
             overlay_bridge::overlay_quit,
             overlay_bridge::hide_overlay_window,
-            run_tray_action
+            run_tray_action,
+            tray_panel::open_dashboard
         ])
         .setup(|app| {
             if let Some(overlay_win) = app.get_webview_window("overlay") {
@@ -619,6 +621,7 @@ pub fn run() {
             }
 
             // Initialize system tray icon with menu and emergency actions
+            tray_panel::setup(app);
             if let Err(e) = tray::setup_tray(app) {
                 tracing::warn!("Failed to initialize system tray icon: {e}");
             }

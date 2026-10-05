@@ -36,6 +36,21 @@
         "visible": false,
         "resizable": false,
         "shadow": false
+      },
+      {
+        "label": "tray",
+        "title": "Tether",
+        "url": "index.html?view=tray",
+        "width": 360,
+        "height": 380,
+        "decorations": false,
+        "transparent": true,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "resizable": false,
+        "shadow": false,
+        "focus": true
       }
     ],
     "security": {

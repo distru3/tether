@@ -4,7 +4,8 @@ import { Moon, Pencil, ShieldCheck, ShieldOff } from "lucide-react";
 import { listManualBlocks } from "../api";
 import type { BudgetHue } from "../budgetHue";
 import { isHiddenDomain } from "../domains";
-import { durationParts, formatDayLabel, formatDuration, targetLabel } from "../format";
+import { formatDayLabel, formatDuration, targetLabel } from "../format";
+import { Amount } from "../components/Amount";
 import { clockLabel, daysLabel, limitRule } from "../limitText";
 import { useDowntime } from "../hooks/useDowntime";
 import type { useLedgerActions } from "../hooks/useLedgerActions";
@@ -48,20 +49,6 @@ const HUE_ORDER: BudgetHue[] = ["games", "social", "video", "other"];
 /** A clock time in the UI language: "4 AM", "10:30 PM". */
 function timeLabel(d: Date): string {
     return clockLabel(d.getHours() * 60 + d.getMinutes());
-}
-
-/** "1h 5m" as a big number with small units. */
-function Amount({ seconds }: { seconds: number }) {
-    return (
-        <>
-            {durationParts(seconds).map(([value, unit], i) => (
-                <span key={i} className="tt-amount-part">
-                    {value}
-                    <small>{unit}</small>
-                </span>
-            ))}
-        </>
-    );
 }
 
 export function TodayPage({ summary, catalog, statusInfo, viewDay, isViewingToday, loading, now, actions, onOpenLimits, banner, more }: TodayPageProps) {

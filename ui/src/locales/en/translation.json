@@ -581,5 +581,18 @@
     "stopLabel": "Stop Tether and its service",
     "resetDone": "Network settings reset.",
     "serviceDown": "Tether's service isn't responding, so the PIN can't be checked. An administrator can run \"screentime-agent --reset-network\" instead."
+  },
+  "trayPanel": {
+    "leftToday": "Left today",
+    "usedToday": "Used today",
+    "scheduleAt": "{{name}} at {{time}}",
+    "scheduleUntil": "{{name}} until {{time}}",
+    "left": "{{amount}} left",
+    "done": "Done, back at {{time}}",
+    "extra": "Extra time until {{time}}",
+    "open": "Open Tether",
+    "noBudgets": "No budgets yet. Add one in Tether.",
+    "offline": "Tether's service isn't responding.",
+    "used": "{{amount}} used"
   }
 }

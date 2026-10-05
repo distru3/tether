@@ -2,7 +2,7 @@
 //!
 //! Provides a taskbar notification area ("show hidden icons") tray icon that
 //! allows the user to:
-//! 1. Open / Focus the dashboard.
+//! 1. Open / Focus the dashboard (left click opens the tray panel, `tray_panel.rs`).
 //! 2. Run emergency network reset (undo all DNS, hosts, firewall, and browser changes) silently.
 //! 3. Stop all Tether services and terminate the background agent/session silently.
 //!
@@ -270,23 +270,15 @@ pub fn setup_tray(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>> {
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
+            // Left click opens the panel; the menu stays on right click.
             if let TrayIconEvent::Click {
                 button: MouseButton::Left,
                 button_state: MouseButtonState::Up,
+                position,
                 ..
             } = event
             {
-                let app = tray.app_handle();
-                if let Some(window) = app.get_webview_window("main") {
-                    let is_visible = window.is_visible().unwrap_or(false);
-                    if is_visible {
-                        let _ = window.set_focus();
-                    } else {
-                        let _ = window.show();
-                        let _ = window.unminimize();
-                        let _ = window.set_focus();
-                    }
-                }
+                crate::tray_panel::toggle(tray.app_handle(), position);
             }
         })
         .build(app)?;

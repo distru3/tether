@@ -99,3 +99,4 @@ Commands in `ui/src-tauri` that do more than forward one `Request`.
 | Command | Arguments | What it does |
 |---|---|---|
 | `run_tray_action` | `action: "reset_network" \| "stop_all"`, `pin?: String` | The tray menu's "Reset network settings" and "Stop Tether and its service". The menu does not run them: it shows the dashboard and emits `tray_action_requested`; the dashboard tries without a PIN, prompts on `bad_pin`, and calls this command, which sends `VerifyPin` to the agent first (allowed when no PIN is set, rate limited like every PIN check) and only then runs the action. Fails closed with `unreachable` when the agent is down; an administrator can still run `screentime-agent --reset-network`. |
+| `open_dashboard` | none | "Open Tether" in the tray panel: hides the panel, shows and focuses the dashboard. |

@@ -15,6 +15,7 @@ import { WeeklyChart } from "./components/WeeklyChart";
 import { Sidebar, type TabKey } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
 import { BlockOverlay } from "./components/BlockOverlay";
+import { TrayPanel } from "./components/TrayPanel";
 import { LimitsPage } from "./pages/LimitsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { TodayPage } from "./pages/TodayPage";
@@ -45,6 +46,15 @@ export function App() {
 
   if (isOverlay) {
     return <BlockOverlay />;
+  }
+  let isTray = window.location.search.includes("view=tray");
+  try {
+    if (!isTray && getCurrentWindow().label === "tray") isTray = true;
+  } catch {
+    // Non-Tauri fallback
+  }
+  if (isTray) {
+    return <TrayPanel />;
   }
   return <MainDashboard />;
 }
