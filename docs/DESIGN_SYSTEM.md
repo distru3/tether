@@ -113,7 +113,7 @@ Both fonts are bundled (fontsource); the Tauri CSP blocks remote fonts.
 | Limits | Every rule in one place | Phase 1 |
 | Budget editor | Change a limit, see when it applies | Phase 1 |
 | Settings | Four short groups | Phase 1 |
-| Today | Time left, day strip, budget tiles | Done (Phase 2) |
+| Today | Time left, day strip, budget tiles | Done (Phase 2), with the suggestion from last week |
 | Block screen | Pause and choose | Done, with reasons; borrowing waits on a PIN decision |
 | Timer and tray | Glance | Done (Phase 2): timer palette, tray panel |
 | Activity | The week against the limits | Done, with reasons |

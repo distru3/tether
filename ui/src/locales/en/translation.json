@@ -581,7 +581,11 @@
     "websitesFiltered": "Websites are filtered",
     "websitesOpen": "Websites aren't filtered",
     "familyDnsOn": "Family DNS on",
-    "websitesHint": "Block sites or turn on Family DNS on Limits"
+    "websitesHint": "Block sites or turn on Family DNS on Limits",
+    "suggestEyebrow": "From last week",
+    "suggestBody": "{{name}} was open about {{amount}} a day last week, and no budget covers it. Add one?",
+    "suggestAdd": "Add a budget",
+    "suggestLater": "Not now"
   },
   "tray": {
     "resetLabel": "Reset network settings",

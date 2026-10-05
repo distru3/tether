@@ -1795,3 +1795,37 @@ body {
 .tt-act-why li > span:last-child {
   text-align: end;
 }
+
+/* Today: a suggestion from last week (most used app with no budget). */
+.tt-suggest {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.tt-suggest-text {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tt-suggest-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tt-suggest-text p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.tt-suggest-actions {
+  display: flex;
+  gap: 8px;
+  margin-inline-start: auto;
+}

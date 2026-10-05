@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { Moon, Pencil, ShieldCheck, ShieldOff } from "lucide-react";
+import { Lightbulb, Moon, Pencil, ShieldCheck, ShieldOff } from "lucide-react";
 import { listManualBlocks } from "../api";
 import type { BudgetHue } from "../budgetHue";
 import { isHiddenDomain } from "../domains";
-import { formatDayLabel, formatDuration, targetLabel } from "../format";
+import { formatDayLabel, formatDuration, shiftDay, targetLabel } from "../format";
+import { suggestBudget, type BudgetSuggestion } from "../activityModel";
 import { Amount } from "../components/Amount";
 import { clockLabel, daysLabel, limitRule } from "../limitText";
 import { useDowntime } from "../hooks/useDowntime";
+import { useWeekDetail } from "../hooks/useWeekDetail";
 import type { useLedgerActions } from "../hooks/useLedgerActions";
 import {
     budgetStates,
@@ -146,6 +148,14 @@ export function TodayPage({ summary, catalog, statusInfo, viewDay, isViewingToda
                         </button>
                     </section>
                 )
+            )}
+
+            {isViewingToday && budgets.length + (total ? 1 : 0) > 0 && (
+                <Suggestion
+                    viewDay={viewDay}
+                    catalog={catalog}
+                    onAdd={(appId) => actions.openEditor({ kind: "app", id: appId }, null)}
+                />
             )}
 
             <section className="tt-today-cards" aria-label={t("today.rulesLabel")}>
@@ -367,6 +377,69 @@ function BudgetTile({
                 </button>
             </div>
         </article>
+    );
+}
+
+// ------------------------------------------------------------ suggestion
+
+const DISMISSED_KEY = "tether.suggestionDismissed";
+
+/** App id → the day key it was dismissed on. Per viewer, best effort. */
+function readDismissed(): Record<string, number> {
+    try {
+        const raw = window.localStorage.getItem(DISMISSED_KEY);
+        const parsed: unknown = raw ? JSON.parse(raw) : {};
+        return parsed && typeof parsed === "object" ? (parsed as Record<string, number>) : {};
+    } catch {
+        return {};
+    }
+}
+
+function writeDismissed(map: Record<string, number>) {
+    try {
+        window.localStorage.setItem(DISMISSED_KEY, JSON.stringify(map));
+    } catch {
+        // Storage unavailable: the card just comes back next time.
+    }
+}
+
+/**
+ * "From last week": the most used app no budget covers (activityModel
+ * `suggestBudget`), offered as a new budget. "Not now" hides that app's
+ * suggestion for a week.
+ */
+function Suggestion({ viewDay, catalog, onAdd }: { viewDay: number; catalog: CatalogDto | null; onAdd: (appId: number) => void }) {
+    const { t } = useTranslation();
+    const { summaries, loading } = useWeekDetail(shiftDay(viewDay, -1));
+    const [dismissed, setDismissed] = useState(readDismissed);
+    const suggestion: BudgetSuggestion | null = useMemo(() => suggestBudget(catalog, summaries), [catalog, summaries]);
+    if (loading || !suggestion) return null;
+    const when = dismissed[String(suggestion.appId)];
+    if (typeof when === "number" && when <= viewDay && viewDay < shiftDay(when, 7)) return null;
+
+    const dismiss = () => {
+        const next = { ...dismissed, [String(suggestion.appId)]: viewDay };
+        writeDismissed(next);
+        setDismissed(next);
+    };
+    return (
+        <section className="tt-card tt-suggest" aria-labelledby="today-suggest">
+            <span className="tt-today-card-icon tt-today-card-icon--plum" aria-hidden="true">
+                <Lightbulb size={20} />
+            </span>
+            <div className="tt-suggest-text">
+                <h2 id="today-suggest" className="tt-suggest-eyebrow">{t("today.suggestEyebrow")}</h2>
+                <p>{t("today.suggestBody", { name: suggestion.label, amount: formatDuration(suggestion.avgSeconds) })}</p>
+            </div>
+            <div className="tt-suggest-actions">
+                <button type="button" className="tt-btn" onClick={dismiss}>
+                    {t("today.suggestLater")}
+                </button>
+                <button type="button" className="tt-btn tt-btn--primary" onClick={() => onAdd(suggestion.appId)}>
+                    {t("today.suggestAdd")}
+                </button>
+            </div>
+        </section>
     );
 }
 

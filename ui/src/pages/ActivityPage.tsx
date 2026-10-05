@@ -1,8 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import i18n from "../i18n";
-import { blockReasons, getDaySummary, getWeeklySummary } from "../api";
 import type { BudgetHue } from "../budgetHue";
 import { dayKeyToDate, formatDuration, shiftDay, targetLabel, weekdayShortNames } from "../format";
 import {
@@ -11,13 +10,10 @@ import {
     dayByHue,
     STACK_ORDER,
     totalBudgetOn,
-    weekDays,
     weekTopApps,
 } from "../activityModel";
 import type { CatalogDto } from "../types/generated/CatalogDto";
-import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
-import type { WeeklySummaryDto } from "../types/generated/WeeklySummaryDto";
-import type { BlockReasonCountDto } from "../types/generated/BlockReasonCountDto";
+import { useWeekDetail } from "../hooks/useWeekDetail";
 
 interface ActivityPageProps {
     catalog: CatalogDto | null;
@@ -40,42 +36,12 @@ function shortDate(day: number): string {
 export function ActivityPage({ catalog, today, now, onOpenDay }: ActivityPageProps) {
     const { t } = useTranslation();
     const [endDay, setEndDay] = useState(today);
-    const [week, setWeek] = useState<WeeklySummaryDto | null>(null);
-    const [summaries, setSummaries] = useState<Map<number, DaySummaryDto>>(new Map());
-    const [loading, setLoading] = useState(true);
-    const [reasons, setReasons] = useState<BlockReasonCountDto[]>([]);
+    const { days, week, summaries, reasons, loading } = useWeekDetail(endDay);
 
     // Follow the day rollover while showing the current week.
     useEffect(() => {
         setEndDay((prev) => (prev > today ? today : prev));
     }, [today]);
-
-    const days = useMemo(() => weekDays(endDay), [endDay]);
-
-    useEffect(() => {
-        let live = true;
-        setLoading(true);
-        (async () => {
-            const [w, why, ...daySummaries] = await Promise.all([
-                getWeeklySummary(endDay).catch(() => null),
-                blockReasons(days[0] ?? endDay, endDay).catch(() => null),
-                ...days.map((d) => getDaySummary(d).catch(() => null)),
-            ]);
-            if (!live) return;
-            setReasons(why?.counts ?? []);
-            const map = new Map<number, DaySummaryDto>();
-            daySummaries.forEach((s, i) => {
-                const day = days[i];
-                if (s && day !== undefined && "apps" in s) map.set(day, s);
-            });
-            setWeek(w);
-            setSummaries(map);
-            setLoading(false);
-        })();
-        return () => {
-            live = false;
-        };
-    }, [endDay, days]);
 
     const totals = days.map((d) => week?.days.find((x) => x.day === d)?.total_seconds ?? summaries.get(d)?.total_seconds ?? 0);
     const weekTotal = totals.reduce((a, b) => a + b, 0);

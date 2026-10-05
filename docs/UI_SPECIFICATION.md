@@ -65,6 +65,9 @@ Phase 2 of `docs/DESIGN_SYSTEM.md`: time **left** first. The day picker in the t
 | Budget tiles (one per enabled app/category limit): tint fills to the share left,        |
 | status pill, "20m left" / "Back at 4 AM", apps that counted, Edit                       |
 +-----------------------------------------------------------------------------------------+
+| Suggestion (today only, when one applies): "From last week" · "Chrome was open about    |
+| 1h 8m a day last week, and no budget covers it. Add one?"   [Not now] [Add a budget]    |
++-----------------------------------------------------------------------------------------+
 | Schedule card (active or next schedule)   |  Websites card (sites blocked, Family DNS)  |
 +-----------------------------------------------------------------------------------------+
 | Most used (UsageAside)                    |  This week (WeeklyChart)                    |
@@ -77,6 +80,7 @@ All numbers come from `ui/src/todayModel.ts` (pure functions, `now` passed in):
 - **Headline** priority: total used up, a budget done, total low, a budget low, else "You're on track today" ("Here's your day so far" with no budgets). Past days show the date.
 - **`stripSegments`**: usage intervals placed on the agent's day (`dayWindowStart` = midnight + `day_start_minutes`), coloured by the budget the app counts toward (`hueForApp`: its own app limit, else a category limit on its primary category or a tag, else "Everything else"), merged when the same colour is less than 90 s apart.
 - **`scheduleBands` / `scheduleOutlook`**: enabled downtime schedules that overlap the day, hatched on the strip. An occurrence belongs to the weekday it starts on, as in `st_core::schedules` (Friday's 22:00-07:00 runs into Saturday morning). The subtitle names the schedule in force or the next one to start.
+- **Suggestion** (`suggestBudget` in `ui/src/activityModel.ts`, data from `useWeekDetail` over the seven days before today): the most used app that no enabled budget covers, has no switched-off budget of its own, and whose primary category can take a limit (`limitable`), if it averaged at least 45 min a day over the days that loaded. "Add a budget" opens the budget editor for that app; nothing changes until the person saves, and adding a budget only tightens, so no PIN. "Not now" hides that app's suggestion for seven days (per viewer, `localStorage` key `tether.suggestionDismissed`, best effort). Shown only on today and only when at least one budget exists; with none, the "No budgets yet" card already offers one.
 - Strip labels sit at their real positions (start, +6 h, +12 h, +18 h, end, "now"); labels near "now" are hidden. In Arabic the strip runs right to left with the page.
 
 Tiles use the budget hue tokens (`tt-hue-*`: `--hue`, `--hue-tile`, `--hue-fill`, `--hue-ink`). "Most used" bars use the same hue as the strip; the category is a neutral button that opens the categorize dialog (the old palette-coloured pills, an accessibility gap, are gone). "This week" bars are buttons that open that day; the viewed day is orange.
@@ -444,5 +448,7 @@ Implements Phase 1 of `docs/DESIGN_SYSTEM.md`:
 - **Installer**: styled NSIS installer, see `packaging/README.md`.
 - The category-pill contrast gap from Phase 1 is gone (neutral category buttons).
 - **Activity** page (Section 4).
-- **Not yet**: Phase 4 agent work (custom budget groups, borrowing, reasons, suggestions).
+- **Block-screen reasons** (Section 5B) and the Activity "When time ran out" card.
+- **Suggestion from last week** on Today (Section 3).
+- **Not yet**: custom budget groups; borrowing time (it would let a blocked app run without the PIN, so it waits on an owner decision).
 

@@ -88,3 +88,49 @@ export function chartMaxSeconds(values: number[]): number {
     const max = Math.max(3600, ...values);
     return Math.ceil(max / 3600) * 3600;
 }
+
+export interface BudgetSuggestion {
+    appId: number;
+    label: string;
+    /** Average use per loaded day, seconds. */
+    avgSeconds: number;
+}
+
+/** Average a day's use must reach before an app is worth a suggestion. */
+export const SUGGEST_MIN_AVG_SECONDS = 45 * 60;
+
+/**
+ * Today's "from last week" card: the most used app that no budget covers,
+ * if it averaged at least 45 minutes a day. Apps in a category that can't
+ * take a limit (`block_only`, `never_block`) are skipped. Adding a budget
+ * only tightens, so the card never needs the PIN.
+ */
+export function suggestBudget(
+    catalog: CatalogDto | null,
+    summaries: ReadonlyMap<number, DaySummaryDto>,
+    minAvgSeconds = SUGGEST_MIN_AVG_SECONDS,
+): BudgetSuggestion | null {
+    if (!catalog || summaries.size === 0) return null;
+    const totals = new Map<number, { label: string; seconds: number }>();
+    for (const summary of summaries.values()) {
+        for (const row of summary.apps) {
+            const t = totals.get(row.id) ?? { label: row.label, seconds: 0 };
+            t.seconds += row.seconds;
+            totals.set(row.id, t);
+        }
+    }
+    let best: BudgetSuggestion | null = null;
+    for (const [appId, { label, seconds }] of totals) {
+        const avgSeconds = Math.round(seconds / summaries.size);
+        if (avgSeconds < minAvgSeconds || (best && avgSeconds <= best.avgSeconds)) continue;
+        const app = catalog.apps.find((a) => a.id === appId);
+        if (!app) continue;
+        const kind = catalog.categories.find((c) => c.id === app.primary_category)?.kind;
+        if (kind !== undefined && kind !== "limitable") continue;
+        if (hueForApp(appId, catalog).limit !== null) continue;
+        // A switched-off budget of its own: the person already decided.
+        if (catalog.limits.some((l) => l.target.kind === "app" && l.target.id === appId)) continue;
+        best = { appId, label, avgSeconds };
+    }
+    return best;
+}
