@@ -22,7 +22,15 @@ if (!root) {
 // Apply RTL/LTR direction based on saved language.
 initDirection();
 
-getCurrentWindow().show();
+// Every window loads this page, but only the dashboard shows itself once
+// loaded. The tray panel (`tray`) and the block screen (`overlay`) are
+// always-on-top windows the host opens when needed (tray_panel.rs,
+// overlay_bridge.rs); showing them here put an invisible window over the
+// dashboard at startup that swallowed clicks.
+const current = getCurrentWindow();
+if (current.label === "main") {
+    void current.show();
+}
 
 ReactDOM.createRoot(root).render(
     <React.StrictMode>

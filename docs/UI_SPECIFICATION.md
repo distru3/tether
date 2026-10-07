@@ -198,6 +198,7 @@ Shown on first run (`localStorage` `screentime_first_run_completed`). Four steps
 - A left click on the tray icon opens a 360x380 window (`tray`, `?view=tray`) next to the taskbar: the ring (time left of the total budget, or time used), time used and the active or next schedule, one row per budget (time left, "Done, back at …" or "Extra time until …", a bar in the budget's hue), and **Open Tether** (`open_dashboard`). Right click still shows the menu.
 - Placement (`panel_origin`, unit-tested): opens from whichever side the taskbar is on (the side the click is outside the monitor's work area), centered on the click, clamped on screen; sizes are logical pixels scaled by the monitor.
 - Hides on Escape and when it loses focus; a click on the tray icon right after a focus-loss hide is ignored, so clicking the icon toggles it closed instead of reopening it.
+- Only the host shows it (`tray_panel::toggle`). `main.tsx` shows its own window once loaded only for `main`; before 2026-10-07 it showed every window, so the tray panel and the transparent block-screen window opened at startup over the dashboard and caught its clicks.
 - Reloads its numbers every time it opens (`tray_panel_shown`) and every 30 s while open, with the same pure functions as Today (`todayModel.ts`). Follows the app theme; mirrors in Arabic.
 - The tray menu's "Reset network settings" and "Stop Tether and its service" go through the dashboard's PIN prompt (`run_tray_action`, see `docs/IPC_CATALOG.md`).
 
