@@ -44,6 +44,16 @@ jobs:
                     libx11-dev \
                     libxss-dev
 
+            # tauri.conf.json bundles the agent and session helper from
+            # ui/src-tauri/bin (git-ignored; packaging/build-installer.ps1 fills
+            # it). tauri-build only checks that the files exist, so empty
+            # placeholders are enough for clippy and the tests.
+            - name: Placeholder bundled binaries
+              shell: bash
+              run: |
+                  mkdir -p ui/src-tauri/bin
+                  touch ui/src-tauri/bin/screentime-agent.exe ui/src-tauri/bin/screentime-session.exe
+
             - run: cargo fmt --all -- --check
             - run: cargo clippy --workspace --all-targets -- -D warnings
             - run: cargo test --workspace --all-features

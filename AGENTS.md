@@ -87,6 +87,9 @@ cd ui && npm run tauri dev
 #   tests:   cargo test --workspace --target x86_64-pc-windows-gnu
 #            with CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUNNER=wine (apt: wine64 mingw-w64)
 # The Linux-native build of the agent/session is not maintained (out of scope).
+# Everywhere (CI included), the Tauri crate's build script needs
+# ui/src-tauri/bin/screentime-{agent,session}.exe to exist (git-ignored);
+# CI creates empty placeholders, real builds copy them in (packaging/build-installer.ps1).
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings   # zero-warning policy enforced
 cargo test --workspace                                   # ~190 tests
