@@ -453,6 +453,9 @@ fn relaunch_session_helper() {
     let Ok(own) = std::env::current_exe() else {
         return;
     };
+    // The service runs from its 8.3 short path; start the helper from the
+    // long one, as the logon Run entry does.
+    let own = st_win32::long_path(&own).unwrap_or(own);
     let Some(exe) = helper_candidates(&own, "screentime-session.exe")
         .into_iter()
         .find(|p| p.is_file())

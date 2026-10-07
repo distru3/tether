@@ -96,7 +96,9 @@ The fonts are embedded and registered privately for the installer process
 
 - **Pre-install**: stops `ScreentimeAgent` and closes the helper and the app so
   files are not locked.
-- **Post-install**: `screentime-agent.exe --install` and `sc start` (if the
+- **Post-install**: `screentime-agent.exe --install` (when the service is
+  already registered, from an earlier version or another folder, it is
+  re-pointed at this install's agent instead of failing) and `sc start` (if the
   service does not start, the page says so and asks for a restart instead of
   claiming it runs); one HKLM
   `Run` value `ScreentimeSession` (every user, at logon); RivaTuner

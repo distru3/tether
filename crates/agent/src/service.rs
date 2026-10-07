@@ -255,7 +255,17 @@ mod win {
     pub(super) fn install() -> Result<()> {
         let exe = current_exe_for_sc()?;
         let created = run_sc(&cli::install_create_command(&exe))?;
-        require_sc_success(&created)?;
+        // Already registered (an upgrade, or an earlier install elsewhere):
+        // carry on, so the ImagePath below points it at THIS executable.
+        // Bailing here left reinstalls running the old binary.
+        if created.status.code() == Some(cli::ERROR_SERVICE_EXISTS) {
+            println!(
+                "service already registered; pointing it at {}",
+                exe.display()
+            );
+        } else {
+            require_sc_success(&created)?;
+        }
         // sc.exe cannot carry "--service" inside binPath (single-token option
         // values), so the canonical ImagePath is written straight to the SCM
         // database afterwards; see cli::install_imagepath_command.
