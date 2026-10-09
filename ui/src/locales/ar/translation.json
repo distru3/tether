@@ -35,7 +35,8 @@
   },
   "weeklyChart": {
     "vsLastWeek": "مقارنة بالأسبوع الماضي",
-    "historyTitle": "هذا الأسبوع"
+    "historyTitle": "هذا الأسبوع",
+    "empty": "لم يُسجَّل شيء في الأيام السبعة الماضية بعد."
   },
   "limits": {
     "category": "فئة",
@@ -336,7 +337,8 @@
       "h": "س",
       "m": "د",
       "s": "ث"
-    }
+    },
+    "midnight": "منتصف الليل"
   },
   "overlay": {
     "enterPin": "أدخل رمز PIN لإضافة 15 دقيقة",
@@ -444,7 +446,7 @@
     "schedulesHint": "أثناء الجدول تعمل التطبيقات المسموح بها فقط.",
     "websites": "المواقع",
     "siteLabel": "موقع لحظره",
-    "sitePlaceholder": "احظر موقعًا، مثل reddit.com",
+    "sitePlaceholder": "موقع، مثل reddit.com",
     "block": "حظر",
     "more_zero": "+⁨{{count}}⁩",
     "more_one": "+⁨{{count}}⁩ آخر",
@@ -454,7 +456,9 @@
     "more_other": "+⁨{{count}}⁩ أخرى",
     "familyDns": "حماية DNS العائلية",
     "familyDnsHint": "تحظر المواقع غير اللائقة والضارة في كل المتصفحات",
-    "backToLimits": "› العودة إلى الحدود"
+    "backToLimits": "› العودة إلى الحدود",
+    "leftOf": "متبقٍ {{left}} من {{budget}}",
+    "leftToday": "الوقت المتبقي اليوم لـ {{name}}"
   },
   "settingsPage": {
     "title": "الإعدادات",
@@ -533,7 +537,6 @@
       "videoHint": "نتفليكس وديزني+ وتطبيقات البث الأخرى",
       "bedtime": "وقت النوم",
       "bedtimeHint": "تعمل التطبيقات المسموح بها فقط في ليالي الدراسة",
-      "bedtimeAmount": "10 م – 7 ص",
       "total": "كل وقت الشاشة",
       "totalHint": "كل تطبيق يُحسب، بما فيه الواجبات"
     },
@@ -617,7 +620,9 @@
     "suggestEyebrow": "من الأسبوع الماضي",
     "suggestBody": "كان {{name}} مفتوحًا نحو {{amount}} يوميًا الأسبوع الماضي، ولا تشمله أي ميزانية. هل تضيف واحدة؟",
     "suggestAdd": "أضف ميزانية",
-    "suggestLater": "ليس الآن"
+    "suggestLater": "ليس الآن",
+    "ringDone": "انتهى",
+    "ringDoneCaption": "استُخدمت كل الـ {{budget}}"
   },
   "tray": {
     "resetLabel": "إعادة ضبط إعدادات الشبكة",
@@ -667,7 +672,7 @@
     "days_other": "⁨{{count}}⁩ يوم",
     "topApps": "الأكثر استخدامًا هذا الأسبوع",
     "whyTitle": "عندما نفد الوقت",
-    "whyBody": "ما قيل لشاشة الحظر عمّا كان سيحدث بعدها:",
+    "whyBody": "الإجابات التي اختيرت على شاشة الحظر هذا الأسبوع.",
     "whyEmpty": "لا توجد إجابات هذا الأسبوع."
   }
 }

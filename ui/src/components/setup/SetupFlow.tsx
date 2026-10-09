@@ -4,6 +4,7 @@ import { Moon, User, Users } from "lucide-react";
 import { applyLanguage } from "../../i18n";
 import * as api from "../../api";
 import { formatDuration } from "../../format";
+import { clockLabel } from "../../limitText";
 import type { BudgetHue } from "../../budgetHue";
 import type { LimitTargetDto } from "../../types/generated/LimitTargetDto";
 
@@ -252,7 +253,8 @@ export function SetupFlow({ onComplete }: SetupFlowProps) {
 }
 
 function templateAmount(tpl: Template, t: (key: string, opts?: Record<string, unknown>) => string): string {
-    if (tpl.target === "bedtime") return t("setup.tpl.bedtimeAmount");
+    // Same clock format as the rest of the app ("10 PM – 7 AM").
+    if (tpl.target === "bedtime") return `${clockLabel(BEDTIME.start)} – ${clockLabel(BEDTIME.end)}`;
     const weekend = tpl.weekdays[5];
     const base = formatDuration(tpl.defaultMinutes * 60);
     if (weekend !== null && weekend !== undefined) {

@@ -21,7 +21,7 @@ import {
 import type { OverlayActiveStateDto } from "../api";
 import { blockReason, type BlockReason } from "../blockModel";
 import { formatDuration, setDayStartMinutes, targetLabel, todayKey } from "../format";
-import { clockLabel, limitRule } from "../limitText";
+import { backAtLabel, clockLabel, limitRule } from "../limitText";
 import { dayWindowStart, nowPosition } from "../todayModel";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
@@ -346,7 +346,7 @@ export function BlockOverlay() {
   const app = state.label || t("overlay.thisApp");
   const guardian = ctx.status?.profile === "guardian";
   const inSeconds = Math.max(60, Math.round((reason.until.getTime() - now.getTime()) / 1000));
-  const back = t("overlay.backAt", { time: timeOf(reason.until), in: formatDuration(inSeconds - (inSeconds % 60)) });
+  const back = t("overlay.backAt", { time: backAtLabel(reason.until), in: formatDuration(inSeconds - (inSeconds % 60)) });
 
   let eyebrow: string | null = null;
   let title: string;

@@ -102,7 +102,7 @@
   --budget-video: #5CC2A6;
   --budget-video-tile: #18332E;
   --budget-video-fill: #23504A;
-  --budget-other: #6E6185;
+  --budget-other: #8A7CA6;
   --budget-social-fill: #57283C;
   --budget-other-tile: #2A2238;
   --budget-other-fill: #3A3150;
@@ -111,6 +111,9 @@
   --budget-video-ink: #B5DDD1;
   --budget-other-ink: #D9CCF2;
   --ring-track: #3A2752;
+  /* Weekly bars: visible on the card (3:1), unlike the ring track. */
+  --week-bar: #6B5A8C;
+  --week-bar-hover: #8A7CA6;
   --strip-bg: #1C1229;
   --strip-band: #34234D;
 }
@@ -221,6 +224,8 @@
   --budget-video-ink: #1D4A3D;
   --budget-other-ink: #4E4363;
   --ring-track: #ECE5F6;
+  --week-bar: #DDD3EC;
+  --week-bar-hover: #C9BBE0;
   --strip-bg: #F4F1F8;
   --strip-band: #E2D8F2;
 }

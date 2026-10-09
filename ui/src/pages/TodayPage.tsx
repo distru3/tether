@@ -7,7 +7,7 @@ import { isHiddenDomain } from "../domains";
 import { formatDayLabel, formatDuration, shiftDay, targetLabel } from "../format";
 import { suggestBudget, type BudgetSuggestion } from "../activityModel";
 import { Amount } from "../components/Amount";
-import { clockLabel, daysLabel, limitRule } from "../limitText";
+import { backAtLabel, clockLabel, daysLabel, limitRule } from "../limitText";
 import { useDowntime } from "../hooks/useDowntime";
 import { useWeekDetail } from "../hooks/useWeekDetail";
 import type { useLedgerActions } from "../hooks/useLedgerActions";
@@ -175,6 +175,8 @@ function Ring({ total, used, isToday, loading }: { total: TotalState | null; use
     const r = 68;
     const c = 2 * Math.PI * r;
     const share = total && total.budget > 0 ? total.left / total.budget : 0;
+    // Today's total is used up: say it in words, like the headline does.
+    const usedUp = isToday && total !== null && total.budget > 0 && total.left <= 0;
     const label = total
         ? t("today.ringAria", { left: formatDuration(total.left), budget: formatDuration(total.budget) })
         : t("today.ringAriaUsed", { amount: formatDuration(used) });
@@ -194,11 +196,13 @@ function Ring({ total, used, isToday, loading }: { total: TotalState | null; use
                 )}
             </svg>
             <div className="tt-ring-value" aria-hidden="true">
-                <span className="tt-ring-number">
-                    <Amount seconds={total ? total.left : used} />
+                <span className={`tt-ring-number${usedUp ? " tt-ring-number--word" : ""}`}>
+                    {usedUp ? t("today.ringDone") : <Amount seconds={total ? total.left : used} />}
                 </span>
                 <span className="tt-ring-caption">
-                    {total
+                    {usedUp && total
+                        ? t("today.ringDoneCaption", { budget: formatDuration(total.budget) })
+                        : total
                         ? t("today.ringLeft", { budget: formatDuration(total.budget) })
                         : isToday
                           ? t("today.ringUsedToday")
@@ -355,7 +359,7 @@ function BudgetTile({
                         </>
                     ) : status === "done" ? (
                         <>
-                            <span className="tt-tile-number tt-tile-number--text">{t("today.backAt", { time: timeLabel(resetAt) })}</span>
+                            <span className="tt-tile-number tt-tile-number--text">{t("today.backAt", { time: backAtLabel(resetAt) })}</span>
                             {state.apps.length > 0 && <span className="tt-tile-apps">{state.apps.join(", ")}</span>}
                         </>
                     ) : (
@@ -432,7 +436,7 @@ function Suggestion({ viewDay, catalog, onAdd }: { viewDay: number; catalog: Cat
                 <p>{t("today.suggestBody", { name: suggestion.label, amount: formatDuration(suggestion.avgSeconds) })}</p>
             </div>
             <div className="tt-suggest-actions">
-                <button type="button" className="tt-btn" onClick={dismiss}>
+                <button type="button" className="tt-btn tt-btn--outline" onClick={dismiss}>
                     {t("today.suggestLater")}
                 </button>
                 <button type="button" className="tt-btn tt-btn--primary" onClick={() => onAdd(suggestion.appId)}>

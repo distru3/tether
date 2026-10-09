@@ -67,6 +67,34 @@ export function budgetWeek(
     return [...acc.values()].map(({ n, used, ...rest }) => ({ ...rest, avgSeconds: n > 0 ? Math.round(used / n) : 0 }));
 }
 
+/**
+ * How the total-screen-time budget did across the week, from the same day
+ * totals the chart shows: average use and the days nothing was left.
+ * `totals[i]` belongs to `days[i]`; days after `today` are left out. `null`
+ * when no total budget is on.
+ */
+export function totalWeek(
+    catalog: CatalogDto | null,
+    days: number[],
+    totals: number[],
+    today: number,
+): { limit: LimitDto; avgSeconds: number; ranOut: number } | null {
+    const limit = catalog?.limits.find((l) => l.enabled && l.target.kind === "total");
+    if (!limit) return null;
+    let n = 0;
+    let used = 0;
+    let ranOut = 0;
+    days.forEach((day, i) => {
+        if (day > today) return;
+        const seconds = totals[i] ?? 0;
+        n += 1;
+        used += seconds;
+        const budget = totalBudgetOn(catalog, day);
+        if (budget !== null && seconds >= budget) ranOut += 1;
+    });
+    return { limit, avgSeconds: n > 0 ? Math.round(used / n) : 0, ranOut };
+}
+
 /** The week's most used apps, summed across the loaded days. */
 export function weekTopApps(
     summaries: ReadonlyMap<number, DaySummaryDto>,

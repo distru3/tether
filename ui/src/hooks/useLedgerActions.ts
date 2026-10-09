@@ -27,15 +27,17 @@ export interface GateRequest {
 
 /** i18n key for the human name of each setting, used in PIN prompts. */
 const SETTING_LABEL_KEYS: Record<string, string> = {
-    strict_mode: "settings.strictMode",
-    family_dns: "settings.familyDns",
-    limit_cooldown_hours: "settings.cooldown",
-    day_start_minutes: "settings.dayReset",
-    idle_threshold_secs: "settings.idleThreshold",
-    show_hud_overlay: "settings.showHud",
-    show_hud_in_fullscreen: "settings.showHudInFullscreen",
-    hud_peek_hotkey: "settings.hudPeekShortcut",
-    alert_volume: "settings.alertVolume",
+    // The names the Settings page shows, so the prompt says the same thing.
+    strict_mode: "settingsPage.strict",
+    family_dns: "limitsPage.familyDns",
+    limit_cooldown_hours: "settingsPage.cooldown",
+    day_start_minutes: "settingsPage.dayStart",
+    idle_threshold_secs: "settingsPage.idle",
+    show_hud_overlay: "settingsPage.showTimer",
+    show_hud_in_fullscreen: "settingsPage.fullscreen",
+    hud_peek_hotkey: "settingsPage.peek",
+    alert_volume: "settingsPage.chime",
+    profile: "settingsPage.profile",
 };
 
 export interface EditorRequest {

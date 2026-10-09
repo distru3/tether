@@ -27,7 +27,8 @@
   },
   "weeklyChart": {
     "vsLastWeek": "vs last week",
-    "historyTitle": "This week"
+    "historyTitle": "This week",
+    "empty": "Nothing recorded in the last seven days yet."
   },
   "limits": {
     "category": "Category",
@@ -320,7 +321,8 @@
       "h": "h",
       "m": "m",
       "s": "s"
-    }
+    },
+    "midnight": "midnight"
   },
   "overlay": {
     "enterPin": "Enter the PIN to add 15 minutes",
@@ -424,13 +426,15 @@
     "schedulesHint": "During a schedule only allowed apps open.",
     "websites": "Websites",
     "siteLabel": "Website to block",
-    "sitePlaceholder": "Block a site, like reddit.com",
+    "sitePlaceholder": "Site, like reddit.com",
     "block": "Block",
     "more_one": "+{{count}} more",
     "more_other": "+{{count}} more",
     "familyDns": "Family DNS",
     "familyDnsHint": "Blocks adult and harmful sites in every browser",
-    "backToLimits": "‹ Back to Limits"
+    "backToLimits": "‹ Back to Limits",
+    "leftOf": "{{left}} left of {{budget}}",
+    "leftToday": "Time left today for {{name}}"
   },
   "settingsPage": {
     "title": "Settings",
@@ -509,7 +513,6 @@
       "videoHint": "Netflix, Disney+ and other streaming apps",
       "bedtime": "Bedtime",
       "bedtimeHint": "Only allowed apps open on school nights",
-      "bedtimeAmount": "10 pm – 7 am",
       "total": "All screen time",
       "totalHint": "Every app counts, homework included"
     },
@@ -585,7 +588,9 @@
     "suggestEyebrow": "From last week",
     "suggestBody": "{{name}} was open about {{amount}} a day last week, and no budget covers it. Add one?",
     "suggestAdd": "Add a budget",
-    "suggestLater": "Not now"
+    "suggestLater": "Not now",
+    "ringDone": "Done",
+    "ringDoneCaption": "all {{budget}} used"
   },
   "tray": {
     "resetLabel": "Reset network settings",
@@ -627,7 +632,7 @@
     "days_other": "{{count}} days",
     "topApps": "Most used this week",
     "whyTitle": "When time ran out",
-    "whyBody": "What the block screen was told about what came next:",
+    "whyBody": "The answers given on the block screen this week.",
     "whyEmpty": "No answers this week."
   }
 }

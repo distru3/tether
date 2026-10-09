@@ -63,7 +63,7 @@ Budget hues (tile background / fill level / swatch):
 | Games | `#EEE7FF` | `#D6C9FA` | `#8F6CE6` | `#2D2150` | `#46337A` |
 | Social | `#FFE6E0` | — | `#E8705C` | `#3A1F2E` | — |
 | Video | `#DDF4EC` | `#B4E6D7` | `#2FA383` | `#18332E` | `#23504A` |
-| Everything else | — | — | `#B9AFC8` | — | `#6E6185` |
+| Everything else | — | — | `#B9AFC8` | — | `#8A7CA6` |
 
 Orange marks "now" and "attention" (running low, the primary action on the
 block screen). Do not use it for decoration.

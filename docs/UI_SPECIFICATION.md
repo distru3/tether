@@ -96,7 +96,7 @@ One page for every rule. `View = "main" | "schedules" | "websites"`; the two sub
 
 - **Header**: "Limits" plus a subtitle naming the cooldown ("Lowering a limit works right away. Raising one waits {{count}} hours…", plural keys; `subtitleNoWait` when the cooldown is 0), and "+ New budget" (`actions.startNewOrder`, opens `LimitEditorDialog`).
 - **Waiting banner**: one `tt-banner` row per `catalog.pending_limits` entry ("{{name}} changes to {{amount}} a day, {{when}}." / "{{name}} is removed {{when}}.", `formatWhen`), each with **Cancel** (`actions.cancelPendingLimit`).
-- **Budgets card**: one `tt-budget` row per limit: hue swatch, name, the rule (`limitRule`: same every day / weekday overrides), today's use against the budget (`role="progressbar"` meter, over-budget text), an on/off switch (`actions.toggleLimit`) and **Edit** (`actions.openEditor`). Paused rows dim only the swatch and meter so text keeps its contrast. Rows stack under 760px.
+- **Budgets card**: one `tt-budget` row per limit: hue swatch, name, the rule (`limitRule`: same every day / weekday overrides), time left today against the budget (`role="progressbar"` meter that empties like the Today tiles, "Used up today" when nothing is left), an on/off switch (`actions.toggleLimit`) and **Edit** (`actions.openEditor`). Paused rows dim only the swatch and meter so text keeps its contrast. Rows stack under 760px.
 - **Schedules card** (side column): each downtime schedule with its clock range (`Intl` time format), days ("Every day" / "Weekdays" / "Weekends" / list from the bitmask), and a switch; **Manage** opens the Schedules subview (`DowntimeSection`: editor, delete, always-allowed apps).
 - **Websites card** (side column): add a site inline (`addManualBlock`), up to three blocked sites as chips (hidden adult-list domains excluded via `domains.ts` `isHiddenDomain`), "+N more", and the **Family DNS** switch (`family_dns` setting). **Manage** opens the Websites subview (`WebFilteringPanel`: bulk import, search, paging, hidden-domain reveal).
 
@@ -104,8 +104,8 @@ One page for every rule. `View = "main" | "schedules" | "websites"`; the two sub
 The week against the limits. Loads the weekly totals plus each of the seven days' summaries.
 - **Header**: "38h 22m this week, 7h 22m more than last week. Stayed under 6h on 5 of 7 days." (the last sentence only with a total-screen-time budget, using each weekday's budget), and a week stepper (previous / next, never past today; arrows mirror in Arabic).
 - **Screen time by day**: stacked bars split by budget colour (`dayByHue`, the same `hueForApp` as the Today strip), a dashed line at the total budget, hour gridlines; days over the total budget in danger text. Each bar is a button that opens that day on Today. The chart is a labelled group with a text summary for screen readers.
-- **Budgets this week** (`budgetWeek`): per enabled app/category budget, the daily average and the days it ran out, over the days that loaded.
-- **Most used this week** (`weekTopApps`).
+- **Budgets this week** (`budgetWeek`): per enabled app/category budget, the daily average and the days it ran out, over the days that loaded; plus the total-screen-time budget (`totalWeek`, from the same day totals as the chart).
+- **Most used this week** (`weekTopApps`), under the chart in the main column.
 - **When time ran out**: counts of the block-screen answers for the week (`BlockReasons`), as bars.
 - Not yet: borrowing.
 
@@ -195,7 +195,7 @@ Shown on first run (`localStorage` `screentime_first_run_completed`). Four steps
 ---
 
 ### C. Tray panel (`TrayPanel.tsx`, `ui/src-tauri/src/tray_panel.rs`)
-- A left click on the tray icon opens a 360x380 window (`tray`, `?view=tray`) next to the taskbar: the ring (time left of the total budget, or time used), time used and the active or next schedule, one row per budget (time left, "Done, back at …" or "Extra time until …", a bar in the budget's hue), and **Open Tether** (`open_dashboard`). Right click still shows the menu.
+- A left click on the tray icon opens a 360px-wide window, as tall as its content (the panel reports its height and `fit_tray_panel` resizes it against the taskbar, 160-560px), (`tray`, `?view=tray`) next to the taskbar: the ring (time left of the total budget, or time used), time used and the active or next schedule, one row per budget (time left, "Done, back at …" or "Extra time until …", a bar in the budget's hue), and **Open Tether** (`open_dashboard`). Right click still shows the menu.
 - Placement (`panel_origin`, unit-tested): opens from whichever side the taskbar is on (the side the click is outside the monitor's work area), centered on the click, clamped on screen; sizes are logical pixels scaled by the monitor.
 - Hides on Escape and when it loses focus; a click on the tray icon right after a focus-loss hide is ignored, so clicking the icon toggles it closed instead of reopening it.
 - Only the host shows it (`tray_panel::toggle`). `main.tsx` shows its own window once loaded only for `main`; before 2026-10-07 it showed every window, so the tray panel and the transparent block-screen window opened at startup over the dashboard and caught its clicks.
@@ -453,3 +453,16 @@ Implements Phase 1 of `docs/DESIGN_SYSTEM.md`:
 - **Suggestion from last week** on Today (Section 3).
 - **Not yet**: custom budget groups; borrowing time (it would let a blocked app run without the PIN, so it waits on an owner decision).
 
+---
+
+## 18. Polish pass (2026-10-09)
+
+- **Setup** shows the title bar (the window has no system frame, so without it setup could not be moved, minimized or closed). Steps are top-aligned, so the heading stays put.
+- **Scrolling**: switching tabs, or opening and leaving the Schedules and Websites subviews, starts at the top (`scrollTop.ts`).
+- **PIN prompts** name settings as the Settings page does (`SETTING_LABEL_KEYS` in `useLedgerActions.ts`).
+- **"Back at midnight"** instead of "12 AM" on tiles, the tray panel and the block screen (`limitText.ts` `backAtLabel`). Setup's bedtime uses the app's clock format.
+- **Dialogs** put the main button last (PIN prompt, recovery, PIN setup), like the budget editor.
+- **Limits** budget meters show time left; the "Waiting" banner uses the neutral plum panel, not the warning tint.
+- **Today**: the ring says "Done · all 6h used" when the total is used up; tiles are shorter (168px); the week card shows a sentence instead of empty bars and "−100%" when nothing is recorded, and its bars fill the card's height.
+- **Dark theme**: "Everything else" `#8A7CA6` and weekly bars (`--week-bar`) meet 3:1 on cards; "Not now" is an outline button.
+- **Activity**: most-used apps under the chart; the budget table includes total screen time.

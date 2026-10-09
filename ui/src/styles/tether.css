@@ -164,6 +164,13 @@
   min-width: 0;
 }
 
+/* A main column holding several cards. */
+.tt-col-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
 .tt-col-side {
   flex: 1 1 320px;
   min-width: 0;
@@ -287,8 +294,9 @@
   gap: 12px;
   border-radius: 18px;
   padding: 12px 16px;
-  background: var(--color-accent-subtle);
-  border: 1px solid var(--border-warning);
+  /* Information, not a warning: a soft plum panel, not the error tint. */
+  background: var(--color-primary-subtle);
+  border: 1px solid var(--border-card);
   color: var(--text-primary);
 }
 
@@ -439,7 +447,9 @@
 
 /* ---- Setup ---- */
 .tt-setup {
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   background: var(--bg-app);
   color: var(--text-primary);
   display: flex;
@@ -474,7 +484,9 @@
   margin: 0 auto;
   display: flex;
   flex-direction: column;
-  justify-content: center;
+  /* Top-aligned at a fixed offset, so the heading stays put between steps. */
+  justify-content: flex-start;
+  padding-top: clamp(0px, 3vh, 32px);
   gap: 24px;
 }
 
@@ -762,6 +774,10 @@
   font-variant-numeric: tabular-nums;
 }
 
+.tt-ring-number--word {
+  font-size: 24px;
+}
+
 .tt-ring-caption {
   font-size: 13px;
   color: var(--text-muted);
@@ -892,7 +908,8 @@
 .tt-tile {
   position: relative;
   overflow: hidden;
-  min-height: 210px;
+  /* Tall enough for the fill to read as a gauge, without an empty middle. */
+  min-height: 168px;
   border-radius: 26px;
   background: var(--hue-tile);
   color: var(--text-primary);
@@ -1254,7 +1271,9 @@ button.tt-usage-cat:hover {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
   gap: 8px;
-  align-items: end;
+  /* Bars grow with the card when it is stretched beside "Most used". */
+  flex: 1;
+  align-items: stretch;
   min-height: 190px;
 }
 
@@ -1282,7 +1301,8 @@ button.tt-usage-cat:hover {
 
 .tt-week-track {
   position: relative;
-  height: 130px;
+  flex: 1;
+  min-height: 130px;
   border-radius: 12px;
   overflow: hidden;
 }
@@ -1292,11 +1312,11 @@ button.tt-usage-cat:hover {
   inset-inline: 0;
   bottom: 0;
   border-radius: 10px;
-  background: var(--ring-track);
+  background: var(--week-bar);
 }
 
 .tt-week-col:hover .tt-week-track > span {
-  background: var(--border-strong);
+  background: var(--week-bar-hover);
 }
 
 .tt-week-col--selected .tt-week-track > span,
@@ -1344,9 +1364,11 @@ button.tt-usage-cat:hover {
 
 /* ---- Tray panel (window `tray`) ---- */
 .tt-tray {
-  /* The window is transparent; the card leaves room for its shadow. */
+  /* The window is transparent; the card leaves room for its shadow. Its
+     height is its content: TrayPanel reports it and the host sizes the
+     window to match (fit_tray_panel). */
   position: fixed;
-  inset: 8px;
+  inset: 8px 8px auto;
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -1371,8 +1393,8 @@ button.tt-usage-cat:hover {
 
 .tt-tray-ring {
   position: relative;
-  width: 78px;
-  height: 78px;
+  width: 88px;
+  height: 88px;
   flex: none;
 }
 
@@ -1395,7 +1417,7 @@ button.tt-usage-cat:hover {
   justify-content: center;
   font-family: var(--font-display);
   font-weight: 700;
-  font-size: 12px;
+  font-size: 14px;
   white-space: nowrap;
 }
 
@@ -1419,15 +1441,14 @@ button.tt-usage-cat:hover {
 
 .tt-tray-note {
   margin: 0;
-  flex: 1;
 }
 
 .tt-tray-list {
   list-style: none;
   margin: 0;
   padding: 0;
-  flex: 1;
-  min-height: 0;
+  /* Many budgets scroll instead of growing past the screen. */
+  max-height: 320px;
   overflow-y: auto;
   display: flex;
   flex-direction: column;

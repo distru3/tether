@@ -14,6 +14,7 @@ import { Toasts } from "./components/Toasts";
 import { WeeklyChart } from "./components/WeeklyChart";
 import { Sidebar, type TabKey } from "./components/Sidebar";
 import { TitleBar } from "./components/TitleBar";
+import { scrollMainToTop } from "./scrollTop";
 import { BlockOverlay } from "./components/BlockOverlay";
 import { TrayPanel } from "./components/TrayPanel";
 import { LimitsPage } from "./pages/LimitsPage";
@@ -124,10 +125,14 @@ function MainDashboard() {
   }
 
   const selectTab = (tab: TabKey) => {
-    if (!document.startViewTransition) {
+    const show = () => {
       setActiveTab(tab);
+      scrollMainToTop();
+    };
+    if (!document.startViewTransition) {
+      show();
     } else {
-      document.startViewTransition(() => setActiveTab(tab));
+      document.startViewTransition(show);
     }
   };
 
@@ -198,8 +203,15 @@ function MainDashboard() {
 
 
   // Show onboarding overlay on first run
+  // The window has no system frame, so setup needs the title bar too:
+  // without it the window cannot be moved, minimized or closed.
   if (showOnboarding) {
-    return <SetupFlow onComplete={handleOnboardingComplete} />;
+    return (
+      <div className="app-root">
+        <TitleBar />
+        <SetupFlow onComplete={handleOnboardingComplete} />
+      </div>
+    );
   }
 
   return (

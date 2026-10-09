@@ -604,7 +604,8 @@ pub fn run() {
             run_tray_action,
             record_block_reason,
             block_reasons,
-            tray_panel::open_dashboard
+            tray_panel::open_dashboard,
+            tray_panel::fit_tray_panel
         ])
         .setup(|app| {
             if let Some(overlay_win) = app.get_webview_window("overlay") {

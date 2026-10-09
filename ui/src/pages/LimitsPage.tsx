@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { scrollMainToTop } from "../scrollTop";
 import { useTranslation } from "react-i18next";
 import { Clock3 } from "lucide-react";
 import { addManualBlock, describeError, listManualBlocks } from "../api";
@@ -49,6 +50,9 @@ export function LimitsPage({ catalog, summary, statusInfo, actions, notify, onSe
     const { t } = useTranslation();
     const [view, setView] = useState<View>("main");
     const downtime = useDowntime(notify, actions.guarded);
+    // A sub-view opens at its top, not at the scroll position of the card
+    // that opened it.
+    useEffect(scrollMainToTop, [view]);
 
     if (view === "schedules" || view === "websites") {
         return (
@@ -179,7 +183,9 @@ function BudgetRow({
     const name = targetLabel(limit.target, catalog);
     const { used, budget } = todayUse(limit, summary);
     const over = limit.enabled && budget > 0 && used >= budget;
-    const share = budget > 0 ? Math.min(100, Math.round((used / budget) * 100)) : 0;
+    // Time left, like the tiles on Today: the bar empties as the day goes on.
+    const left = Math.max(0, budget - used);
+    const share = budget > 0 ? Math.min(100, Math.round((left / budget) * 100)) : 0;
     return (
         <li className={`tt-budget tt-hue-${hueFor(limit.target, catalog)} ${limit.enabled ? "" : "tt-budget--off"}`}>
             <span className="tt-swatch" aria-hidden="true">
@@ -193,12 +199,12 @@ function BudgetRow({
                 <span className={over ? "tt-over" : undefined}>
                     {over
                         ? t("limitsPage.usedUp")
-                        : t("limitsPage.usedOf", { used: formatDuration(used), budget: formatDuration(budget) })}
+                        : t("limitsPage.leftOf", { left: formatDuration(left), budget: formatDuration(budget) })}
                 </span>
                 <span
                     className="tt-meter"
                     role="progressbar"
-                    aria-label={t("limitsPage.usedToday", { name })}
+                    aria-label={t("limitsPage.leftToday", { name })}
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={share}

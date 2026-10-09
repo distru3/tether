@@ -11,6 +11,15 @@ export function clockLabel(minute: number): string {
     return d.toLocaleTimeString(i18n.language, { hour: "numeric", minute: minute % 60 === 0 ? undefined : "2-digit" });
 }
 
+/**
+ * A "back at …" time: "midnight" rather than "12 AM", which reads like noon
+ * to many people. Other times as `clockLabel`.
+ */
+export function backAtLabel(d: Date): string {
+    const minute = d.getHours() * 60 + d.getMinutes();
+    return minute === 0 ? i18n.t("time.midnight") : clockLabel(minute);
+}
+
 /** Which days a schedule runs (Monday-first bit mask). */
 export function daysLabel(mask: number): string {
     if ((mask & 127) === 127) return i18n.t("limitsPage.everyDay");

@@ -35,8 +35,10 @@ export function WeeklyChart({ week, viewDay, loading, onSelectDay }: WeeklyChart
     const days = week.days;
     const total = days.reduce((sum, day) => sum + day.total_seconds, 0);
     const maxSeconds = days.reduce((max, day) => Math.max(max, day.total_seconds), 1);
+    // A change is only meaningful when both weeks have use; a fresh install
+    // would otherwise show "−100%".
     const delta =
-        week.previous_week_total > 0 ? Math.round(((total - week.previous_week_total) / week.previous_week_total) * 100) : null;
+        week.previous_week_total > 0 && total > 0 ? Math.round(((total - week.previous_week_total) / week.previous_week_total) * 100) : null;
     const vsLastWeek = t("weeklyChart.vsLastWeek");
     const deltaLabel =
         delta === null
@@ -60,36 +62,40 @@ export function WeeklyChart({ week, viewDay, loading, onSelectDay }: WeeklyChart
                     )}
                 </span>
             </div>
-            <div className="tt-week-bars">
-                {days.map((day) => {
-                    const selected = day.day === viewDay;
-                    const height = day.total_seconds === 0 ? 3 : Math.max(8, Math.round((day.total_seconds / maxSeconds) * 100));
-                    const date = dayKeyToDate(day.day);
-                    const weekday = names[(date.getDay() + 6) % 7] ?? "";
-                    const label = `${formatDayLabel(day.day)}: ${formatDuration(day.total_seconds)}`;
-                    return (
-                        <button
-                            type="button"
-                            key={day.day}
-                            className={`tt-week-col${selected ? " tt-week-col--selected" : ""}`}
-                            onClick={() => onSelectDay?.(day.day)}
-                            aria-label={label}
-                            aria-pressed={selected}
-                            title={label}
-                        >
-                            <span className="tt-week-amount" aria-hidden="true">
-                                {selected ? formatDuration(day.total_seconds) : ""}
-                            </span>
-                            <span className="tt-week-track" aria-hidden="true">
-                                <span style={{ height: `${height}%` }} />
-                            </span>
-                            <span className="tt-week-day" aria-hidden="true">
-                                {weekday} {date.getDate()}
-                            </span>
-                        </button>
-                    );
-                })}
-            </div>
+            {total === 0 ? (
+                <p className="tt-sub tt-week-empty">{t("weeklyChart.empty")}</p>
+            ) : (
+                <div className="tt-week-bars">
+                    {days.map((day) => {
+                        const selected = day.day === viewDay;
+                        const height = day.total_seconds === 0 ? 3 : Math.max(8, Math.round((day.total_seconds / maxSeconds) * 100));
+                        const date = dayKeyToDate(day.day);
+                        const weekday = names[(date.getDay() + 6) % 7] ?? "";
+                        const label = `${formatDayLabel(day.day)}: ${formatDuration(day.total_seconds)}`;
+                        return (
+                            <button
+                                type="button"
+                                key={day.day}
+                                className={`tt-week-col${selected ? " tt-week-col--selected" : ""}`}
+                                onClick={() => onSelectDay?.(day.day)}
+                                aria-label={label}
+                                aria-pressed={selected}
+                                title={label}
+                            >
+                                <span className="tt-week-amount" aria-hidden="true">
+                                    {selected ? formatDuration(day.total_seconds) : ""}
+                                </span>
+                                <span className="tt-week-track" aria-hidden="true">
+                                    <span style={{ height: `${height}%` }} />
+                                </span>
+                                <span className="tt-week-day" aria-hidden="true">
+                                    {weekday} {date.getDate()}
+                                </span>
+                            </button>
+                        );
+                    })}
+                </div>
+            )}
         </section>
     );
 }

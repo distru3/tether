@@ -1,11 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCatalog, getDaySummary, getStatus, listSchedules } from "../api";
 import { formatDuration, setDayStartMinutes, targetLabel, todayKey } from "../format";
-import { clockLabel } from "../limitText";
+import { backAtLabel, clockLabel } from "../limitText";
 import { useNowMinute } from "../hooks/useNowMinute";
 import { useTheme } from "../hooks/useTheme";
 import { budgetStates, dayWindowStart, scheduleOutlook, totalState, type BudgetState } from "../todayModel";
@@ -38,6 +38,20 @@ export function TrayPanel() {
     useTheme();
     const now = useNowMinute();
     const [data, setData] = useState<PanelData>({ status: null, catalog: null, summary: null, schedules: [], offline: false });
+    const card = useRef<HTMLElement>(null);
+
+    // The window is only as tall as the card (plus its 8px shadow margin on
+    // each side): the host resizes it against the taskbar.
+    useEffect(() => {
+        const el = card.current;
+        if (!el || typeof ResizeObserver === "undefined") return;
+        const fit = () => {
+            invoke("fit_tray_panel", { height: el.offsetHeight + 16 }).catch(() => {});
+        };
+        const observer = new ResizeObserver(fit);
+        observer.observe(el);
+        return () => observer.disconnect();
+    }, []);
 
     const load = useCallback(async () => {
         try {
@@ -108,7 +122,7 @@ export function TrayPanel() {
     };
 
     return (
-        <main className="tt-tray" dir={i18n.dir()} aria-label="Tether">
+        <main ref={card} className="tt-tray" dir={i18n.dir()} aria-label="Tether">
             <div className="tt-tray-head">
                 <div
                     className="tt-tray-ring"
@@ -159,7 +173,7 @@ function BudgetLine({ state, name, reset }: { state: BudgetState; name: string; 
     const fill = state.budget > 0 ? Math.min(1, state.left / state.budget) : 0;
     const text =
         state.status === "done"
-            ? t("trayPanel.done", { time: timeOf(reset) })
+            ? t("trayPanel.done", { time: backAtLabel(reset) })
             : state.status === "extra" && state.extraUntil
               ? t("trayPanel.extra", { time: timeOf(state.extraUntil) })
               : t("trayPanel.left", { amount: formatDuration(state.left) });

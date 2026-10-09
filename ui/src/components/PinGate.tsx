@@ -86,20 +86,20 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                     )}
                     <div className="dialog-actions">
                         <button
-                            type="submit"
-                            className="btn btn--primary"
-                            disabled={busy || pin.trim().length === 0}
-                        >
-                            {busy && <LoadingSpinner size="xs" />}
-                            {busy ? t("pinGate.checking") : t("pinGate.confirm")}
-                        </button>
-                        <button
                             type="button"
                             className="btn btn--secondary"
                             onClick={guardedClose}
                             disabled={busy}
                         >
                             {t("common.cancel")}
+                        </button>
+                        <button
+                            type="submit"
+                            className="btn btn--primary"
+                            disabled={busy || pin.trim().length === 0}
+                        >
+                            {busy && <LoadingSpinner size="xs" />}
+                            {busy ? t("pinGate.checking") : t("pinGate.confirm")}
                         </button>
                     </div>
                     <button
@@ -173,14 +173,6 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                     )}
                     <div className="dialog-actions">
                         <button
-                            type="submit"
-                            className="btn btn--primary"
-                            disabled={recovering}
-                        >
-                            {recovering && <LoadingSpinner size="xs" />}
-                            {recovering ? t("pinGate.replacing") : t("pinGate.replacePin")}
-                        </button>
-                        <button
                             type="button"
                             className="btn btn--secondary"
                             onClick={() => {
@@ -190,6 +182,14 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             disabled={recovering}
                         >
                             {t("pinGate.back")}
+                        </button>
+                        <button
+                            type="submit"
+                            className="btn btn--primary"
+                            disabled={recovering}
+                        >
+                            {recovering && <LoadingSpinner size="xs" />}
+                            {recovering ? t("pinGate.replacing") : t("pinGate.replacePin")}
                         </button>
                     </div>
                 </form>
