@@ -25,7 +25,9 @@ export function TitleBar() {
     }, []);
 
     return (
-        <header data-tauri-drag-region className="titlebar">
+        // A labelled region, not a banner: the page below (dashboard or setup)
+        // has its own header.
+        <div data-tauri-drag-region className="titlebar" role="region" aria-label={t("titlebar.label")}>
             <div className="titlebar-left" data-tauri-drag-region>
                 <span className="titlebar-title" data-tauri-drag-region>Tether</span>
             </div>
@@ -69,7 +71,7 @@ export function TitleBar() {
                     </svg>
                 </button>
             </div>
-        </header>
+        </div>
     );
 }
 

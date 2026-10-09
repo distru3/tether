@@ -61,10 +61,7 @@ export function LimitsPage({ catalog, summary, statusInfo, actions, notify, onSe
                     {t("limitsPage.backToLimits")}
                 </button>
                 {view === "schedules" ? (
-                    <>
-                        <h1 className="tt-title">{t("limitsPage.schedules")}</h1>
-                        <DowntimeSection catalog={catalog} notify={notify} guarded={actions.guarded} />
-                    </>
+                    <DowntimeSection catalog={catalog} notify={notify} guarded={actions.guarded} />
                 ) : (
                     <WebFilteringPanel onAttempt={actions.attempt} />
                 )}

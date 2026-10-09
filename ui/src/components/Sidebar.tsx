@@ -139,7 +139,7 @@ export function Sidebar({
                         tabIndex={showDayPicker ? undefined : -1}
                     >
                         {!isViewingToday && <Calendar size={12} className="stepper-cal-icon" />}
-                        <span>{isViewingToday ? t("sidebar.today", "Today") : formatDayLabel(viewDay)}</span>
+                        <span>{isViewingToday ? t("sidebar.today") : formatDayLabel(viewDay)}</span>
                     </button>
                     <button
                         type="button"

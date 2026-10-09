@@ -98,7 +98,7 @@ One page for every rule. `View = "main" | "schedules" | "websites"`; the two sub
 - **Waiting banner**: one `tt-banner` row per `catalog.pending_limits` entry ("{{name}} changes to {{amount}} a day, {{when}}." / "{{name}} is removed {{when}}.", `formatWhen`), each with **Cancel** (`actions.cancelPendingLimit`).
 - **Budgets card**: one `tt-budget` row per limit: hue swatch, name, the rule (`limitRule`: same every day / weekday overrides), time left today against the budget (`role="progressbar"` meter that empties like the Today tiles, "Used up today" when nothing is left), an on/off switch (`actions.toggleLimit`) and **Edit** (`actions.openEditor`). Paused rows dim only the swatch and meter so text keeps its contrast. Rows stack under 760px.
 - **Schedules card** (side column): each downtime schedule with its clock range (`Intl` time format), days ("Every day" / "Weekdays" / "Weekends" / list from the bitmask), and a switch; **Manage** opens the Schedules subview (`DowntimeSection`: editor, delete, always-allowed apps).
-- **Websites card** (side column): add a site inline (`addManualBlock`), up to three blocked sites as chips (hidden adult-list domains excluded via `domains.ts` `isHiddenDomain`), "+N more", and the **Family DNS** switch (`family_dns` setting). **Manage** opens the Websites subview (`WebFilteringPanel`: bulk import, search, paging, hidden-domain reveal).
+- **Websites card** (side column): add a site inline (`addManualBlock`), up to three blocked sites as chips (hidden adult-list domains excluded via `domains.ts` `isHiddenDomain`), "+N more", and the **Family DNS** switch (`family_dns` setting). **Manage** opens the Websites subview (`WebFilteringPanel`, v2 since 2026-10-09: **Add sites** card with the inline form, **Import a list** (text or CSV, up to 100 at a time) and a collapsed "Make a list with an AI chat" helper; **Blocked sites** card with a count of the visible sites, search, one row per site with an unblock icon (PIN), paging, and "N more sites are on the hidden adult list. Show them" (PIN), so the count always adds up).
 
 ### Activity (`ui/src/pages/ActivityPage.tsx`, `ui/src/activityModel.ts`)
 The week against the limits. Loads the weekly totals plus each of the seven days' summaries.
@@ -110,7 +110,7 @@ The week against the limits. Loads the weekly totals plus each of the seven days
 - Not yet: borrowing.
 
 ### Budget editor (`LimitEditorDialog.tsx`)
-Target picker (app / category / total), duration slider + h/m inputs + presets, weekday overrides. **Before the save button it says when the change applies**:
+Target picker (app / category / total, a pill switcher), duration slider (ticks from 1h; no browser spin arrows on the h/m inputs) + presets as pills, weekday overrides (day buttons, quick picks, a per-day adjuster), and a **Budget is on** switch. The app's category shows as a neutral tag with a **Change category** link. **Before the save button it says when the change applies**:
 - `limitRules.ts` `waitsForCooldown(existing, minutes, weekdayMinutes, enabled)` mirrors the agent's `is_loosening` (`crates/agent/src/ipc_server/limits.rs`): raising the daily limit or any day's effective limit waits; lowering, a new limit and switching a limit off apply now (removing or disabling applies instantly by owner decision).
 - If it waits (and `cooldownHours > 0`): an orange `tt-note` "Applies {{when}}" with the reason, and the button reads "Save, applies later" (`limitEditor.saveLater`). Otherwise a calm note "Applies right away."
 - `cooldownHours` comes from `statusInfo.limit_cooldown_hours` (24 by default). The agent stays the authority; the note is a preview.
@@ -224,25 +224,10 @@ Shown on first run (`localStorage` `screentime_first_run_completed`). Four steps
 
 ### A. Schedules on the Limits page
 - **Entry point**: the Schedules card on Limits lists each schedule with a switch; its **Manage** link opens the Schedules subview (back button + level-1 "Schedules" heading) that hosts `DowntimeSection`.
-- **Dedicated Viewport (`DowntimeSection.tsx`)**:
-  - **Metric Cluster**: Surfaces 3 live status cards:
-    - *Active Schedules*: Ratio of enabled schedules (e.g. `1 / 2`).
-    - *Downtime Status*: Real-time enforcement indicator (`Active now` with amber badge or `Inactive`).
-    - *Always Allowed*: Counter of exempt applications.
-  - **Recurring Schedule Rows**:
-    - Displays schedule name (e.g. "Bedtime", "Deep Work"), time interval badge (`10:00 PM – 7:00 AM`), active weekday pills (`M T W T F S S`), overnight indicator badge, quick toggle switch, edit button, and delete action.
-  - **Schedule Editor Modal (`ScheduleEditorModal`)**:
-    - Backed by accessible `Dialog` modal.
-    - Configures schedule name, HTML5 start and end time pickers (converted to 0–1439 minute integers), overnight calculation badge, and 7 interactive day bitmask pills with quick presets ("Every day", "Weekdays", "Weekends").
-  - **Always-Allowed Apps (Downtime Allowlist)**:
-    - Searchable application dropdown powered by detected apps from `catalog.apps`.
-    - Allows user to exempt critical tools (e.g. Calculator, Phone, Notes) that remain fully accessible during scheduled downtime.
-    - Visual tag list with remove buttons for quick exemption management.
-
-### B. End-to-End Pipeline
-- **Backend IPC**: Full round-trip support in `st-agent::ipc_server` for `ListSchedules`, `CreateSchedule`, `UpdateSchedule`, `SetScheduleEnabled`, `DeleteSchedule`, `ListAllowlist`, and `SetAllowlist`.
-- **Enforcement Integration**: `st-agent::enforcer` checks active minute against weekday bitmasks (supporting overnight rollover) on each tick; non-allowlisted apps are blocked with `OverlayMode::DowntimeActive`.
-
+- **Schedules subview (`DowntimeSection.tsx`)**, v2 since 2026-10-09: level-1 "Schedules" heading and "During a schedule only allowed apps open."
+  - **Your schedules** card: one `tt-row` per schedule: name (an "On now" tag while it runs), "10 PM – 7 AM (overnight) · Mon–Fri" in the app's clock format (`clockLabel`, `daysLabel`), a switch, **Edit**, and a delete icon that asks once more inline ("Delete?", times out after 5 s). **New schedule** in the card head.
+  - **Schedule editor** (dialog): Name, From / Until (`type="time"`), "Runs overnight, until 7 AM the next morning." when the end is before the start, Days as quick picks (Every day / Weekdays / Weekends) plus seven day pills, Cancel / Save.
+  - **Always allowed** card: a styled select of detected apps + **Allow**, and the allowed apps as removable chips. Empty: "None yet. During a schedule every app closes except system tools." (the enforcer exempts the allowlist and `never_block` categories).
 ---
 
 ## 8. Timer Overlay (HUD Pill) Focus Reconciliation & Low-Latency Dismissal
@@ -318,7 +303,7 @@ When running full-screen or borderless 3D games with driver-level frame rate lim
 Superseded by the v2 palette (Section 1 and `docs/DESIGN_SYSTEM.md`). What still holds:
 - Component rules read semantic tokens (`--bg-card`, `--border-card`, `--text-primary`, `--color-primary`, …); light-only adjustments use `[data-theme-mode="light"]` and tokens, not hardcoded colours.
 - Text uses the text-safe tokens (`--color-*-text`, `--color-on-primary`); fills use the fill tokens.
-- `WebFilteringPanel.css`, the weekly chart, dialogs, PIN inputs and skeletons have no per-theme blocks; they follow the tokens.
+- The weekly chart, dialogs, PIN inputs and skeletons have no per-theme blocks; they follow the tokens.
 
 ---
 
@@ -366,11 +351,8 @@ Superseded by the v2 palette (Section 1 and `docs/DESIGN_SYSTEM.md`). What still
 
 ## 13. UI De-Cardenisation Architecture
 
-### A. Unified Telemetry Bar (`MetricCards.tsx` & `MetricCards.css`)
-- Replaces disjointed floating card boxes with a cohesive horizontal telemetry bar:
-  - Enclosed in a single unified panel (`.metric-cards-grid`) with subtle 1px border (`var(--border-subtle)`).
-  - Individual metric segments (`.metric-card-link`) are separated by vertical hairline dividers (`border-right: 1px solid var(--border-subtle)`).
-  - Hover states apply clean surface tinting (`var(--bg-card-hover)`) without shifting surrounding geometry.
+### A. Metric cards (removed 2026-10-09)
+- `MetricCards` (stat strips on the Schedules and Websites subviews) is gone; those views state counts in their card titles instead.
 
 ### B. Linear-Style Unified Settings Sections (`redesign.css`)
 - Replaces 8 detached floating settings cards with unified grouped panels:
@@ -401,7 +383,7 @@ Rules established by the October 2026 pass. Follow them in new UI:
 - **Honest states.** Unreachable agent → `.service-alert` banner and "Protection: Not running". An unknown catalog shows "—", never "No limits".
 - **Progress carries state.** Limit cards use `rich-limit-progress-fill--ok | --warn (≥80%) | --over`. Never force a color with `!important` over a state class.
 - **Budgets come from the agent.** A card's budget is the row's `limit_seconds` (weekday-aware). Disabled limits and the total limit fall back to today's weekday-resolved minutes.
-- **Every user-visible string goes through i18n**, including `aria-label`, `title`, placeholders and toasts. Weekday names come from `Intl.DateTimeFormat` in the UI language (`weekdayShortNames()`, DowntimeSection `weekdays()`). Arabic plural forms (`_zero/_one/_two/_few/_many/_other`) are provided where counts appear. Numbers embedded in Arabic sentences are wrapped in Unicode isolates (U+2068/U+2069) so they don't reorder.
+- **Every user-visible string goes through i18n**, including `aria-label`, `title`, placeholders and toasts. Weekday names come from `Intl.DateTimeFormat` in the UI language (`weekdayShortNames()`). Arabic plural forms (`_zero/_one/_two/_few/_many/_other`) are provided where counts appear. Numbers embedded in Arabic sentences are wrapped in Unicode isolates (U+2068/U+2069) so they don't reorder.
 - **Filter tabs** keep stable keys and a separate labels map, so translation can't break filtering (`FilterTabs` itself was removed in Phase 1; segmented controls now use `aria-pressed`).
 - **Copy**: plain verbs, sentence case, and the same name for an action through the whole flow ("Allow 15 more minutes"). The window's close button says what it does ("Close window (Tether keeps running)").
 - **Removed dead components**: `Hero`, `LedgerSection`, `FrictionBanner`, `Masthead`, `Section`, `TetherLogo`. `noUnusedLocals` is on in `tsconfig.json`.
@@ -466,3 +448,9 @@ Implements Phase 1 of `docs/DESIGN_SYSTEM.md`:
 - **Today**: the ring says "Done · all 6h used" when the total is used up; tiles are shorter (168px); the week card shows a sentence instead of empty bars and "−100%" when nothing is recorded, and its bars fill the card's height.
 - **Dark theme**: "Everything else" `#8A7CA6` and weekly bars (`--week-bar`) meet 3:1 on cards; "Not now" is an outline button.
 - **Activity**: most-used apps under the chart; the budget table includes total screen time.
+- **Schedules and Websites subviews** rebuilt on the v2 components (Section 7A, Section 4 Limits); `MetricCards` and `WebFilteringPanel.css` removed. Websites counts add up: visible sites in the title, the hidden adult list in its own line.
+- **Budget editor** restyled (Section 4): pills, no spin arrows, a switch, a neutral category tag, "budget" in its wording.
+- **Settings › About and help**: the real version (`agent_version`) and six accurate help topics replace the old tutorial (`TutorialContent` removed).
+- **Title bar** is a labelled "Window" region (not a banner), so setup keeps its own header.
+- **Cleanup**: 54 unused translation keys, about 240 lines of CSS no element used, and the `t("key", "fallback")` English fallbacks for keys that exist.
+

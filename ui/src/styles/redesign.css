@@ -612,7 +612,6 @@ textarea {
    Unified De-Cardenised Dashboard Architecture
    ========================================================================== */
 
-
 .card,
 .glass-card,
 .hero-card,
@@ -638,27 +637,6 @@ textarea {
   color: var(--redesign-muted);
   font-size: 0.64rem;
   font-weight: 720;
-}
-
-.timeline-panel h2,
-.timeline-panel h3,
-.weekly-chart-card h2,
-.weekly-chart-card h3,
-.ledger-title,
-.limits-panel h2,
-.web-filter-panel h2 {
-  margin: 0;
-  color: var(--redesign-ink);
-  font-size: 0.98rem;
-  font-weight: 680;
-  letter-spacing: -0.025em;
-}
-
-.ledger-section,
-.weekly-chart-card,
-.limits-panel,
-.web-filter-panel {
-  padding: 20px;
 }
 
 .notice-stack,
@@ -770,7 +748,6 @@ dialog::backdrop,
   
   }
 
-
 /* Refined timeline panel and widgets */
 
 .target-badge--category-tag {
@@ -781,65 +758,6 @@ dialog::backdrop,
 .settings-page {
   width: min(1120px, 100%);
   margin: 0 auto;
-}
-
-.view-container,
-.limits-container {
-  max-width: none;
-  margin: 0;
-  padding: 0;
-}
-
-.view-header {
-  margin-bottom: 22px;
-  align-items: center;
-}
-
-.view-title {
-  margin-bottom: 5px;
-  color: var(--redesign-ink);
-  font-size: clamp(1.65rem, 3vw, 2.25rem);
-  letter-spacing: -0.06em;
-}
-
-.view-subtitle {
-  color: var(--redesign-muted);
-  font-size: 0.78rem;
-}
-
-.tab-page .limits-panel,
-.tab-page .banner-warning-card,
-.tab-page .rich-limit-card,
-.tab-page .empty-card,
-.settings-page > .card,
-.ai-prompt-card {
-  border: 1px solid var(--border-card);
-  border-radius: var(--redesign-radius);
-  background: var(--bg-card);
-  box-shadow: var(--shadow-card);
-}
-
-.tab-page .limits-panel,
-.settings-page > .card {
-  overflow: hidden;
-}
-
-.tab-page .card-body,
-.settings-page .card-body {
-  color: var(--redesign-ink-soft);
-}
-
-.tab-page .web-filter-controls {
-  align-items: center !important;
-}
-
-.settings-page .select-input,
-.settings-page .input,
-.tab-page .form-input {
-  border: 1px solid var(--redesign-line);
-  border-radius: 9px;
-  color: var(--redesign-ink);
-  background: rgba(255, 255, 255, 0.055);
 }
 
 /* The one switch definition (ToggleSwitch and the settings rows). The knob
@@ -905,49 +823,10 @@ dialog::backdrop,
 }
 
 /* Cross-page structure refinements. */
-.page-intro {
-  padding-bottom: 4px;
-}
-
-.web-filter-page-shell {
-  display: grid;
-  gap: 16px;
-}
-
-.web-filter-page-shell .view-header,
-.web-filter-page-shell .metric-cards-grid {
-  margin-bottom: 0;
-}
-
-.web-filter-command-panel,
-.web-filter-domain-panel {
-  margin: 0;
-}
-
-.web-filter-command-panel .card-body {
-  display: grid;
-  gap: 18px;
-}
-
-.web-filter-command-panel .web-filter-controls {
-  margin-bottom: 0 !important;
-  padding-bottom: 18px;
-  border-bottom: 1px solid var(--redesign-line-soft);
-}
-
-.web-filter-command-panel .ai-prompt-card {
-  margin-bottom: 0 !important;
-}
-
-.web-filter-domain-panel .card-body {
-  padding: 0;
-}
 
 /* Limits is a control center, not another settings form. */
 
 /* Progress carries state: amber from 80%, red once the budget is spent. */
-
-
 
 /* ─── Light theme component-level overrides unified via tokens.css & clean light rules below ─── */
 
@@ -973,13 +852,6 @@ dialog::backdrop,
   background: var(--bg-card);
   border-color: var(--border-strong);
   color: var(--text-primary);
-}
-
-[data-theme-mode="light"] .settings-page .select-input,
-[data-theme-mode="light"] .settings-page .input,
-[data-theme-mode="light"] .tab-page .form-input {
-  background: var(--bg-card);
-  border-color: var(--border-strong);
 }
 
 [data-theme-mode="light"] .titlebar {
@@ -1273,17 +1145,25 @@ dialog::backdrop,
 
 .limit-section-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
+  gap: 8px 12px;
 }
 
 .limit-section-title {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.limit-section-header .weekday-helper-btn,
+.weekday-active-count-badge {
+  white-space: nowrap;
 }
 
 .limit-section-icon {
@@ -1294,20 +1174,21 @@ dialog::backdrop,
 .target-segmented-control {
   display: flex;
   gap: 4px;
-  padding: 3px;
-  background: var(--bg-input);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
+  padding: 4px;
+  background: var(--bg-recessed);
+  border-radius: 99px;
 }
 
 .target-segment-btn {
-  flex: 1;
-  height: 34px;
+  flex: 1 1 auto;
+  white-space: nowrap;
+  height: 36px;
   padding: 0 12px;
-  border: 1px solid transparent;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
+  border: 0;
+  border-radius: 99px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
   cursor: pointer;
   color: var(--text-secondary);
   background: transparent;
@@ -1323,11 +1204,10 @@ dialog::backdrop,
   background: var(--bg-surface-hover);
 }
 
-.target-segment-btn--active {
-  background: var(--bg-card);
-  color: var(--color-primary-text);
-  border-color: var(--border-strong);
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+.target-segment-btn--active,
+.target-segment-btn--active:hover {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
 }
 
 /* ---- Custom App / Category Picker ---- */
@@ -1338,16 +1218,16 @@ dialog::backdrop,
 
 .picker-trigger {
   width: 100%;
-  height: 38px;
+  height: 42px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 12px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
+  padding: 0 14px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
   background: var(--bg-input);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -1509,7 +1389,7 @@ dialog::backdrop,
   align-items: center;
   justify-content: space-between;
   padding: 4px 0;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .limit-app-category-info {
@@ -1520,112 +1400,125 @@ dialog::backdrop,
 
 .limit-app-category-label {
   color: var(--text-muted);
-  font-size: 11.5px;
 }
 
-/* ---- Duration Controls ---- */
+.limit-app-category-info .tt-tag {
+  margin-inline-start: 0;
+}
+
+/* ---- Duration Controls (budget editor, v2: docs/DESIGN_SYSTEM.md) ---- */
 .duration-dual-inputs {
   display: flex;
   align-items: center;
   gap: 4px;
   background: var(--bg-input);
-  padding: 2px 6px;
-  border-radius: 8px;
-  border: 1px solid var(--border-subtle);
+  padding: 4px 10px;
+  border-radius: 12px;
+  border: 1px solid var(--border-strong);
+}
+
+.duration-dual-inputs:focus-within {
+  border-color: var(--color-focus);
 }
 
 .duration-dual-inputs--sm {
-  padding: 1px 4px;
-  border-radius: 6px;
+  padding: 2px 8px;
+  border-radius: 10px;
 }
 
 .duration-input-group {
   display: flex;
-  align-items: center;
-  gap: 3px;
+  align-items: baseline;
+  gap: 2px;
 }
 
 .duration-num-input {
-  width: 38px;
-  height: 28px;
+  width: 34px;
+  height: 30px;
   text-align: center;
-  font-size: 13.5px;
+  font: inherit;
+  font-size: 16px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
   border: none;
   background: transparent;
   color: var(--text-primary);
   box-sizing: border-box;
   padding: 0;
   outline: none;
+  /* No browser spin arrows: presets, the slider and typing cover it. */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.duration-num-input::-webkit-outer-spin-button,
+.duration-num-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .duration-num-input--sm {
-  width: 30px;
-  height: 22px;
-  font-size: 12px;
-}
-
-.duration-num-input:focus {
-  color: var(--color-primary-text);
+  width: 28px;
+  height: 26px;
+  font-size: 14px;
 }
 
 .duration-unit {
-  font-size: 11px;
+  font-size: 14px;
   color: var(--text-muted);
   user-select: none;
 }
 
 .duration-separator {
-  font-size: 13px;
-  font-weight: 700;
+  font-size: 14px;
   color: var(--text-muted);
-  margin: 0 1px;
+  margin: 0 2px;
   user-select: none;
 }
 
 .duration-presets {
-  display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   margin-top: 4px;
 }
 
 .preset-pill {
-  height: 30px;
+  flex: 1 0 56px;
+  height: 34px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
-  font-size: 11.5px;
-  font-weight: 550;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
+  border-radius: 99px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1px solid var(--border-strong);
+  background: transparent;
   color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
   user-select: none;
 }
 
 .preset-pill:hover {
-  background: var(--bg-surface-hover);
+  background: var(--bg-recessed);
   color: var(--text-primary);
-  border-color: var(--border-hover);
 }
 
-.preset-pill--active {
-  background: var(--color-primary-subtle);
-  color: var(--color-primary-text);
+.preset-pill--active,
+.preset-pill--active:hover {
+  background: var(--color-primary);
   border-color: var(--color-primary);
-  font-weight: 700;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  color: var(--color-on-primary);
 }
 
 .duration-slider-wrap {
-  margin-top: 4px;
-  margin-bottom: 10px;
+  margin-top: 6px;
+  margin-bottom: 6px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
 }
 
 .duration-slider {
@@ -1639,8 +1532,8 @@ dialog::backdrop,
    --at, 0..1), so "1h" lines up with where the thumb is at one hour. */
 .duration-slider-labels {
   position: relative;
-  height: 14px;
-  font-size: 10.5px;
+  height: 18px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
@@ -1655,10 +1548,6 @@ dialog::backdrop,
   translate: 50% 0;
 }
 
-.duration-slider-labels > span:first-child {
-  translate: 0 0;
-}
-
 .duration-slider-labels > span:last-child {
   inset-inline-start: auto;
   inset-inline-end: 0;
@@ -1667,68 +1556,70 @@ dialog::backdrop,
 
 /* ---- Weekday Schedule ---- */
 .weekday-active-count-badge {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
-  padding: 1px 6px;
-  border-radius: 999px;
+  padding: 1px 8px;
+  border-radius: 99px;
   background: var(--color-primary-subtle);
   color: var(--color-primary-text);
-  border: 1px solid var(--color-primary);
-  margin-left: 4px;
+  margin-inline-start: 6px;
 }
 
 .weekday-helpers {
-  display: flex;
-  gap: 4px;
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: 99px;
+  background: var(--bg-recessed);
 }
 
 .weekday-helper-btn {
-  padding: 2px 7px;
-  border-radius: 4px;
-  font-size: 10.5px;
-  border: 1px solid var(--border-subtle);
+  padding: 4px 10px;
+  border-radius: 99px;
+  font: inherit;
+  font-size: 13px;
+  border: 0;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--text-secondary);
   cursor: pointer;
-  transition: all 0.12s ease;
 }
 
 .weekday-helper-btn:hover {
   color: var(--text-primary);
-  background: var(--bg-surface-hover);
-  border-color: var(--border-hover);
+  background: var(--bg-card);
 }
 
 .weekday-pill-bar {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
-  gap: 5px;
+  gap: 6px;
   width: 100%;
 }
 
 .weekday-day-cell {
-  height: 46px;
+  height: 52px;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  border-radius: 7px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-input);
+  gap: 3px;
+  border-radius: 16px;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
   user-select: none;
   padding: 0 2px;
 }
 
 .weekday-day-cell:hover {
-  border-color: var(--border-hover);
-  background: var(--bg-surface-hover);
+  background: var(--bg-recessed);
 }
 
 .weekday-day-cell--active {
-  border-color: var(--color-primary);
+  border-color: transparent;
   background: var(--color-primary-subtle);
 }
 
@@ -1737,137 +1628,108 @@ dialog::backdrop,
 }
 
 .day-cell-name {
-  font-size: 11.5px;
+  font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
   line-height: 1;
 }
 
 .day-cell-time {
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 12px;
   color: var(--text-muted);
   line-height: 1;
 }
 
 .weekday-day-cell--active .day-cell-time {
   color: var(--color-primary-text);
-  font-weight: 700;
+  font-weight: 600;
 }
 
 /* Focused Day Adjuster Bar */
 .weekday-focus-editor {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--bg-surface);
-  border: 1px solid var(--border-subtle);
-  border-radius: 8px;
-  margin-top: 2px;
-  min-height: 38px;
+  gap: 10px;
+  padding: 10px 14px;
+  background: var(--bg-recessed);
+  border-radius: 16px;
+  margin-top: 4px;
+  min-height: 44px;
   box-sizing: border-box;
 }
 
 .weekday-focus-info {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
 }
 
 .weekday-focus-day {
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .weekday-focus-status {
-  font-size: 11px;
+  font-size: 13px;
   color: var(--text-muted);
 }
 
 .weekday-focus-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 6px;
 }
 
-.weekday-step-btn {
-  height: 26px;
-  padding: 0 6px;
-  border-radius: 4px;
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-input);
-  color: var(--text-secondary);
-  font-size: 10.5px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.12s ease;
-}
-
-.weekday-step-btn:hover {
-  background: var(--bg-surface-hover);
-  color: var(--text-primary);
-  border-color: var(--border-hover);
-}
-
+.weekday-step-btn,
 .weekday-action-btn {
-  height: 26px;
-  padding: 0 8px;
-  border-radius: 4px;
-  border: 1px solid var(--border-subtle);
+  height: 30px;
+  padding: 0 10px;
+  border-radius: 99px;
+  border: 1px solid var(--border-strong);
   background: transparent;
-  font-size: 11px;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
   font-weight: 500;
   cursor: pointer;
-  transition: all 0.12s ease;
 }
 
-.weekday-action-btn--reset {
-  color: var(--text-muted);
+.weekday-step-btn:hover,
+.weekday-action-btn:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
 }
 
 .weekday-action-btn--reset:hover {
   color: var(--color-danger-text);
-  border-color: var(--border-danger, rgba(244, 63, 94, 0.3));
 }
 
 .weekday-action-btn--sync {
   color: var(--color-primary-text);
-  border-color: var(--color-primary-subtle);
-  background: var(--color-primary-subtle);
-}
-
-.weekday-action-btn--sync:hover {
-  filter: brightness(1.1);
 }
 
 .weekday-focus-inactive {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  width: 100%;
+  margin-inline-start: auto;
 }
 
-/* ---- Enforcement Toggle ---- */
+/* ---- "Budget is on" switch ---- */
 .limit-enforce-toggle {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
   cursor: pointer;
   user-select: none;
-  margin-top: 2px;
-}
-
-.limit-enforce-checkbox {
-  accent-color: var(--color-primary);
-  cursor: pointer;
-  width: 16px;
-  height: 16px;
+  margin-top: 4px;
 }
 
 .limit-enforce-label {
-  font-size: 13px;
+  font-size: 15px;
   font-weight: 500;
   color: var(--text-primary);
 }

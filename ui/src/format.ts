@@ -90,7 +90,7 @@ export function effectClause(effectiveUtc: string | null | undefined): string {
 export function targetLabel(target: LimitTargetDto, catalog: CatalogDto | null): string {
     switch (target.kind) {
         case "total":
-            return i18n.t("limitEditor.totalScreenTime", "Total screen time");
+            return i18n.t("limitEditor.totalScreenTime");
         case "app":
             return catalog?.apps.find((a) => a.id === target.id)?.display_name ?? `App #${target.id}`;
         case "category":

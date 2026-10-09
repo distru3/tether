@@ -110,9 +110,9 @@ Both fonts are bundled (fontsource); the Tauri CSP blocks remote fonts.
 | Screen | Job | Status |
 |---|---|---|
 | Setup (4 steps) | Who it's for, starting budgets, PIN, websites | Phase 1 |
-| Limits | Every rule in one place | Phase 1 |
-| Budget editor | Change a limit, see when it applies | Phase 1 |
-| Settings | Four short groups | Phase 1 |
+| Limits | Every rule in one place | Done; Schedules and Websites subviews on v2 since 2026-10-09 |
+| Budget editor | Change a limit, see when it applies | Done (restyled 2026-10-09) |
+| Settings | Short groups, About and help | Done |
 | Today | Time left, day strip, budget tiles | Done (Phase 2), with the suggestion from last week |
 | Block screen | Pause and choose | Done, with reasons; borrowing waits on a PIN decision |
 | Timer and tray | Glance | Done (Phase 2): timer palette, tray panel |

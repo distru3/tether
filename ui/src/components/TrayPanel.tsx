@@ -144,7 +144,7 @@ export function TrayPanel() {
                     </span>
                 </div>
                 <div className="tt-tray-title">
-                    <strong>{total ? t("trayPanel.leftToday") : t("trayPanel.usedToday")}</strong>
+                    <h1>{total ? t("trayPanel.leftToday") : t("trayPanel.usedToday")}</h1>
                     <span>{[t("trayPanel.used", { amount: formatDuration(used) }), scheduleLine].filter(Boolean).join(" · ")}</span>
                 </div>
             </div>

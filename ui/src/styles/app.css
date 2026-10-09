@@ -112,76 +112,12 @@ body {
 /* ---- System Notices ---- */
 
 /* ---- View Container & Headers ---- */
-.view-container {
-  padding: 28px 36px;
-  max-width: 960px;
-  margin: 0 auto;
-  width: 100%;
-}
-
-.view-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-  gap: 16px;
-}
-
-.view-title {
-  font-size: 22px;
-  font-weight: 700;
-  margin: 0 0 4px;
-  color: var(--text-primary);
-  letter-spacing: -0.02em;
-}
-
-.view-subtitle {
-  color: var(--text-secondary);
-  font-size: 13.5px;
-  margin: 0;
-  line-height: 1.5;
-}
 
 /* ---- Glass Card ---- */
-.glass-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-lg);
-  padding: 16px;
-  box-shadow: var(--shadow-sm);
-  overflow: hidden;
-}
 
 /* ---- Overview Grid ---- */
 
 /* ---- Hero Section ---- */
-
-.skeleton-loading {
-  animation: pulse-skeleton 1.5s ease infinite;
-}
-
-.skeleton-line {
-  height: 14px;
-  background-color: var(--bg-recessed);
-  border-radius: var(--radius-xs);
-  margin-bottom: 8px;
-}
-
-.skeleton-title {
-  width: 60%;
-  height: 20px;
-}
-
-.skeleton-subtitle {
-  width: 80%;
-}
-
-.skeleton-bar {
-  width: 100%;
-  height: 100%;
-  background-color: var(--bg-recessed);
-  border-radius: var(--radius-xs);
-}
 
 /* ---- Weekly Chart ---- */
 
@@ -190,26 +126,6 @@ body {
 /* ---- Blocked Banner ---- */
 
 /* ---- Badges ---- */
-.badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 3px 8px;
-  border-radius: var(--radius-sm);
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.badge--indigo {
-  background-color: var(--bg-recessed);
-  color: var(--color-primary-text);
-  border: 1px solid var(--accent-indigo-border);
-}
-
-.badge-sm {
-  font-size: 10px;
-  padding: 1px 5px;
-}
 
 /* ---- Buttons ---- */
 .btn {
@@ -259,40 +175,9 @@ body {
   padding: 5px 10px;
 }
 
-.text-danger {
-  color: var(--color-danger-text);
-}
-
 /* ---- Focus Session ---- */
 
-.form-input-sm {
-  padding: 6px 10px;
-  font-size: 13px;
-}
-
 /* ---- Downtime Panel ---- */
-
-.schedule-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px;
-  background-color: var(--bg-card);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border-subtle);
-}
-
-.form-hint {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  padding: 8px 12px;
-  background-color: var(--bg-card);
-  border-radius: var(--radius-sm);
-  margin-top: 8px;
-}
 
 /* ---- Limits Panel ---- */
 
@@ -304,37 +189,9 @@ body {
   border-radius: var(--radius-xs);
 }
 
-.empty-card {
-  text-align: center;
-  padding: 40px 20px;
-  color: var(--text-muted);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-}
-
 /* ---- Web Filtering Panel ---- */
 
 /* ---- Forms ---- */
-
-.form-input,
-.form-select {
-  background-color: var(--bg-input);
-  border: 1px solid var(--border-strong);
-  padding: 7px 10px;
-  border-radius: var(--radius-sm);
-  color: var(--text-primary);
-  font-size: 13px;
-  flex: 1;
-  min-width: 0;
-}
-
-.form-input:focus,
-.form-select:focus {
-  outline: none;
-  border-color: var(--color-primary);
-}
 
 /* ---- Settings Panel ---- */
 
@@ -419,7 +276,7 @@ body {
   font-weight: 500;
 }
 
-.field input[type="number"], .field input[type="password"], .field input[type="text"], .field select {
+.field input[type="number"], .field input[type="password"], .field input[type="text"], .field input[type="time"], .field select {
   width: 100%;
   padding: 10px 14px;
   border: 1px solid var(--border-strong);
@@ -431,7 +288,7 @@ body {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
-.field input[type="number"]:focus, .field input[type="password"]:focus, .field input[type="text"]:focus, .field select:focus {
+.field input[type="number"]:focus, .field input[type="password"]:focus, .field input[type="text"]:focus, .field input[type="time"]:focus, .field select:focus {
   border-color: var(--color-focus);
   outline: none;
   box-shadow: 0 0 0 2px var(--accent-indigo-subtle, rgba(220, 160, 109, 0.25));
@@ -705,14 +562,6 @@ body {
   font-variant-numeric: tabular-nums lining-nums;
 }
 
-.empty-hint {
-  color: var(--text-muted);
-  font-style: italic;
-  font-size: 13px;
-  text-align: center;
-  padding: 20px;
-}
-
 /* ---- Keyframes ---- */
 @keyframes fade-in {
   from {
@@ -886,10 +735,6 @@ button:not([disabled]):active {
 
 /* ---- RTL Adjustments ---- */
 [dir="rtl"] .app-layout {
-  direction: rtl;
-}
-
-[dir="rtl"] .card-body {
   direction: rtl;
 }
 

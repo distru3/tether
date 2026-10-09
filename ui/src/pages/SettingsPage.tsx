@@ -7,9 +7,11 @@ import type { useLedgerActions } from "../hooks/useLedgerActions";
 import type { ThemePreference } from "../hooks/useTheme";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { StatusDto } from "../types/generated/StatusDto";
-import { TutorialContent } from "../components/TutorialContent";
 
 type Actions = ReturnType<typeof useLedgerActions>;
+
+/** The help topics under About and help, in reading order. */
+const HELP_TOPICS = ["today", "budgets", "pin", "schedules", "websites", "timer"] as const;
 
 interface SettingsPageProps {
     statusInfo: StatusDto | null;
@@ -335,7 +337,7 @@ export function SettingsPage({
 
                 <section className="tt-card" aria-labelledby="set-help">
                     <div className="tt-card-head">
-                        <h2 id="set-help" className="tt-card-title">{t("settingsPage.help")}</h2>
+                        <h2 id="set-help" className="tt-card-title">{t("settingsPage.aboutHelp")}</h2>
                         <button
                             type="button"
                             className="tt-btn tt-btn--ghost tt-btn--sm"
@@ -347,10 +349,21 @@ export function SettingsPage({
                             <ChevronDown size={16} aria-hidden="true" style={{ transform: helpOpen ? "rotate(180deg)" : undefined }} />
                         </button>
                     </div>
-                    <div id="set-help-body" hidden={!helpOpen}>
-                        <TutorialContent />
-                    </div>
-                    <p className="tt-row-detail">{t("settings.aboutVersion")}</p>
+                    <p className="tt-sub">
+                        {statusInfo ? t("settingsPage.version", { version: statusInfo.agent_version }) : t("settingsPage.versionUnknown")}
+                    </p>
+                    <ul id="set-help-body" className="tt-list" hidden={!helpOpen}>
+                        {HELP_TOPICS.map((topic) => (
+                            <li className="tt-row" key={topic}>
+                                <span className="tt-row-text">
+                                    <span className="tt-row-title">{t(`help.${topic}Title`)}</span>
+                                    <span className="tt-row-detail">
+                                        {t(`help.${topic}`, { hotkey: statusInfo?.hud_peek_hotkey ?? "Ctrl+Alt+T" })}
+                                    </span>
+                                </span>
+                            </li>
+                        ))}
+                    </ul>
                 </section>
             </div>
         </div>

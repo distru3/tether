@@ -78,12 +78,6 @@
   background: var(--color-primary-hover);
 }
 
-.tt-btn--accent {
-  background: var(--color-accent);
-  color: #1C1229;
-  font-weight: 600;
-}
-
 .tt-btn--outline {
   background: transparent;
   border-color: var(--border-strong);
@@ -1157,7 +1151,6 @@
   }
 }
 
-
 /* Most used apps. */
 .tt-usage-list {
   list-style: none;
@@ -1428,7 +1421,8 @@ button.tt-usage-cat:hover {
   min-width: 0;
 }
 
-.tt-tray-title strong {
+.tt-tray-title h1 {
+  margin: 0;
   font-size: 17px;
   font-weight: 600;
 }
@@ -1849,4 +1843,223 @@ body {
   display: flex;
   gap: 8px;
   margin-inline-start: auto;
+}
+
+/* ---- Shared small pieces (Schedules, Websites, editors) ---------------- */
+
+/* A short status word next to a title ("On now"). */
+.tt-tag {
+  display: inline-block;
+  margin-inline-start: 8px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: 2px;
+  background: var(--bg-recessed);
+  color: var(--text-secondary);
+}
+
+.tt-tag--on {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+
+/* Icon-only button (delete, remove). Always has an aria-label. */
+.tt-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 99px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tt-icon-btn:hover {
+  background: var(--bg-recessed);
+  color: var(--color-danger-text);
+}
+
+.tt-icon-btn:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+/* A select styled like .tt-input, with its own arrow. */
+.tt-select {
+  appearance: none;
+  padding-inline-end: 36px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+[dir="rtl"] .tt-select {
+  background-position: 13px 50%, 18px 50%;
+}
+
+ul.tt-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tt-chip--removable {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline-end: 4px;
+}
+
+.tt-chip--removable > button {
+  display: inline-flex;
+  border: 0;
+  border-radius: 99px;
+  padding: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tt-chip--removable > button:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+/* Two fields side by side in a dialog (from / until). */
+.tt-field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.tt-fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.tt-fieldset > legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.tt-day-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tt-day-pill {
+  flex: 1 0 52px;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  padding: 7px 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tt-day-pill[aria-pressed="true"] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.tt-day-pill:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* ---- Websites subview ---- */
+.tt-web-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.tt-details > summary {
+  cursor: pointer;
+  color: var(--color-accent-text);
+  font-weight: 500;
+  width: fit-content;
+}
+
+.tt-details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tt-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 280px;
+  min-width: 0;
+}
+
+.tt-search > svg {
+  position: absolute;
+  inset-inline-start: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.tt-search > .tt-input {
+  padding-inline-start: 36px;
+}
+
+/* Domains stay monospace: it helps reading them letter by letter. */
+.tt-domain {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.tt-web-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tt-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tt-icon-btn--plain:hover {
+  color: var(--text-primary);
+}
+
+.tt-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.tt-web-hide {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+}
+
+[dir="rtl"] .tt-flip-rtl {
+  transform: scaleX(-1);
 }

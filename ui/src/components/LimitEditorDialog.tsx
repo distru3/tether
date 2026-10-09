@@ -4,7 +4,6 @@ import { Smartphone, Layers, LayoutGrid, Clock, Calendar, Check } from "lucide-r
 import type { WeekdayMinutes } from "../api";
 import { formatDuration, formatWhen, targetLabel, WEEKDAY_SHORT, weekdayShortNames } from "../format";
 import { waitsForCooldown } from "../limitRules";
-import { colorForCategory } from "../categoryColors";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { LimitDto } from "../types/generated/LimitDto";
 import type { LimitTargetDto } from "../types/generated/LimitTargetDto";
@@ -58,7 +57,8 @@ function decodeTarget(value: string): LimitTargetDto | null {
 /** The duration slider's linear range (minutes) and its labelled ticks. */
 const SLIDER_MIN = 5;
 const SLIDER_MAX = 480;
-const SLIDER_TICKS = [15, 60, 120, 240, 360, SLIDER_MAX];
+// No 15m tick: next to "1h" the two labels collide.
+const SLIDER_TICKS = [60, 120, 240, 360, SLIDER_MAX];
 
 /** Compact per-day budget label, in the app-wide duration style. */
 function formatShortDuration(totalMins: number): string {
@@ -266,7 +266,6 @@ export function LimitEditorDialog({
     const currentApp = currentTarget?.kind === "app" ? catalog?.apps.find((a) => a.id === currentTarget.id) : null;
     const currentCat = currentApp ? catalog?.categories.find((c) => c.id === currentApp.primary_category) : null;
     const currentCatName = currentCat?.name ?? t("categorize.uncategorized");
-    const currentCatColor = colorForCategory(currentCatName, currentCat?.color);
 
     // Synchronize target kind switcher
     const handleSegmentChange = (kind: "app" | "category" | "total") => {
@@ -376,14 +375,14 @@ export function LimitEditorDialog({
         if (busy) return;
         const parsed = Number.parseInt(minutes, 10);
         if (!Number.isFinite(parsed) || parsed < 0 || parsed > 1440) {
-            setError(t("limitEditor.errMinutes", "Please enter a valid duration (0-1440 minutes)."));
+            setError(t("limitEditor.errMinutes"));
             return;
         }
         for (const day of dayOverrides) {
             if (!day.override) continue;
             const dayMinutes = Number.parseInt(day.minutes, 10);
             if (!Number.isFinite(dayMinutes) || dayMinutes < 0 || dayMinutes > 1440) {
-                setError(t("limitEditor.errOverrideMinutes", "Please check weekday override values."));
+                setError(t("limitEditor.errOverrideMinutes"));
                 return;
             }
         }
@@ -392,7 +391,7 @@ export function LimitEditorDialog({
         ) as WeekdayMinutes;
         const finalTarget = locked ? target : decodeTarget(chosen);
         if (finalTarget === null) {
-            setError(t("limitEditor.errPick", "Please select a target application or category."));
+            setError(t("limitEditor.errPick"));
             return;
         }
         onSubmit(finalTarget, parsed, weekdayMinutes, enabled);
@@ -416,7 +415,7 @@ export function LimitEditorDialog({
 
     return (
         <Dialog
-            label={locked ? t("limitEditor.editOrder", "Edit Limit") : t("limitEditor.newOrder", "New Limit")}
+            label={locked ? t("limitEditor.editOrder") : t("limitEditor.newOrder")}
             onClose={() => {
                 if (!busy) onClose();
             }}
@@ -424,10 +423,10 @@ export function LimitEditorDialog({
             <form onSubmit={submit} className="limit-editor-form">
                 <div className="limit-editor-header">
                     <p className="dialog-eyebrow">
-                        {locked ? t("limitEditor.editEyebrow", "MODIFY LIMIT") : t("limitEditor.newEyebrow", "NEW LIMIT")}
+                        {locked ? t("limitEditor.editEyebrow") : t("limitEditor.newEyebrow")}
                     </p>
                     <h2 className="dialog-title">
-                        {locked && target !== null ? targetLabel(target, catalog) : t("limitEditor.chooseTarget", "Configure Allowance")}
+                        {locked && target !== null ? targetLabel(target, catalog) : t("limitEditor.chooseTarget")}
                     </h2>
                 </div>
 
@@ -466,7 +465,7 @@ export function LimitEditorDialog({
                                 options={appOptions}
                                 value={chosen}
                                 disabled={busy}
-                                placeholder={t("limitEditor.choose", "Select an application...")}
+                                placeholder={t("limitEditor.choose")}
                                 onChange={(v) => { setChosen(v); setError(null); }}
                             />
                         )}
@@ -496,25 +495,16 @@ export function LimitEditorDialog({
                 {currentApp && (
                     <div className="limit-app-category-bar">
                         <div className="limit-app-category-info">
-                            <span className="limit-app-category-label">{t("categorize.primary", "Category")}:</span>
-                            <span
-                                className="target-badge target-badge--category-tag"
-                                style={{
-                                    backgroundColor: `${currentCatColor}22`,
-                                    color: currentCatColor,
-                                    borderColor: `${currentCatColor}44`,
-                                }}
-                            >
-                                {currentCatName}
-                            </span>
+                            <span className="limit-app-category-label">{t("categorize.primary")}</span>
+                            <span className="tt-tag">{currentCatName}</span>
                         </div>
                         {onCategorize && (
                             <button
                                 type="button"
-                                className="btn btn-ghost btn-xs"
+                                className="tt-link"
                                 onClick={() => onCategorize(currentApp.id, currentApp.display_name, currentApp.primary_category, currentApp.tags)}
                             >
-                                {t("categorize.changeCategory", "Change")}
+                                {t("categorize.changeCategory")}
                             </button>
                         )}
                     </div>
@@ -525,7 +515,7 @@ export function LimitEditorDialog({
                     <div className="limit-section-header">
                         <div className="limit-section-title">
                             <Clock size={13} className="limit-section-icon" />
-                            <span>{t("limitEditor.minutesPerDay", "Daily Allowance")}</span>
+                            <span>{t("limitEditor.minutesPerDay")}</span>
                         </div>
                         <div className="duration-dual-inputs">
                             <div className="duration-input-group">
@@ -601,10 +591,10 @@ export function LimitEditorDialog({
                     <div className="limit-section-header">
                         <div className="limit-section-title">
                             <Calendar size={13} className="limit-section-icon" />
-                            <span>{t("limitEditor.perDayOverrides", "Weekday Schedule")}</span>
+                            <span>{t("limitEditor.perDayOverrides")}</span>
                             {overrideCount > 0 && (
                                 <span className="weekday-active-count-badge">
-                                    {overrideCount} custom
+                                    {t("limitEditor.customCount", { count: overrideCount })}
                                 </span>
                             )}
                         </div>
@@ -649,8 +639,8 @@ export function LimitEditorDialog({
                             <span className="weekday-focus-day">{weekdayShortNames()[focusedDay]}</span>
                             <span className="weekday-focus-status">
                                 {activeFocusedDay?.override 
-                                    ? t("limitEditor.customOverride", "Custom Allowance") 
-                                    : t("limitEditor.usingDaily", "Using Daily Allowance")}
+                                    ? t("limitEditor.customOverride") 
+                                    : t("limitEditor.usingDaily")}
                             </span>
                         </div>
 
@@ -720,9 +710,9 @@ export function LimitEditorDialog({
                                     type="button"
                                     className="weekday-action-btn weekday-action-btn--reset"
                                     onClick={() => toggleSingleDay(focusedDay)}
-                                    title={t("limitEditor.resetTitle", "Remove override and use daily default")}
+                                    title={t("limitEditor.resetTitle")}
                                 >
-                                    {t("limitEditor.removeOverride", "Reset to Default")}
+                                    {t("limitEditor.removeOverride")}
                                 </button>
 
                                 {overrideCount > 1 && (
@@ -735,9 +725,9 @@ export function LimitEditorDialog({
                                                 prev.map((d) => (d.override ? { ...d, minutes: targetMins } : d))
                                             );
                                         }}
-                                        title={t("limitEditor.syncTitle", "Apply this duration to all custom days")}
+                                        title={t("limitEditor.syncTitle")}
                                     >
-                                        {t("limitEditor.syncAll", "Sync All")}
+                                        {t("limitEditor.syncAll")}
                                     </button>
                                 )}
                             </div>
@@ -757,14 +747,15 @@ export function LimitEditorDialog({
 
                 {/* 4. In Force Checkbox */}
                 <label className="limit-enforce-toggle">
+                    <span className="limit-enforce-label">{t("limitEditor.inForce")}</span>
                     <input
                         type="checkbox"
+                        role="switch"
+                        className="toggle-switch"
                         checked={enabled}
                         disabled={busy}
                         onChange={(event) => setEnabled(event.target.checked)}
-                        className="limit-enforce-checkbox"
                     />
-                    <span className="limit-enforce-label">{t("limitEditor.inForce", "Enable limit enforcement")}</span>
                 </label>
 
                 {waits ? (
@@ -800,7 +791,7 @@ export function LimitEditorDialog({
                         onClick={() => { if (!busy) onClose(); }}
                         disabled={busy}
                     >
-                        {t("common.cancel", "Cancel")}
+                        {t("common.cancel")}
                     </button>
                     <button type="submit" className="btn btn--primary" disabled={busy}>
                         {busy && <LoadingSpinner size="xs" />}
