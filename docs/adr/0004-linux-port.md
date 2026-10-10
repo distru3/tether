@@ -63,7 +63,8 @@ Windows; setup says a supervised account should not have `sudo`.
 ## Phases
 
 - **L0 Foundation**: Unix transport + peer check, Linux paths, systemd units,
-  Linux build and CI green; remove the stale freeze design (docs, stub
+  Linux build and CI green (the `ubuntu-latest` CI job is off until then and
+  comes back with L0); remove the stale freeze design (docs, stub
   notes, unused `freeze`/`thaw`).
 - **L1 X11 end to end**: tracking, idle, identity, categories, overlay and
   timer, Quit. Tested on Xvfb with a window manager.

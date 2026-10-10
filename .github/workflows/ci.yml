@@ -17,7 +17,9 @@ jobs:
         strategy:
             fail-fast: false
             matrix:
-                os: [windows-latest, ubuntu-latest]
+                # Linux is a stub until phase L0 of docs/adr/0004-linux-port.md;
+                # ubuntu-latest comes back into this list with it.
+                os: [windows-latest]
         runs-on: ${{ matrix.os }}
         steps:
             - uses: actions/checkout@v4
