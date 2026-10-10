@@ -1,6 +1,6 @@
 # Screentime System Map & Architecture Reference
 
-This document is the authoritative on-demand reference for AI agents and human engineers working on the Screentime codebase. Verified against the codebase on **2026-09-12**.
+This document is the authoritative on-demand reference for AI agents and human engineers working on the Screentime codebase. Verified against the codebase on **2026-10-02**.
 
 ---
 
@@ -31,15 +31,16 @@ The system is partitioned into **three separate processes** due to Windows opera
 |  |  (crates/session)           |  |  (ui/ + ui/src-tauri)                  |  |
 |  |  - 1 Hz Foreground Tracker  |  |  - Tauri 2 Desktop Shell               |  |
 |  |  - Idle Detection           |  |  - React 18 / TypeScript Dashboard     |  |
-|  |  - Win32 GDI Block Overlay  |  |  - Smoked-Glass Analytics UI           |  |
-|  |  - Low-Level Keyboard Hook  |  |  - Settings, Limits & Filtering Admin  |  |
+|  |  - Native timer HUD         |  |  - Today / Limits / Settings UI        |  |
+|  |  - Block-overlay driver     |  |  - Settings, Limits & Filtering Admin  |  |
 |  +-----------------------------+  +----------------------------------------+  |
 +-------------------------------------------------------------------------------+
 ```
 
 ### Why This Split Exists
 - **Session 0 Isolation**: On Windows, services running as SYSTEM cannot interact with the user desktop, cannot see the focused window, and cannot display UI. Thus, `screentime-agent` cannot sample the foreground app.
-- **Session Helper (`screentime-session`)**: Runs inside the interactive desktop session. It samples `GetForegroundWindow()` and Win32 `GetLastInputInfo()` every second, packaging observations into `ReportUsage` requests sent to the agent over `\\.\pipe\screentime`. It also hosts the hand-painted GDI block overlay window because only a session process can draw topmost windows over games and fullscreen applications.
+- **Session Helper (`screentime-session`)**: Runs inside the interactive desktop session. It samples `GetForegroundWindow()` and Win32 `GetLastInputInfo()` every second, packaging observations into `ReportUsage` requests sent to the agent over `\\.\pipe\screentime`. It draws the native timer HUD, and decides when the block overlay must show. The overlay itself is rendered by the UI's `overlay` webview, which the session commands over `\\.\pipe\screentime_overlay_bridge`.
+- **The service keeps the session helper running** (ADR 0003). The helper is the only source of focus reports, so while it is gone nothing is enforced. Release builds use `panic = "abort"`, so HUD creation is fallible (`hud::spawn_hud_overlay` returns `Option`) rather than `unwrap`ping Win32 results. If the helper still exits (crash, or ended in Task Manager), the service notices 15 s of report silence and relaunches it in the console user's session (`supervisor.rs` decides with startup grace and backoff; `st_win32::session_launch` uses `WTSQueryUserToken` + `CreateProcessAsUserW`). Console-mode dev agents don't supervise. Open: a fail-closed fallback while reports are stale.
 - **Tauri UI (`screentime-ui`)**: Runs the React frontend dashboard inside WebView2. It never connects to the database directly; it issues one-shot IPC requests to the agent via Tauri commands.
 
 ---
@@ -50,22 +51,29 @@ The system is partitioned into **three separate processes** due to Windows opera
 crates/
 ├── core/             Pure domain logic. NO OS APIs. NO wall clock. NO SQL.
 │                     Platform traits (`WindowTracker`, `ProcessController`, etc.),
-│                     DayKey calculation, LimitEngine, Category, Schedules, FocusSession.
+│                     DayKey calculation, LimitEngine, Category, Schedules,
+│                     SettingKey (allowed settings + loosening rules), PinThrottle,
+│                     games (shared "is this a game?" heuristics).
 ├── storage/          SQLite migrations (0001-0004), query modules, connection handling.
 ├── ipc/              Named pipe framing, wire serialization, Request/Response enums,
 │                     ts-rs TypeScript binding generator.
-├── st-win32/         Shared Win32 helpers (process handles, image paths, wide strings).
+├── st-win32/         Shared Win32 helpers (process handles, image paths, wide strings),
+│                     in-memory WAV playback (`audio`), pipe-peer trust (`peer_is_trusted`),
+│                     user-session process launch (`session_launch`).
 ├── tracker-win/      Win32 active window and idle tracker (used by dev fallback).
 ├── tracker-linux/    Linux window tracking stub.
 ├── enforce-win/      Process freeze/terminate and hosts-file atomic writer.
 ├── enforce-linux/    Linux cgroup and hosts writer stub.
-├── dnsproxy/         Cloudflare Family DNS adapter configuration & original DNS backup/restore.
-├── agent/            Privileged daemon: IPC server, report ingestion, enforcement loop.
-└── session/          Per-user sampling front and Win32 GDI block overlay.
+├── family-dns/       Cloudflare Family DNS adapter configuration & original DNS backup/restore.
+├── agent/            Privileged daemon: IPC server (`ipc_server/` — `auth.rs` gate + one
+│                     module per area), report ingestion, enforcement loop, live
+│                     `policy.rs`, `family_dns.rs` (enable/disable orchestration),
+│                     `supervisor.rs` (relaunches a silent session helper).
+└── session/          Per-user sampling front, native timer HUD, block-overlay driver.
 
 ui/
 ├── src-tauri/        Tauri 2 backend: thin adapter translating Tauri invoke -> IPC named pipe.
-└── src/              React 18 frontend: Smoked-glass analytics workspace.
+└── src/              React 18 frontend: Today / Limits / Settings (docs/DESIGN_SYSTEM.md).
 ```
 
 ### Invariant Rules
@@ -107,19 +115,23 @@ SQLite database managed via append-only migrations tracked by `PRAGMA user_versi
 1. If an app or category budget is exhausted, `st-core::LimitEngine` issues a `Decision::Block`.
 2. Agent records the block in `block_state` with `expires_utc` set to the end of the local day.
 3. On its 1 Hz tick, `screentime-session` queries `Request::BlockedApps`.
-4. If the active foreground window matches a blocked app, `screentime-session` spawns the topmost, borderless Win32 GDI block overlay window (`WS_EX_TOPMOST | WS_EX_NOACTIVATE`) and installs a low-level keyboard hook (`WH_KEYBOARD_LL`) to swallow inputs.
-5. User can click **Quit App** (sends `Request::CloseApps`) or enter their PIN on the click-pad for **+15 MIN EXTEND** (sends `Request::GrantOverride`).
+4. If the active foreground window matches a blocked app, `screentime-session` sends `OverlayBridgeRequest::Show` to the UI's bridge pipe. The UI sizes its always-on-top `overlay` window over the app (at least 520×680 when the PIN pad is shown, clamped to the monitor) and renders `BlockOverlay.tsx`.
+   - **Self-healing**: while the block holds and the app stays focused, the session re-sends `Show` every 2 s (with backoff up to 10 s while unacknowledged) and relaunches the UI if its pipe is missing. Alt+F4 on the overlay, a UI crash or a dropped message is repaired within seconds. `Show` is idempotent and preserves a PIN being typed.
+   - **Peer checks**: the session only talks to a bridge served by `screentime-ui.exe`/`Tether.exe` from its own install; the bridge only accepts the session helper (`st_win32::peer_is_trusted`). An uninspectable peer is allowed and logged.
+5. The user can press **Quit app** or enter the PIN for **Allow 15 more minutes** (`Request::GrantOverride`). Quit tries `WM_CLOSE` and `TerminateProcess` from the user session, then `Request::CloseApps` via the agent. Quitting a *blocked* app needs no PIN; closing an unblocked app does. The overlay hides only if one of those actually closed the app; otherwise it shows the error and stays up.
 
 ### C. Web Filtering & Domain Enforcement
-1. Blocked domains configured via blocklists or manual rules in `st-storage` are enforced natively in the Windows hosts file (`%SystemRoot%\System32\drivers\etc\hosts`) by `st-enforce-win::HostsFileFilter`.
+1. Manually blocked domains (`block_rules` rows with neither a blocklist nor a category) are enforced natively in the Windows hosts file (`%SystemRoot%\System32\drivers\etc\hosts`) by `st-enforce-win::HostsFileFilter`. The main loop re-applies the list whenever it changes. Domains are normalised (lowercase, no leading/trailing dots) on add and remove; adding is idempotent, and removing deletes every copy. Bulk upload accepts plain domains and hosts-file lines (`0.0.0.0 example.com`) and skips invalid lines instead of aborting. (The storage layer also has blocklist tables, but nothing writes or enforces them yet.)
 2. Blocked domains are mapped directly to `0.0.0.0`, dropping TCP/UDP connection attempts instantly across all browsers and desktop applications without requiring a background proxy server.
 3. System-wide adult content, malware, and security protection is provided at the network adapter level via Cloudflare Family DNS (`1.1.1.3` / `1.0.0.3`), configured cleanly via `netsh`.
 
 ### D. Family DNS Protection & Automatic Original DNS Restoration
-1. **Preservation on Enable**: When Family DNS is enabled (via UI Settings, Onboarding, or CLI `--enable-family-dns`), `st_dns::dns_config::capture()` reads all active network interfaces (`IfaceDns`), captures their exact DNS server IP lists (or DHCP state), and serializes them to both SQLite `settings` (`original_dns_config`) and `{data_dir}/original_dns_backup.json`.
-2. **Registry Tracking**: `HKLM\Software\Screentime\FamilyDnsApplied` DWORD is set to `1`. Active interfaces are configured to use Cloudflare Family DNS (`1.1.1.3`, `1.0.0.3`, `2606:4700:4700::1113`, `2606:4700:4700::1003`).
-3. **Restoration on Disable**: When Family DNS is disabled (via UI Settings or CLI `--disable-family-dns`), the agent reads the serialized backup from SQLite or the JSON backup file, restores each interface back to its exact prior configuration (static IPs or DHCP), flushes the Windows DNS resolver cache (`ipconfig /flushdns`), removes the backup records, and clears the registry flag.
-4. **Interactive Uninstaller Restoration**: The NSIS uninstaller (`installer_hooks.nsh`) provides a dedicated checkbox ("Restore previous network DNS configuration"). When selected, it executes `screentime-agent.exe --disable-family-dns`, seamlessly reverting adapters back to their original DHCP or static servers.
+All entry points (the `family_dns` setting from the Limits page or the setup flow, CLI `--enable-family-dns` / `--disable-family-dns`) share one implementation: `crates/agent/src/family_dns.rs`. The OS work sits behind the `DnsBackend` trait (`WindowsDns` in production, a fake in tests). It runs **without the database lock held**, and failures are returned to the caller instead of being swallowed.
+1. **Preservation on Enable**: `st_dns::dns_config::capture()` reads all active network interfaces (`IfaceDns`), including their exact DNS server IP lists (or DHCP state). The snapshot is serialized to both SQLite `settings` (`original_dns_config`) and `{data_dir}/original_dns_backup.json`. **If a backup already exists** (e.g. after a crash mid-enable), it is reused rather than recaptured, so Family DNS itself is never saved as the "original". A capture failure aborts before anything changes.
+2. **Apply**: Active interfaces are pointed at Cloudflare Family DNS (`1.1.1.3`, `1.0.0.3`, `2606:4700:4700::1113`, `2606:4700:4700::1003`). The browser DoH policies and outbound DoT (port 853) firewall rules from `st_dns::lockdown` are applied on every enable path (previously only the CLI did this). `HKLM\Software\Screentime\FamilyDnsApplied` is set to `1`. If applying fails, the agent rolls back to the backup and reports the error, so the toggle never claims protection that is absent.
+3. **Restoration on Disable**: The agent reads the backup from SQLite, falling back to the JSON file, and restores each interface to its exact prior configuration (static IPs or DHCP). With no usable backup, every active adapter returns to DHCP. It then clears the lockdown, flushes the resolver cache, removes both backup copies and clears the registry flag.
+4. **Interactive Uninstaller Restoration**: While Family DNS is on (`FamilyDnsApplied = 1`), the uninstaller's confirm page offers "Turn off Family DNS and restore the previous network DNS", ticked by default (`ui/src-tauri/installer/installer.nsi`). When ticked, `NSIS_HOOK_PREUNINSTALL` (`installer/hooks.nsh`) runs `screentime-agent.exe --disable-family-dns`. The box is hidden when Family DNS is off, because with no backup that command would reset a custom DNS to automatic.
+5. **Emergency reset** (`screentime-agent --reset-network`): clears the lockdown, returns every active adapter to DHCP (deliberately ignoring the backup, in case the backup is what is broken), removes the managed hosts-file block, and marks Family DNS off in the database.
 
 ### E. Application Discovery & Auto-Classification
 1. **Multi-Source Discovery (`st-tracker-win::discovery`)**:
@@ -170,7 +182,7 @@ SQLite database managed via append-only migrations tracked by `PRAGMA user_versi
 
 ## 8. Installer, Uninstaller & Silent Process Execution
 
-Tether's Windows deployment uses Tauri 2's NSIS packager customized via `ui/src-tauri/installer.nsi` and `ui/src-tauri/installer_hooks.nsh`.
+Tether's Windows deployment uses Tauri 2's NSIS packager customized by the files in `ui/src-tauri/installer/` (see `packaging/README.md`): `installer.nsi` (Tauri 2.9 template plus Tether pages and wording), `hooks.nsh` (service, startup, RTSS and DNS steps), `style.nsh` (colours, embedded fonts, page tweaks), `strings.nsh` (English and Arabic wording) and `art/` (sidebar and header bitmaps drawn by `art/make_art.py`).
 
 1. **Zero-Console Silent Execution**:
    - All internal shell invocations in the installer hooks and Rust backend use hidden console attributes:
@@ -180,12 +192,11 @@ Tether's Windows deployment uses Tauri 2's NSIS packager customized via `ui/src-
    - `screentime-session.exe` runs per-user in interactive user sessions.
    - During uninstallation (`NSIS_HOOK_PREUNINSTALL`), before files are deleted:
      - `taskkill.exe /F /IM screentime-session.exe` and `taskkill.exe /F /IM screentime-ui.exe` forcefully terminate running user-space processes.
-     - `screentime-session.exe --autostart off` and explicit registry removals purge HKCU and HKLM Run keys.
+     - `screentime-session.exe --autostart off` and explicit registry removals purge HKCU and HKLM Run keys. (Install writes only the HKLM `ScreentimeSession` Run value, which starts the helper for every user; the helper's single-instance lock covers any leftover HKCU entry from older installs.)
      - A 500ms kernel quiescence pause (`Sleep 500`) allows Windows handle release, preventing file-in-use (`ERROR_ACCESS_DENIED`) locking during file removal.
      - The background Windows service (`ScreentimeAgent`) is cleanly stopped and uninstalled.
-3. **Interactive Network DNS Restore Option**:
-   - The uninstaller confirmation dialog features a dedicated checkbox:
-     `[x] Restore network DNS settings (disable DNS filtering)`
-     positioned dynamically beneath `Delete the application data`.
-   - The checkbox automatically initializes to checked if Family DNS is currently active (`HKLM\Software\Screentime\FamilyDnsApplied == 1`).
-   - If selected upon uninstallation, `screentime-agent.exe --disable-family-dns` executes prior to binary removal, restoring clean network adapter DNS configurations and purging firewall rules.
+3. **Uninstall options** (confirm page, placed under the folder field from its measured position, so they fit any font, DPI or RTL layout):
+   - `[ ] Also delete usage history and settings`: removes `%LOCALAPPDATA%\screentime`, `C:\ProgramData\screentime` and the app's WebView data.
+   - `[x] Turn off Family DNS and restore the previous network DNS`: only shown while `HKLM\Software\Screentime\FamilyDnsApplied == 1`. Passive and silent uninstalls restore DNS whenever that flag is set.
+4. **Starting tracking right after install**: the post-install hook starts `screentime-session.exe` with `nsis_tauri_utils::RunAsUser`, i.e. as the signed-in desktop user, not with the installer's elevated (possibly different, over-the-shoulder) admin token.
+5. **Language**: English and Arabic, picked from the Windows display language (no selector). The post-install hook records the language so the uninstaller never asks, including after a silent install.

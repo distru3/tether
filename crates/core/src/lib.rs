@@ -16,11 +16,14 @@
 pub mod category;
 pub mod clock;
 pub mod daykey;
+pub mod games;
 pub mod limits;
 pub mod model;
 pub mod pin;
 pub mod platform;
+pub mod reasons;
 pub mod schedules;
+pub mod settings;
 
 pub use category::{BuiltinCategory, Category, CategoryKind, BUILTIN_CATEGORIES};
 pub use clock::{Clock, ClockGuard, ClockVerdict, SystemClock};
@@ -33,5 +36,4 @@ pub use platform::{
 };
 pub use schedules::{
     is_any_downtime_active, is_schedule_active, weekday_mask_contains, DowntimeSchedule,
-    FocusSession,
 };

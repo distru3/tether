@@ -125,10 +125,6 @@ export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSe
                 </label>
                 {error !== null && <p className="dialog-error">{error}</p>}
                 <div className="dialog-actions">
-                    <button type="submit" className="btn btn--primary" disabled={busy}>
-                        {busy && <LoadingSpinner size="xs" />}
-                        {busy ? t("pinSetup.setting") : t("pinSetup.savePin")}
-                    </button>
                     <button
                         type="button"
                         className="btn btn--secondary"
@@ -136,6 +132,10 @@ export function PinSetupDialog({ pinConfigured, busy, onClose, onSubmit }: PinSe
                         disabled={busy}
                     >
                         {t("common.cancel")}
+                    </button>
+                    <button type="submit" className="btn btn--primary" disabled={busy}>
+                        {busy && <LoadingSpinner size="xs" />}
+                        {busy ? t("pinSetup.setting") : t("pinSetup.savePin")}
                     </button>
                 </div>
             </form>

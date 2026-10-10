@@ -21,6 +21,7 @@
 mod enforcement;
 mod limits;
 mod migrations;
+mod reasons;
 mod reporting;
 mod schedules;
 mod settings;
@@ -32,7 +33,7 @@ pub use crate::limits::{LimitRow, PendingLimitRow};
 pub use crate::reporting::{
     CategoryRow, DailyTotal, DaySnapshot, DaySummary, UsageRow, WeeklySummary,
 };
-pub use crate::web::{normalize_domain, BlockRuleRow, BlocklistRow};
+pub use crate::web::{normalize_domain, BlockRuleRow};
 
 use std::path::Path;
 

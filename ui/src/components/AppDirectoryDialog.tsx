@@ -68,17 +68,17 @@ export function AppDirectoryDialog({
     }, [appsList, categoriesMap, search, filter]);
 
     return (
-        <Dialog label={t("categorize.appDirectory", "Application Directory")} onClose={onClose}>
+        <Dialog label={t("categorize.appDirectory")} onClose={onClose}>
             <div className="app-directory-dialog">
-                <p className="dialog-eyebrow">{t("categorize.eyebrow", "App Classification")}</p>
+                <p className="dialog-eyebrow">{t("categorize.eyebrow")}</p>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-                    <h2 className="dialog-title">{t("categorize.appDirectory", "Application Directory")}</h2>
+                    <h2 className="dialog-title">{t("categorize.appDirectory")}</h2>
                     <span style={{ fontSize: "12px", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>
                         {t("categorize.appsDetected", { count: appsList.length })}
                     </span>
                 </div>
                 <p className="panel-note" style={{ marginBottom: 16 }}>
-                    {t("categorize.desc", "Choose the primary category for this app. You can also add tag categories for overlapping budgets.")}
+                    {t("categorize.directoryDesc")}
                 </p>
 
                 {/* Search & filter toolbar */}
@@ -88,7 +88,7 @@ export function AppDirectoryDialog({
                         <input
                             type="text"
                             className="app-directory-search-input"
-                            placeholder={t("categorize.searchApps", "Search applications...")}
+                            placeholder={t("categorize.searchApps")}
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             autoFocus
@@ -98,7 +98,8 @@ export function AppDirectoryDialog({
                                 type="button"
                                 className="app-directory-search-clear"
                                 onClick={() => setSearch("")}
-                                title="Clear search"
+                                title={t("common.clearSearch")}
+                                aria-label={t("common.clearSearch")}
                             >
                                 <X size={13} />
                             </button>
@@ -111,21 +112,21 @@ export function AppDirectoryDialog({
                             className={`app-directory-tab ${filter === "all" ? "app-directory-tab--active" : ""}`}
                             onClick={() => setFilter("all")}
                         >
-                            {t("categorize.filterAll", "All")} ({appsList.length})
+                            {t("categorize.filterAll")} ({appsList.length})
                         </button>
                         <button
                             type="button"
                             className={`app-directory-tab ${filter === "categorized" ? "app-directory-tab--active" : ""}`}
                             onClick={() => setFilter("categorized")}
                         >
-                            {t("categorize.filterCategorized", "Categorized")} ({categorizedCount})
+                            {t("categorize.filterCategorized")} ({categorizedCount})
                         </button>
                         <button
                             type="button"
                             className={`app-directory-tab ${filter === "uncategorized" ? "app-directory-tab--active" : ""}`}
                             onClick={() => setFilter("uncategorized")}
                         >
-                            {t("categorize.filterUncategorized", "Uncategorized")} ({uncategorizedCount})
+                            {t("categorize.filterUncategorized")} ({uncategorizedCount})
                         </button>
                     </div>
                 </div>
@@ -135,12 +136,12 @@ export function AppDirectoryDialog({
                     {filteredApps.length === 0 ? (
                         <div className="app-directory-empty">
                             <Tag size={24} style={{ opacity: 0.4, marginBottom: 8 }} />
-                            <p>{t("categorize.noAppsFound", "No applications match your search.")}</p>
+                            <p>{t("categorize.noAppsFound")}</p>
                         </div>
                     ) : (
                         filteredApps.map((app) => {
                             const cat = categoriesMap.get(app.primary_category);
-                            const catName = cat?.name ?? "Uncategorized";
+                            const catName = cat?.name ?? t("categorize.uncategorized");
                             const catColor = colorForCategory(catName, cat?.color);
 
                             return (
@@ -160,12 +161,12 @@ export function AppDirectoryDialog({
                                             <div className="app-directory-name-row">
                                                 <span className="app-directory-name">{app.display_name}</span>
                                                 {app.user_classified && (
-                                                    <span className="app-directory-custom-badge" title="Manually customized by user">
-                                                        {t("categorize.customized", "Custom")}
+                                                    <span className="app-directory-custom-badge" title={t("categorize.userSet")}>
+                                                        {t("categorize.customized")}
                                                     </span>
                                                 )}
                                             </div>
-                                            <span className="app-directory-key">{app.key}</span>
+                                            <span className="app-directory-key" title={app.key}>{app.key.replace(/^exe:/i, "")}</span>
                                         </div>
                                     </div>
 
@@ -180,7 +181,7 @@ export function AppDirectoryDialog({
                                                 cursor: "pointer",
                                             }}
                                             onClick={() => onCategorize(app.id, app.display_name, app.primary_category, app.tags)}
-                                            title={t("categorize.changeCategory", "Click to change category")}
+                                            title={t("categorize.changeCategory")}
                                             disabled={busy}
                                         >
                                             {catName}
@@ -191,7 +192,7 @@ export function AppDirectoryDialog({
                                             onClick={() => onCategorize(app.id, app.display_name, app.primary_category, app.tags)}
                                             disabled={busy}
                                         >
-                                            {t("ledger.tag", "Tag")}
+                                            {t("categorize.change")}
                                         </button>
                                     </div>
                                 </div>
@@ -202,7 +203,7 @@ export function AppDirectoryDialog({
 
                 <div className="dialog-actions" style={{ marginTop: 16 }}>
                     <button type="button" className="btn btn--secondary" onClick={onClose}>
-                        {t("common.close", "Close")}
+                        {t("common.close")}
                     </button>
                 </div>
             </div>

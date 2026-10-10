@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import { describeError, getCatalog, getDaySummary, getStatus, getWeeklySummary } from "../api";
-import { dayKeyToDate, shiftDay, todayKey } from "../format";
+import { dayKeyToDate, setDayStartMinutes, shiftDay, todayKey } from "../format";
 import type { CatalogDto } from "../types/generated/CatalogDto";
 import type { DaySummaryDto } from "../types/generated/DaySummaryDto";
 import type { StatusDto } from "../types/generated/StatusDto";
@@ -61,6 +62,7 @@ export function useDashboard(): Dashboard {
         try {
             const status = await getStatus();
             if (ticket !== pollSeq.current) return;
+            setDayStartMinutes(Number(status.day_start_minutes));
             setStatusInfo(status);
             const nextSummary = await getDaySummary(viewDay);
             if (ticket !== pollSeq.current) return;
@@ -86,6 +88,7 @@ export function useDashboard(): Dashboard {
     const refreshStatus = useCallback(async () => {
         try {
             const next = await getStatus();
+            setDayStartMinutes(Number(next.day_start_minutes));
             setStatusInfo(next);
         } catch {
             // fail-safe ignore
@@ -182,8 +185,10 @@ export function useDashboard(): Dashboard {
     useEffect(() => {
         let handle = 0;
         const schedule = () => {
+            // Next rollover, honouring the agent's day start.
             const midnight = new Date();
-            midnight.setHours(24, 0, 0, 250);
+            midnight.setHours(0, Number(statusInfo?.day_start_minutes ?? 0), 0, 250);
+            if (midnight.getTime() <= Date.now()) midnight.setDate(midnight.getDate() + 1);
             handle = window.setTimeout(
                 () => {
                     setDayKey(todayKey());
@@ -196,13 +201,44 @@ export function useDashboard(): Dashboard {
         };
         schedule();
         return () => window.clearTimeout(handle);
-    }, [followingToday, poll]);
+    }, [followingToday, poll, statusInfo?.day_start_minutes]);
+
+    // The first status poll reveals the day start; re-anchor "today" if we
+    // are following it (the initial key was computed assuming midnight).
+    useEffect(() => {
+        if (statusInfo === null) return;
+        setDayKey(todayKey());
+        if (followingToday) setViewDayRaw(todayKey());
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [statusInfo?.day_start_minutes]);
+
+    // Built-in category names arrive in English from the agent; translate
+    // them once here so every view (rows, chips, legends, editors) agrees.
+    const { t, i18n } = useTranslation();
+    const localizedCatalog = useMemo(() => {
+        if (catalog === null) return null;
+        return {
+            ...catalog,
+            categories: catalog.categories.map((c) =>
+                c.builtin ? { ...c, name: t(`categoryNames.${c.slug}`, c.name) } : c,
+            ),
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [catalog, i18n.language]);
+    const localizedSummary = useMemo(() => {
+        if (summary === null || localizedCatalog === null) return summary;
+        const names = new Map(localizedCatalog.categories.map((c) => [c.id, c.name]));
+        return {
+            ...summary,
+            categories: summary.categories.map((row) => ({ ...row, label: names.get(row.id) ?? row.label })),
+        };
+    }, [summary, localizedCatalog]);
 
     return {
         phase,
         statusInfo,
-        summary,
-        catalog,
+        summary: localizedSummary,
+        catalog: localizedCatalog,
         lastError,
         todayKey: dayKey,
         viewDay,

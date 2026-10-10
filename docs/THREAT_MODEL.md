@@ -34,7 +34,21 @@ worse than one that says nothing: users will trust it and then be surprised.
   `Suspend`/`Hibernate` is not screen time.
 * Marker-delimited hosts writes so user entries survive.
 * DB and config in a SYSTEM/root-owned directory with restrictive ACLs.
-* PIN gate on grants, PIN change requires the old PIN.
+* One central PIN gate in the agent (`ipc_server/auth.rs`) in front of every
+  request that loosens enforcement: limits, overrides, quitting a blocked app,
+  removing web blocks, recategorising apps, editing/disabling/deleting
+  downtime schedules, allowlisting, and loosening settings. `SetSetting`
+  accepts only a fixed key list, so the PIN hash can no longer be overwritten
+  through it. PIN change requires the old PIN or the recovery code.
+* Brute-force throttle on PIN and recovery-code checks (escalating lockout
+  after 5 consecutive failures, `rate_limited`), with failures audited.
+* Pipe peer verification: usage reports are accepted only from Tether's own
+  session helper, and the overlay bridge checks both ends are genuine Tether
+  binaries from the same install. This stops a local script from faking usage
+  or focus, or squatting the bridge pipe to swallow the block screen.
+* The block screen self-heals: the session re-sends it every 2 s while a
+  block holds and relaunches the UI if needed, so closing the overlay or
+  killing the UI uncovers a blocked app for at most a few seconds.
 * Audit log for overrides, limit edits, service stops, hosts/DNS tampering,
   clock jumps.
 

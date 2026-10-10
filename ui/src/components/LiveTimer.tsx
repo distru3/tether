@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Timer } from "lucide-react";
 import "./LiveTimer.css";
 
@@ -52,7 +52,7 @@ export function LiveTimer({
             {showPulse && <span className="live-timer-dot-pulse" />}
             {showIcon && <Timer size={12} className="live-timer-icon" />}
             {showLabel && <span className="live-timer-label">{label}</span>}
-            <span className="live-timer-digits font-mono">{formatted}</span>
+            <span className="live-timer-digits">{formatted}</span>
         </span>
     );
 }

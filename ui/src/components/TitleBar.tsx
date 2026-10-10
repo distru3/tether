@@ -1,8 +1,10 @@
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import React, { useState, useEffect } from 'react';
+import { useTranslation } from "react-i18next";
+import { useState, useEffect } from 'react';
 import './TitleBar.css';
 
 export function TitleBar() {
+    const { t } = useTranslation();
     const appWindow = getCurrentWindow();
     const [isMaximized, setIsMaximized] = useState(false);
 
@@ -23,7 +25,9 @@ export function TitleBar() {
     }, []);
 
     return (
-        <div data-tauri-drag-region className="titlebar">
+        // A labelled region, not a banner: the page below (dashboard or setup)
+        // has its own header.
+        <div data-tauri-drag-region className="titlebar" role="region" aria-label={t("titlebar.label")}>
             <div className="titlebar-left" data-tauri-drag-region>
                 <span className="titlebar-title" data-tauri-drag-region>Tether</span>
             </div>
@@ -32,7 +36,8 @@ export function TitleBar() {
                 <button
                     className="titlebar-btn"
                     onClick={() => appWindow.minimize()}
-                    title="Minimize"
+                    title={t("titlebar.minimize")}
+                    aria-label={t("titlebar.minimize")}
                 >
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M1 5H9" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
@@ -41,7 +46,8 @@ export function TitleBar() {
                 <button
                     className="titlebar-btn"
                     onClick={() => appWindow.toggleMaximize()}
-                    title={isMaximized ? "Restore Down" : "Maximize"}
+                    title={isMaximized ? t("titlebar.restore") : t("titlebar.maximize")}
+                    aria-label={isMaximized ? t("titlebar.restore") : t("titlebar.maximize")}
                 >
                     {isMaximized ? (
                         <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -57,7 +63,8 @@ export function TitleBar() {
                 <button
                     className="titlebar-btn titlebar-btn-close"
                     onClick={() => appWindow.hide()}
-                    title="Close"
+                    title={t("titlebar.hide")}
+                    aria-label={t("titlebar.hide")}
                 >
                     <svg width="10" height="10" viewBox="0 0 10 10" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <path d="M1.5 1.5L8.5 8.5M8.5 1.5L1.5 8.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />

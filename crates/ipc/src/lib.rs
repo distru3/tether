@@ -13,9 +13,12 @@
 //! * The transport is local only. Never bind a TCP socket.
 //! * The agent authenticates the peer at accept time (pipe ACL on Windows,
 //!   `SO_PEERCRED` on Linux) and again per privileged request.
-//! * Anything that loosens enforcement ([`Request::SetLimit`],
-//!   [`Request::GrantOverride`]) carries a PIN and is written to the audit log
-//!   whether it succeeds or fails.
+//! * Anything that loosens enforcement carries a PIN, which the agent checks
+//!   centrally (its `auth` module) before dispatching: limits, overrides,
+//!   quitting a blocked app, removing a web block, recategorising an app,
+//!   editing/disabling/deleting a schedule, allowlisting, and any
+//!   [`Request::SetSetting`] that `st_core::settings::SettingKey::is_loosening`
+//!   flags. Repeated wrong credentials trip [`ErrorCode::RateLimited`].
 
 use std::io::{Read, Write};
 
@@ -84,6 +87,11 @@ pub enum Request {
         primary: Option<i64>,
         #[ts(as = "Vec<i32>")]
         tags: Vec<i64>,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     /// Everything the limit editor needs in one round trip: apps, categories
     /// and current limits.
@@ -149,6 +157,11 @@ pub enum Request {
     SetSetting {
         key: String,
         value: String,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     /// Usage reported by the session helper, which is the only component able
     /// to see the focused window. See [`ReportUsageDto`] for the contract.
@@ -171,15 +184,30 @@ pub enum Request {
         weekday_mask: u8,
         start_minute: u32,
         end_minute: u32,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     SetScheduleEnabled {
         #[ts(as = "i32")]
         id: i64,
         enabled: bool,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     DeleteSchedule {
         #[ts(as = "i32")]
         id: i64,
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     ListManualBlocks,
     AddManualBlock {
@@ -196,19 +224,36 @@ pub enum Request {
         #[ts(as = "i32")]
         subject_id: i64,
         allowed: bool,
-    },
-    /// Get the current focus session if active.
-    GetFocusSession,
-    StartFocusSession {
-        duration_minutes: u32,
-        name: Option<String>,
-    },
-    EndFocusSession {
+        /// Required (once a PIN is configured) when the change loosens
+        /// enforcement; see `st_core::settings` and the agent's `auth` module.
+        #[serde(default)]
+        #[ts(optional)]
         pin: Option<String>,
+    },
+    /// Check a PIN without changing anything, for UI-only reveals (e.g. the
+    /// hidden adult-domain list). Answers `Accepted` or `bad_pin`, and counts
+    /// against the same brute-force throttle as every other credential check.
+    VerifyPin {
+        pin: String,
     },
     /// Register applications discovered on the local system (proactive app discovery).
     RegisterDiscoveredApps {
         apps: Vec<DiscoveredAppDto>,
+    },
+    /// The block screen's "What were you about to do?" for a blocked app:
+    /// `finish`, `bored` or `habit` (`st_core::reasons::BlockReason`). The
+    /// agent files it under its own current day; one answer per app per day.
+    /// Never changes enforcement, so it needs no PIN.
+    RecordBlockReason {
+        #[ts(as = "i32")]
+        app_id: i64,
+        reason: String,
+    },
+    /// How often each block-screen reason was given between two days
+    /// (inclusive). Answers [`Response::BlockReasons`].
+    BlockReasons {
+        from_day: DayKey,
+        to_day: DayKey,
     },
 }
 
@@ -314,13 +359,25 @@ pub enum Response {
     ScheduleCreated(ScheduleDto),
     /// All always-allowed subjects for downtime.
     Allowlist(AllowlistDto),
-    /// Current focus session state.
-    FocusSession {
-        session: Option<FocusSessionDto>,
-    },
     ManualBlocks {
         domains: Vec<String>,
     },
+    /// Counts for [`Request::BlockReasons`], most common first.
+    BlockReasons(BlockReasonsDto),
+}
+
+/// One block-screen reason and how often it was given.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BlockReasonCountDto {
+    /// `finish`, `bored` or `habit`.
+    pub reason: String,
+    pub count: u32,
+}
+
+/// The payload of `Response::BlockReasons`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct BlockReasonsDto {
+    pub counts: Vec<BlockReasonCountDto>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -340,6 +397,9 @@ pub enum ErrorCode {
     /// something honest.
     BadRequest,
     Internal,
+    /// Too many wrong PINs or recovery codes in a row: credential checks are
+    /// refused until the lockout in the message has elapsed.
+    RateLimited,
 }
 
 /// A batch of foreground-window observations from the session helper.
@@ -493,9 +553,13 @@ pub struct StatusDto {
     #[serde(default = "default_hud_peek_hotkey")]
     pub hud_peek_hotkey: String,
     #[serde(default = "default_alert_volume")]
+    #[ts(as = "i32")]
     pub alert_volume: i64,
+    #[ts(as = "i32")]
     pub limit_cooldown_hours: i64,
+    #[ts(as = "i32")]
     pub day_start_minutes: i64,
+    #[ts(as = "i32")]
     pub idle_threshold_secs: i64,
     /// The active filter can enforce wildcard (subdomain) rules. True only when
     /// the DNS-proxy backend is genuinely applied, not just present.
@@ -504,6 +568,13 @@ pub struct StatusDto {
     /// neither `hosts` nor DNS can see a path; only a browser extension can.
     pub path_level: bool,
     pub family_dns_enabled: bool,
+    /// Who Tether is set up for: "self" or "guardian" (first-run choice).
+    #[serde(default = "default_profile")]
+    pub profile: String,
+}
+
+fn default_profile() -> String {
+    "self".into()
 }
 
 fn default_hud_peek_hotkey() -> String {
@@ -590,68 +661,6 @@ pub struct BlockedAppsDto {
     pub blocked: Vec<BlockedAppDto>,
 }
 
-// -- Web filter --------------------------------------------------------------
-
-/// One web-filter blocklist.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct BlocklistDto {
-    #[ts(as = "i32")]
-    pub id: i64,
-    pub name: String,
-    pub source_url: Option<String>,
-    pub version: Option<String>,
-    pub checksum: Option<String>,
-    pub enabled: bool,
-    pub last_updated_utc: Option<String>,
-}
-
-/// The payload of `Response::Blocklists` (wrapped so the internally tagged
-/// `Response` enum can carry the sequence).
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct BlocklistsDto {
-    pub blocklists: Vec<BlocklistDto>,
-}
-
-/// One `block_rules` row: what to block (or, pre-resolution, allow).
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct BlockRuleDto {
-    #[ts(as = "i32")]
-    pub id: i64,
-    #[ts(as = "Option<i32>")]
-    pub blocklist_id: Option<i64>,
-    #[ts(as = "Option<i32>")]
-    pub category_id: Option<i64>,
-    pub domain: String,
-    pub include_subdomains: bool,
-    /// `"block"` | `"allow"`.
-    pub action: String,
-}
-
-/// The payload of `Response::BlockRules`.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct BlockRulesDto {
-    pub rules: Vec<BlockRuleDto>,
-}
-
-/// One site, with its primary category and limit-matching tags.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct SiteDto {
-    #[ts(as = "i32")]
-    pub id: i64,
-    pub domain: String,
-    #[ts(as = "i32")]
-    pub primary_category: i64,
-    #[ts(as = "Vec<i32>")]
-    pub tags: Vec<i64>,
-    pub user_classified: bool,
-}
-
-/// The payload of `Response::Sites`.
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-pub struct SitesDto {
-    pub sites: Vec<SiteDto>,
-}
-
 /// One downtime schedule window.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct ScheduleDto {
@@ -683,17 +692,6 @@ pub struct AllowlistItemDto {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct AllowlistDto {
     pub items: Vec<AllowlistItemDto>,
-}
-
-/// An active focus session.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct FocusSessionDto {
-    pub name: Option<String>,
-    pub started_at_utc: String,
-    pub duration_minutes: u32,
-    pub expires_utc: String,
-    #[ts(as = "i32")]
-    pub remaining_seconds: i64,
 }
 
 /// Write one length-prefixed JSON frame.
@@ -811,6 +809,7 @@ mod tests {
             (ErrorCode::NotFound, "\"not_found\""),
             (ErrorCode::BadRequest, "\"bad_request\""),
             (ErrorCode::Internal, "\"internal\""),
+            (ErrorCode::RateLimited, "\"rate_limited\""),
         ];
         for (code, expected) in cases {
             let json = serde_json::to_string(&Response::Error {
@@ -821,6 +820,28 @@ mod tests {
             assert!(
                 json.contains(expected),
                 "expected {expected} in payload for {code:?}: {json}"
+            );
+        }
+    }
+
+    #[test]
+    fn loosening_requests_from_older_clients_parse_without_a_pin() {
+        // Clients predating the central PIN gate never sent `pin`; their frames
+        // must still parse (the agent then treats the PIN as empty).
+        let frames = [
+            r#"{"type":"set_setting","key":"alert_volume","value":"50"}"#,
+            r#"{"type":"categorize","app_id":1,"primary":2,"tags":[]}"#,
+            r#"{"type":"set_schedule_enabled","id":1,"enabled":false}"#,
+            r#"{"type":"delete_schedule","id":1}"#,
+            r#"{"type":"set_allowlist","subject_type":"app","subject_id":1,"allowed":true}"#,
+            r#"{"type":"update_schedule","id":1,"name":"n","weekday_mask":1,"start_minute":0,"end_minute":60}"#,
+        ];
+        for frame in frames {
+            let request: Request = serde_json::from_str(frame).expect(frame);
+            let json = serde_json::to_value(&request).expect("serialise");
+            assert!(
+                json.get("pin").is_some(),
+                "pin field present after round trip: {json}"
             );
         }
     }
@@ -1016,6 +1037,16 @@ mod tests {
         let dir =
             std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/src/types/generated");
         std::fs::create_dir_all(&dir).expect("create generated dir");
+        // Start from empty so a removed DTO cannot leave a stale binding
+        // behind; every file in this directory is generated.
+        for entry in std::fs::read_dir(&dir)
+            .expect("read generated dir")
+            .flatten()
+        {
+            if entry.path().extension().is_some_and(|ext| ext == "ts") {
+                std::fs::remove_file(entry.path()).expect("remove stale binding");
+            }
+        }
         // Export both protocol roots; every consumed DTO (and its transitive
         // dependencies in st-core) is reachable from one of them.
         Response::export_all_to(&dir).expect("export response bindings");

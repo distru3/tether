@@ -86,6 +86,11 @@ pub(crate) fn usage_text() -> String {
         .to_string()
 }
 
+/// `sc.exe create`'s exit code when the service is already registered
+/// (Win32 `ERROR_SERVICE_EXISTS`). `--install` treats it as "update the
+/// path" rather than a failure.
+pub(crate) const ERROR_SERVICE_EXISTS: i32 = 1073;
+
 /// The `sc.exe create` line `--install` runs.
 ///
 /// `sc.exe` parses options with the value AFTER the space following `=`, and

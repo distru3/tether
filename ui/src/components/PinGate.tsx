@@ -77,7 +77,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                         placeholder="····"
                         value={pin}
                         disabled={busy}
-                        aria-label="PIN"
+                        aria-label={t("pinGate.pinLabel")}
                         onChange={(event) => setPin(event.target.value)}
                     />
                     {error !== null && <p className="dialog-error">{error}</p>}
@@ -86,20 +86,20 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                     )}
                     <div className="dialog-actions">
                         <button
-                            type="submit"
-                            className="btn btn--primary"
-                            disabled={busy || pin.trim().length === 0}
-                        >
-                            {busy && <LoadingSpinner size="xs" />}
-                            {busy ? t("pinGate.checking") : t("pinGate.confirm")}
-                        </button>
-                        <button
                             type="button"
                             className="btn btn--secondary"
                             onClick={guardedClose}
                             disabled={busy}
                         >
                             {t("common.cancel")}
+                        </button>
+                        <button
+                            type="submit"
+                            className="btn btn--primary"
+                            disabled={busy || pin.trim().length === 0}
+                        >
+                            {busy && <LoadingSpinner size="xs" />}
+                            {busy ? t("pinGate.checking") : t("pinGate.confirm")}
                         </button>
                     </div>
                     <button
@@ -131,7 +131,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             placeholder="XXXX-XXXX-XXXX-XXXX"
                             value={code}
                             disabled={recovering}
-                            aria-label="Recovery code"
+                            aria-label={t("pinGate.recoveryCode")}
                             onChange={(event) => {
                                 setCode(event.target.value);
                                 setLocalError(null);
@@ -146,7 +146,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             autoComplete="new-password"
                             value={newPin}
                             disabled={recovering}
-                            aria-label="New PIN"
+                            aria-label={t("pinGate.newPin")}
                             onChange={(event) => {
                                 setNewPin(event.target.value);
                                 setLocalError(null);
@@ -161,7 +161,7 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             autoComplete="new-password"
                             value={confirmPin}
                             disabled={recovering}
-                            aria-label="Repeat new PIN"
+                            aria-label={t("pinGate.repeatPin")}
                             onChange={(event) => {
                                 setConfirmPin(event.target.value);
                                 setLocalError(null);
@@ -173,14 +173,6 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                     )}
                     <div className="dialog-actions">
                         <button
-                            type="submit"
-                            className="btn btn--primary"
-                            disabled={recovering}
-                        >
-                            {recovering && <LoadingSpinner size="xs" />}
-                            {recovering ? t("pinGate.replacing") : t("pinGate.replacePin")}
-                        </button>
-                        <button
                             type="button"
                             className="btn btn--secondary"
                             onClick={() => {
@@ -190,6 +182,14 @@ export function PinGate({ label, error, busy, onSubmit, onClose }: PinGateProps)
                             disabled={recovering}
                         >
                             {t("pinGate.back")}
+                        </button>
+                        <button
+                            type="submit"
+                            className="btn btn--primary"
+                            disabled={recovering}
+                        >
+                            {recovering && <LoadingSpinner size="xs" />}
+                            {recovering ? t("pinGate.replacing") : t("pinGate.replacePin")}
                         </button>
                     </div>
                 </form>

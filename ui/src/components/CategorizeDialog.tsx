@@ -33,6 +33,7 @@ function CategorySelect({
     disabled: boolean;
     onChange: (val: number | null) => void;
 }) {
+    const { t } = useTranslation();
     const [open, setOpen] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
     const selected = options.find((o) => o.value === value);
@@ -62,7 +63,7 @@ function CategorySelect({
                     {selected?.color && (
                         <span style={{ width: 8, height: 8, borderRadius: "50%", backgroundColor: selected.color, flexShrink: 0 }} />
                     )}
-                    <span>{selected ? selected.label : "Auto-detect"}</span>
+                    <span>{selected ? selected.label : t("categorize.autoDetect")}</span>
                 </div>
                 <ChevronDownIcon size={14} />
             </button>
@@ -122,7 +123,7 @@ function CategorySelect({
                                         )}
                                         <span>{opt.label}</span>
                                     </div>
-                                    {isSelected && <span style={{ fontSize: "11px", color: "var(--color-accent)" }}>✓</span>}
+                                    {isSelected && <span style={{ fontSize: "11px", color: "var(--color-accent-text)" }}>✓</span>}
                                 </li>
                             );
                         })}

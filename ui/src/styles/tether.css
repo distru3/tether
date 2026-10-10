@@ -1,0 +1,2065 @@
+/* ==========================================================================
+   tether.css: components of the v2 design (docs/DESIGN_SYSTEM.md §5–6).
+   Used by the rebuilt screens (Setup, Limits, Settings). Built only on the
+   theme tokens in redesign.css, so every rule works in light and dark.
+   Prefix: tt-
+   ========================================================================== */
+
+.tt-page {
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.tt-head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tt-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.tt-sub {
+  margin: 0;
+  color: var(--text-muted);
+  max-width: 70ch;
+}
+
+/* ---- Buttons ---- */
+.tt-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border-radius: 99px;
+  padding: 10px 18px;
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 500;
+  line-height: 1.2;
+  cursor: pointer;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.tt-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.tt-btn--primary {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.tt-btn--primary:hover:not(:disabled) {
+  background: var(--color-primary-hover);
+}
+
+.tt-btn--outline {
+  background: transparent;
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.tt-btn--outline:hover:not(:disabled) {
+  background: var(--bg-surface-hover);
+}
+
+.tt-btn--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  padding-inline: 8px;
+}
+
+.tt-btn--ghost:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.tt-btn--danger {
+  background: transparent;
+  color: var(--color-danger-text);
+  padding-inline: 8px;
+}
+
+.tt-btn--sm {
+  padding: 6px 14px;
+  font-size: 14px;
+}
+
+.tt-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--color-accent-text);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* ---- Cards and rows ---- */
+.tt-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 26px;
+  box-shadow: var(--shadow-card);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+
+.tt-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.tt-card-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.tt-columns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.tt-col-main {
+  flex: 999 1 560px;
+  min-width: 0;
+}
+
+/* A main column holding several cards. */
+.tt-col-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.tt-col-side {
+  flex: 1 1 320px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.tt-list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tt-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tt-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tt-row-title {
+  font-weight: 600;
+}
+
+.tt-row-detail {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.tt-row-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: none;
+}
+
+/* Budget row on Limits: swatch, text, today's meter, actions. */
+.tt-budget {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) minmax(120px, 170px) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 14px 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+/* A paused budget dims its colour, never its text (contrast). */
+.tt-budget--off .tt-swatch,
+.tt-budget--off .tt-meter {
+  opacity: 0.45;
+}
+
+@media (max-width: 760px) {
+  .tt-budget {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .tt-budget > .tt-meter-block,
+  .tt-budget > .tt-row-end {
+    grid-column: 2;
+  }
+}
+
+.tt-swatch {
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-recessed);
+}
+
+.tt-swatch > span {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+}
+
+.tt-meter-block {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.tt-meter {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--bg-surface-hover);
+  overflow: hidden;
+}
+
+.tt-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--color-primary);
+}
+
+.tt-over {
+  color: var(--color-danger-text);
+  font-weight: 500;
+}
+
+/* ---- Notes and banners ---- */
+.tt-banner,
+.tt-note {
+  display: flex;
+  gap: 12px;
+  border-radius: 18px;
+  padding: 12px 16px;
+  /* Information, not a warning: a soft plum panel, not the error tint. */
+  background: var(--color-primary-subtle);
+  border: 1px solid var(--border-card);
+  color: var(--text-primary);
+}
+
+.tt-banner {
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.tt-banner > span,
+.tt-note > span {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.tt-note-icon {
+  flex: none;
+  color: var(--color-accent-text);
+  margin-top: 2px;
+}
+
+.tt-note strong {
+  display: block;
+}
+
+.tt-note--calm {
+  background: var(--bg-recessed);
+  border-color: var(--border-subtle);
+}
+
+/* ---- Inputs ---- */
+.tt-input {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 9px 12px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font: inherit;
+}
+
+.tt-input:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.tt-inline-form {
+  display: flex;
+  gap: 8px;
+}
+
+.tt-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.tt-chip {
+  background: var(--bg-recessed);
+  border-radius: 99px;
+  padding: 5px 10px;
+}
+
+.tt-error {
+  color: var(--color-danger-text);
+  font-size: 14px;
+  margin: 0;
+}
+
+/* Segmented control (language, theme). */
+.tt-segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 99px;
+  background: var(--bg-recessed);
+}
+
+.tt-segmented > button {
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  border-radius: 99px;
+  padding: 6px 14px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tt-segmented > button[aria-pressed="true"] {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.tt-value {
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 4px 4px 4px 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-input);
+}
+
+.tt-value input {
+  width: 64px;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-align: end;
+}
+
+.tt-value input:focus-visible {
+  outline: none;
+}
+
+.tt-value:focus-within {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+.tt-unit {
+  color: var(--text-muted);
+  font-size: 14px;
+  padding-inline-end: 6px;
+}
+
+.tt-back {
+  align-self: flex-start;
+}
+
+.tt-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ---- Setup ---- */
+.tt-setup {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  background: var(--bg-app);
+  color: var(--text-primary);
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding: 28px 40px 36px;
+  box-sizing: border-box;
+}
+
+.tt-setup-top {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.tt-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tt-brand .logo-title {
+  font-size: 18px;
+}
+
+.tt-setup-main {
+  flex: 1;
+  width: 100%;
+  max-width: 820px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  /* Top-aligned at a fixed offset, so the heading stays put between steps. */
+  justify-content: flex-start;
+  padding-top: clamp(0px, 3vh, 32px);
+  gap: 24px;
+}
+
+.tt-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.tt-steps li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tt-steps li > span {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--bg-surface-hover);
+  color: var(--text-secondary);
+}
+
+.tt-steps li[aria-current="step"] {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tt-steps li[aria-current="step"] > span {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.tt-steps li.tt-step--done > span {
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
+}
+
+.tt-setup-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+
+.tt-choices {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.tt-choice {
+  text-align: start;
+  background: var(--bg-card);
+  border: 2px solid var(--border-subtle);
+  border-radius: 26px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.tt-choice[aria-checked="true"] {
+  border-color: var(--color-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.tt-choice-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 17px;
+  display: grid;
+  place-items: center;
+  background: var(--color-primary-subtle);
+  color: var(--color-primary-text);
+}
+
+.tt-choice-title {
+  font-size: 21px;
+  font-weight: 700;
+}
+
+.tt-choice-body {
+  color: var(--text-secondary);
+}
+
+/* A selectable template row in setup step 2. */
+.tt-template {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 22px;
+  padding: 14px 18px;
+  display: grid;
+  grid-template-columns: auto 44px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  cursor: pointer;
+}
+
+.tt-template input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--color-primary);
+}
+
+.tt-setup-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.tt-code {
+  font-family: var(--font-mono);
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  background: var(--bg-card);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  padding: 14px 18px;
+  text-align: center;
+  user-select: all;
+}
+
+@media (max-width: 640px) {
+  .tt-setup {
+    padding: 20px 16px 28px;
+  }
+
+  .tt-template {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .tt-template .tt-swatch {
+    display: none;
+  }
+}
+
+/* Budget hues (docs/DESIGN_SYSTEM.md §3), keyed by category slug. */
+.tt-hue-games { --hue: var(--budget-games); --hue-tile: var(--budget-games-tile); --hue-fill: var(--budget-games-fill); --hue-ink: var(--budget-games-ink); }
+.tt-hue-social { --hue: var(--budget-social); --hue-tile: var(--budget-social-tile); --hue-fill: var(--budget-social-fill); --hue-ink: var(--budget-social-ink); }
+.tt-hue-video { --hue: var(--budget-video); --hue-tile: var(--budget-video-tile); --hue-fill: var(--budget-video-fill); --hue-ink: var(--budget-video-ink); }
+.tt-hue-total { --hue: var(--color-accent); --hue-tile: var(--color-accent-subtle); --hue-fill: var(--color-accent-subtle); --hue-ink: var(--text-secondary); }
+.tt-hue-other { --hue: var(--budget-other); --hue-tile: var(--budget-other-tile); --hue-fill: var(--budget-other-fill); --hue-ink: var(--budget-other-ink); }
+
+[class*="tt-hue-"] .tt-swatch,
+.tt-swatch[class*="tt-hue-"] {
+  background: var(--hue-tile);
+}
+
+[class*="tt-hue-"] .tt-swatch > span,
+.tt-swatch[class*="tt-hue-"] > span {
+  background: var(--hue);
+}
+
+[class*="tt-hue-"] .tt-meter > span {
+  background: var(--hue);
+}
+
+/* ---- Settings ---- */
+.tt-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.tt-settings-grid .tt-row:first-child {
+  border-top: 0;
+}
+
+.tt-range {
+  width: 120px;
+  accent-color: var(--color-primary);
+}
+
+.tt-row-end .tt-segmented > button {
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .tt-settings-grid .tt-row {
+    flex-wrap: wrap;
+  }
+}
+
+/* ---- Today (docs/DESIGN_SYSTEM.md §6) ---- */
+.tt-today {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+  max-width: 1160px;
+  margin: 0 auto;
+}
+
+.tt-today-hero {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 32px;
+  padding: 24px 28px;
+  border-radius: var(--radius-xl);
+}
+
+.tt-today-hero-body {
+  flex: 1 1 520px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tt-today-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tt-today-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text-primary);
+}
+
+/* Ring: time left of the total budget. */
+.tt-ring {
+  position: relative;
+  width: 160px;
+  height: 160px;
+  flex: none;
+}
+
+.tt-ring svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.tt-ring circle {
+  fill: none;
+  stroke-width: 14;
+}
+
+.tt-ring-track {
+  stroke: var(--ring-track);
+}
+
+.tt-ring-arc {
+  stroke: var(--color-accent);
+  stroke-linecap: round;
+}
+
+.tt-ring-value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+}
+
+.tt-ring-number {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 26px;
+  line-height: 1;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-ring-number--word {
+  font-size: 24px;
+}
+
+.tt-ring-caption {
+  font-size: 13px;
+  color: var(--text-muted);
+  max-width: 110px;
+}
+
+.tt-amount-part + .tt-amount-part {
+  margin-inline-start: 0.2em;
+}
+
+.tt-amount-part small {
+  font-family: var(--font-sans);
+  font-size: 0.55em;
+  font-weight: 500;
+  margin-inline-start: 0.05em;
+}
+
+/* Day strip: the agent's day, use coloured by budget. */
+.tt-strip-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tt-strip {
+  position: relative;
+  height: 36px;
+  border-radius: 10px;
+  background: var(--strip-bg);
+  overflow: hidden;
+}
+
+.tt-strip-band {
+  position: absolute;
+  inset-block: 0;
+  background: repeating-linear-gradient(135deg, var(--strip-band) 0 5px, transparent 5px 10px);
+}
+
+.tt-strip-seg {
+  position: absolute;
+  top: 8px;
+  height: 20px;
+  min-width: 2px;
+  border-radius: 4px;
+  background: var(--hue);
+}
+
+.tt-strip-now {
+  position: absolute;
+  inset-block: 0;
+  width: 3px;
+  margin-inline-start: -1px;
+  background: var(--color-accent);
+}
+
+.tt-strip-scale {
+  position: relative;
+  height: 16px;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.tt-strip-tick {
+  position: absolute;
+  translate: -50% 0;
+}
+
+[dir="rtl"] .tt-strip-tick {
+  translate: 50% 0;
+}
+
+.tt-strip-tick--start {
+  inset-inline-start: 0;
+  translate: none;
+}
+
+.tt-strip-tick--end {
+  inset-inline-end: 0;
+  translate: none;
+}
+
+[dir="rtl"] .tt-strip-tick--start,
+[dir="rtl"] .tt-strip-tick--end {
+  translate: none;
+}
+
+.tt-strip-tick--now {
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+.tt-strip-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.tt-strip-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tt-strip-key {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--hue, var(--budget-other));
+}
+
+.tt-strip-key--band {
+  background: repeating-linear-gradient(135deg, var(--text-muted) 0 2px, transparent 2px 4px);
+}
+
+/* Budget tiles: tinted, filled to the share of time left. */
+.tt-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.tt-tile {
+  position: relative;
+  overflow: hidden;
+  /* Tall enough for the fill to read as a gauge, without an empty middle. */
+  min-height: 168px;
+  border-radius: 26px;
+  background: var(--hue-tile);
+  color: var(--text-primary);
+  padding: 20px 22px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.tt-tile-fill {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  background: var(--hue-fill);
+  transition: height 0.4s ease;
+}
+
+.tt-tile-top,
+.tt-tile-bottom {
+  position: relative;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.tt-tile-top {
+  align-items: flex-start;
+}
+
+.tt-tile-bottom {
+  align-items: flex-end;
+}
+
+.tt-tile-name {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tt-tile-name h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.tt-tile-name span,
+.tt-tile-apps {
+  color: var(--hue-ink);
+  font-size: 14px;
+}
+
+.tt-tile-apps {
+  font-size: 13px;
+}
+
+.tt-tile-pill {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 99px;
+  white-space: nowrap;
+  background: var(--bg-card);
+  color: var(--hue-ink);
+}
+
+.tt-tile-pill--low {
+  background: var(--color-accent);
+  color: #23163A;
+}
+
+.tt-tile-pill--done {
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.tt-tile-pill--extra {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+
+[data-theme-mode="dark"] .tt-tile-pill--plenty {
+  background: var(--hue-fill);
+}
+
+.tt-tile-figure {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.tt-tile-number {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 40px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-tile-number > small {
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 500;
+}
+
+.tt-tile-number .tt-amount-part small {
+  font-size: 0.45em;
+}
+
+.tt-tile-number--text {
+  font-size: 24px;
+  line-height: 1.15;
+}
+
+.tt-tile--done .tt-tile-number--text {
+  color: var(--hue-ink);
+}
+
+.tt-tile-edit {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+[data-theme-mode="dark"] .tt-tile-edit {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.tt-tile-edit:hover {
+  background: var(--bg-card);
+}
+
+.tt-tile-edit:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.tt-today-empty {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+/* Rules at a glance: schedules and websites. */
+.tt-today-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.tt-today-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 22px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  box-shadow: var(--shadow-card);
+  color: var(--text-primary);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+
+.tt-today-card:hover {
+  border-color: var(--border-strong);
+}
+
+.tt-today-card:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.tt-today-card-icon {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 14px;
+  display: grid;
+  place-items: center;
+  background: var(--bg-recessed);
+  color: var(--text-secondary);
+}
+
+.tt-today-card-icon--plum {
+  background: #23163A;
+  color: #C9B6F2;
+}
+
+[data-theme-mode="dark"] .tt-today-card-icon--plum {
+  background: var(--border-card);
+}
+
+.tt-today-card-icon--ok {
+  background: var(--budget-video-tile);
+  color: var(--budget-video-ink);
+}
+
+.tt-today-card-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.tt-today-card-text strong {
+  font-weight: 600;
+}
+
+.tt-today-card-text span {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.tt-today-more {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 900px) {
+  .tt-today-more {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  .tt-today-hero {
+    justify-content: center;
+    padding: 20px;
+  }
+  .tt-today-title {
+    font-size: 24px;
+  }
+}
+
+/* Most used apps. */
+.tt-usage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tt-usage-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tt-usage-line,
+.tt-usage-sub {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.tt-usage-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.tt-usage-name strong {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-usage-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+  flex: none;
+}
+
+.tt-usage-bar {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--strip-bg);
+  overflow: hidden;
+}
+
+.tt-usage-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--hue);
+}
+
+.tt-usage-sub {
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.tt-usage-cat {
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--bg-recessed);
+  border: 1px solid var(--border-subtle);
+  border-radius: 99px;
+  padding: 2px 10px;
+}
+
+button.tt-usage-cat {
+  cursor: pointer;
+}
+
+button.tt-usage-cat:hover {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+/* The week. */
+.tt-week-total {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-week-delta {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 99px;
+  background: var(--bg-recessed);
+  color: var(--text-secondary);
+}
+
+.tt-week-delta--up {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+
+.tt-week-delta--down {
+  color: var(--color-success-text);
+}
+
+.tt-week-bars {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 8px;
+  /* Bars grow with the card when it is stretched beside "Most used". */
+  flex: 1;
+  align-items: stretch;
+  min-height: 190px;
+}
+
+.tt-week-col {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tt-week-amount {
+  min-height: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent-text);
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tt-week-track {
+  position: relative;
+  flex: 1;
+  min-height: 130px;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.tt-week-track > span {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  border-radius: 10px;
+  background: var(--week-bar);
+}
+
+.tt-week-col:hover .tt-week-track > span {
+  background: var(--week-bar-hover);
+}
+
+.tt-week-col--selected .tt-week-track > span,
+.tt-week-col--selected:hover .tt-week-track > span {
+  background: var(--color-accent);
+}
+
+.tt-week-day {
+  font-size: 12px;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.tt-week-col--selected .tt-week-day {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tt-week-col:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+  border-radius: 12px;
+}
+
+/* Blocked right now. */
+.tt-blocked-row {
+  justify-content: space-between;
+}
+
+.tt-blocked-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--color-danger-text);
+}
+
+.tt-blocked-name strong {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.tt-week .tt-week-bars {
+  flex: 1;
+}
+
+/* ---- Tray panel (window `tray`) ---- */
+.tt-tray {
+  /* The window is transparent; the card leaves room for its shadow. Its
+     height is its content: TrayPanel reports it and the host sizes the
+     window to match (fit_tray_panel). */
+  position: fixed;
+  inset: 8px 8px auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px;
+  box-sizing: border-box;
+  border-radius: 24px;
+  border: 1px solid var(--border-card);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  font-family: var(--font-sans);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  user-select: none;
+}
+
+.tt-tray-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.tt-tray-ring {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  flex: none;
+}
+
+.tt-tray-ring svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.tt-tray-ring circle {
+  fill: none;
+  stroke-width: 8;
+}
+
+.tt-tray-ring > span {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.tt-tray-title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.tt-tray-title h1 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.tt-tray-title span,
+.tt-tray-note {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.tt-tray-note {
+  margin: 0;
+}
+
+.tt-tray-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  /* Many budgets scroll instead of growing past the screen. */
+  max-height: 320px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.tt-tray-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tt-tray-row-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tt-tray-row-line > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-tray-row-state {
+  flex: none;
+  color: var(--text-secondary);
+}
+
+.tt-tray-row--low .tt-tray-row-state {
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+.tt-tray-row--done .tt-tray-row-state {
+  color: var(--color-danger-text);
+}
+
+.tt-tray-bar {
+  height: 6px;
+  border-radius: 99px;
+  background: var(--ring-track);
+  overflow: hidden;
+}
+
+.tt-tray-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--hue);
+}
+
+.tt-tray-open {
+  font: inherit;
+  font-weight: 600;
+  padding: 10px;
+  border: 0;
+  border-radius: 99px;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  cursor: pointer;
+}
+
+.tt-tray-open:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Numbers line up everywhere (docs/DESIGN_SYSTEM.md §4). */
+body {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- Activity ---- */
+.tt-week-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+  border-radius: 99px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+}
+
+.tt-week-stepper > span {
+  padding: 0 8px;
+}
+
+.tt-week-stepper button {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 0;
+  display: grid;
+  place-items: center;
+  background: var(--bg-recessed);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.tt-week-stepper button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tt-act-chart {
+  display: flex;
+  gap: 10px;
+  height: 240px;
+}
+
+.tt-act-axis {
+  position: relative;
+  width: 44px;
+  flex: none;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tt-act-axis > span {
+  position: absolute;
+  inset-inline-end: 0;
+  translate: 0 50%;
+}
+
+.tt-act-plot {
+  position: relative;
+  flex: 1;
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 14px;
+  align-items: end;
+  padding-inline: 6px;
+  border-bottom: 1px solid var(--border-card);
+}
+
+.tt-act-grid {
+  position: absolute;
+  inset-inline: 0;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tt-act-limit {
+  position: absolute;
+  inset-inline: 0;
+  border-top: 2px dashed var(--color-accent);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.tt-act-bar {
+  position: relative;
+  height: 100%;
+  display: flex;
+  flex-direction: column-reverse;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+}
+
+.tt-act-bar > span {
+  display: block;
+  flex: none;
+  background: var(--hue);
+}
+
+.tt-act-bar > span:last-child {
+  border-radius: 8px 8px 0 0;
+}
+
+.tt-act-bar:hover:not(:disabled) > span {
+  filter: brightness(1.08);
+}
+
+.tt-act-bar:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.tt-act-bar--today {
+  outline: 2px solid var(--text-primary);
+  outline-offset: 3px;
+}
+
+.tt-act-bar:disabled {
+  cursor: default;
+}
+
+.tt-act-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 14px;
+  padding-inline: 60px 6px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+[dir="rtl"] .tt-act-days {
+  padding-inline: 60px 6px;
+}
+
+.tt-act-day--over {
+  color: var(--color-danger-text);
+  font-weight: 600;
+}
+
+.tt-act-day--today {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tt-act-limit-key {
+  width: 14px;
+  border-top: 2px dashed var(--color-accent);
+}
+
+.tt-act-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.tt-act-table th,
+.tt-act-table td {
+  padding: 6px 0;
+  text-align: end;
+  font-weight: 400;
+}
+
+.tt-act-table thead th {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.tt-act-table th:first-child {
+  text-align: start;
+}
+
+.tt-act-table tbody th {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tt-act-table td {
+  padding-inline-start: 16px;
+  white-space: nowrap;
+}
+
+.tt-act-apps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.tt-act-apps li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.tt-act-apps li > span:last-child {
+  color: var(--text-secondary);
+}
+
+.tt-head > .tt-week-stepper {
+  flex-direction: row;
+  align-items: center;
+}
+
+[dir="rtl"] .tt-week-stepper svg {
+  transform: scaleX(-1);
+}
+
+/* Block screen: "What were you about to do?" */
+.tt-block-reasons {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.tt-block-reasons legend {
+  padding: 0;
+  margin-bottom: 12px;
+  color: #C9B6F2;
+  font-size: 15px;
+}
+
+.tt-block-reasons > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+}
+
+.tt-block-reasons button {
+  font: inherit;
+  font-size: 15px;
+  padding: 10px 18px;
+  border-radius: 99px;
+  border: 1px solid var(--border-strong);
+  background: #2D2150;
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.tt-block-reasons button[aria-pressed="true"] {
+  background: var(--text-primary);
+  color: #1C1229;
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.tt-block-reasons button:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+/* Activity: when time ran out */
+.tt-act-why {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.tt-act-why li {
+  display: grid;
+  grid-template-columns: minmax(0, 9em) minmax(0, 1fr) 2ch;
+  gap: 10px;
+  align-items: center;
+}
+
+.tt-act-why-bar {
+  height: 8px;
+  border-radius: 99px;
+  background: var(--ring-track);
+  overflow: hidden;
+}
+
+.tt-act-why-bar > span {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: var(--color-accent);
+}
+
+.tt-act-why li > span:last-child {
+  text-align: end;
+}
+
+/* Today: a suggestion from last week (most used app with no budget). */
+.tt-suggest {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+}
+
+.tt-suggest-text {
+  flex: 1 1 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tt-suggest-eyebrow {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.tt-suggest-text p {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.tt-suggest-actions {
+  display: flex;
+  gap: 8px;
+  margin-inline-start: auto;
+}
+
+/* ---- Shared small pieces (Schedules, Websites, editors) ---------------- */
+
+/* A short status word next to a title ("On now"). */
+.tt-tag {
+  display: inline-block;
+  margin-inline-start: 8px;
+  padding: 1px 8px;
+  border-radius: 99px;
+  font-size: 12px;
+  font-weight: 600;
+  vertical-align: 2px;
+  background: var(--bg-recessed);
+  color: var(--text-secondary);
+}
+
+.tt-tag--on {
+  background: var(--color-accent-subtle);
+  color: var(--color-accent-text);
+}
+
+/* Icon-only button (delete, remove). Always has an aria-label. */
+.tt-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 99px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tt-icon-btn:hover {
+  background: var(--bg-recessed);
+  color: var(--color-danger-text);
+}
+
+.tt-icon-btn:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+
+/* A select styled like .tt-input, with its own arrow. */
+.tt-select {
+  appearance: none;
+  padding-inline-end: 36px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+
+[dir="rtl"] .tt-select {
+  background-position: 13px 50%, 18px 50%;
+}
+
+ul.tt-chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.tt-chip--removable {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-inline-end: 4px;
+}
+
+.tt-chip--removable > button {
+  display: inline-flex;
+  border: 0;
+  border-radius: 99px;
+  padding: 3px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+
+.tt-chip--removable > button:hover {
+  background: var(--bg-card);
+  color: var(--text-primary);
+}
+
+/* Two fields side by side in a dialog (from / until). */
+.tt-field-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.tt-fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+
+.tt-fieldset > legend {
+  padding: 0;
+  margin-bottom: 8px;
+}
+
+.tt-day-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tt-day-pill {
+  flex: 1 0 52px;
+  border: 1px solid var(--border-strong);
+  border-radius: 99px;
+  padding: 7px 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.tt-day-pill[aria-pressed="true"] {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-on-primary);
+}
+
+.tt-day-pill:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+
+/* ---- Websites subview ---- */
+.tt-web-import {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+
+.tt-details > summary {
+  cursor: pointer;
+  color: var(--color-accent-text);
+  font-weight: 500;
+  width: fit-content;
+}
+
+.tt-details[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.tt-search {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 280px;
+  min-width: 0;
+}
+
+.tt-search > svg {
+  position: absolute;
+  inset-inline-start: 12px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.tt-search > .tt-input {
+  padding-inline-start: 36px;
+}
+
+/* Domains stay monospace: it helps reading them letter by letter. */
+.tt-domain {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  overflow-wrap: anywhere;
+}
+
+.tt-web-footer {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tt-pager {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.tt-icon-btn--plain:hover {
+  color: var(--text-primary);
+}
+
+.tt-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.tt-web-hide {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  width: fit-content;
+}
+
+[dir="rtl"] .tt-flip-rtl {
+  transform: scaleX(-1);
+}

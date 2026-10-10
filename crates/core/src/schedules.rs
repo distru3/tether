@@ -1,4 +1,4 @@
-//! Pure domain models and interval math for downtime schedules and focus sessions.
+//! Pure domain models and interval math for downtime schedules.
 //!
 //! # Invariants
 //!
@@ -24,6 +24,23 @@ pub struct DowntimeSchedule {
     /// Minute of local day (0..=1439).
     pub end_minute: u32,
     pub enabled: bool,
+}
+
+/// The local wall-clock minute of day (0..1440) and Monday-first weekday
+/// (0..7) for `now`, both derived from the *same* local instant.
+///
+/// Downtime schedules are wall-clock windows ("22:00–07:00 on school nights"),
+/// so they must not use [`DayKey`](crate::daykey::DayKey)'s weekday: the day
+/// key honours the configurable day-start offset, and mixing it with a
+/// wall-clock minute evaluated overnight windows against the wrong weekday
+/// bit whenever the day start was not midnight.
+pub fn local_minute_and_weekday(now: DateTime<Utc>, tz_offset_secs: i32) -> (u32, u32) {
+    use chrono::{Datelike, Timelike};
+    let local = now.naive_utc() + chrono::Duration::seconds(tz_offset_secs as i64);
+    (
+        local.hour() * 60 + local.minute(),
+        local.weekday().num_days_from_monday(),
+    )
 }
 
 /// Check if `weekday_mask` has the bit for `weekday_index` set.
@@ -78,42 +95,6 @@ pub fn is_any_downtime_active(
     schedules
         .iter()
         .any(|s| is_schedule_active(s, local_minute, weekday_index))
-}
-
-/// An active, timed distraction-free focus session.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FocusSession {
-    pub name: Option<String>,
-    pub started_at_utc: DateTime<Utc>,
-    pub duration_minutes: u32,
-    pub expires_utc: DateTime<Utc>,
-}
-
-impl FocusSession {
-    pub fn new(name: Option<String>, started_at_utc: DateTime<Utc>, duration_minutes: u32) -> Self {
-        let duration_secs = (duration_minutes as i64) * 60;
-        let expires_utc = started_at_utc + chrono::Duration::seconds(duration_secs);
-        Self {
-            name,
-            started_at_utc,
-            duration_minutes,
-            expires_utc,
-        }
-    }
-
-    /// Check if the focus session is currently running.
-    pub fn is_active(&self, now: DateTime<Utc>) -> bool {
-        now >= self.started_at_utc && now < self.expires_utc
-    }
-
-    /// Remaining seconds in the session, or 0 if expired.
-    pub fn remaining_seconds(&self, now: DateTime<Utc>) -> i64 {
-        if now >= self.expires_utc {
-            0
-        } else {
-            (self.expires_utc - now).num_seconds().max(0)
-        }
-    }
 }
 
 #[cfg(test)]
@@ -197,24 +178,33 @@ mod tests {
     }
 
     #[test]
-    fn focus_session_countdown_and_expiry() {
-        let start = DateTime::parse_from_rfc3339("2026-08-29T10:00:00Z")
-            .unwrap()
+    fn local_minute_and_weekday_use_one_local_instant() {
+        // 2026-08-18 is a Tuesday. 01:30Z at UTC+2 is 03:30 Tuesday local.
+        let now = DateTime::parse_from_rfc3339("2026-08-18T01:30:00Z")
+            .expect("valid")
             .with_timezone(&Utc);
-        let session = FocusSession::new(Some("Pomodoro".into()), start, 25);
+        assert_eq!(local_minute_and_weekday(now, 2 * 3600), (3 * 60 + 30, 1));
+        // West of UTC the local date is still Monday.
+        assert_eq!(local_minute_and_weekday(now, -5 * 3600), (20 * 60 + 30, 0));
+    }
 
-        assert_eq!(session.duration_minutes, 25);
-        assert_eq!(
-            session.expires_utc.to_rfc3339(),
-            "2026-08-29T10:25:00+00:00"
-        );
-
-        let mid = start + chrono::Duration::minutes(10);
-        assert!(session.is_active(mid));
-        assert_eq!(session.remaining_seconds(mid), 15 * 60);
-
-        let after = start + chrono::Duration::minutes(26);
-        assert!(!session.is_active(after));
-        assert_eq!(session.remaining_seconds(after), 0);
+    #[test]
+    fn an_overnight_window_covers_the_small_hours_regardless_of_day_start() {
+        // Monday-only 22:00-07:00. At 02:00 Tuesday local it must be active:
+        // the morning half belongs to Monday's window. (A 04:00 day start used
+        // to make the enforcer look up Sunday's bit here.)
+        let monday_night = DowntimeSchedule {
+            id: 1,
+            name: "Bedtime".into(),
+            weekday_mask: 0b000_0001,
+            start_minute: 22 * 60,
+            end_minute: 7 * 60,
+            enabled: true,
+        };
+        let now = DateTime::parse_from_rfc3339("2026-08-18T02:00:00Z")
+            .expect("valid")
+            .with_timezone(&Utc);
+        let (minute, weekday) = local_minute_and_weekday(now, 0);
+        assert!(is_schedule_active(&monday_night, minute, weekday));
     }
 }

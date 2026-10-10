@@ -1,4 +1,5 @@
-import React from "react";
+import type React from "react";
+import i18n from "../i18n";
 import "./LoadingSpinner.css";
 
 export interface LoadingSpinnerProps {
@@ -21,7 +22,7 @@ export const LoadingSpinner: React.FC<LoadingSpinnerProps> = ({
         <span
             className={`st-loading-spinner-wrapper st-loading-spinner--${size} ${className}`}
             role="status"
-            aria-label={label ?? "Loading"}
+            aria-label={label ?? i18n.t("common.loading")}
         >
             <svg
                 className="st-loading-spinner"

@@ -17,10 +17,28 @@ interface Deps {
     refreshStatus?: () => Promise<void>;
 }
 
+/** Runs an action that may need the PIN; see `useLedgerActions().guarded`. */
+export type Guarded = (label: string, op: (pin?: string) => Promise<void>) => Promise<void>;
+
 export interface GateRequest {
     label: string;
     run: (pin: string) => Promise<void>;
 }
+
+/** i18n key for the human name of each setting, used in PIN prompts. */
+const SETTING_LABEL_KEYS: Record<string, string> = {
+    // The names the Settings page shows, so the prompt says the same thing.
+    strict_mode: "settingsPage.strict",
+    family_dns: "limitsPage.familyDns",
+    limit_cooldown_hours: "settingsPage.cooldown",
+    day_start_minutes: "settingsPage.dayStart",
+    idle_threshold_secs: "settingsPage.idle",
+    show_hud_overlay: "settingsPage.showTimer",
+    show_hud_in_fullscreen: "settingsPage.fullscreen",
+    hud_peek_hotkey: "settingsPage.peek",
+    alert_volume: "settingsPage.chime",
+    profile: "settingsPage.profile",
+};
 
 export interface EditorRequest {
     target: LimitTargetDto | null;
@@ -75,6 +93,27 @@ export function useLedgerActions(deps: Deps) {
             }
         },
         [runExclusive],
+    );
+
+    /**
+     * Run an action that *may* need the PIN. The agent alone decides which
+     * changes loosen enforcement, so the action is first tried without a PIN;
+     * only a `bad_pin` answer opens the PIN gate, which then retries the same
+     * action with the entered PIN. Any other failure propagates to the caller.
+     */
+    const guarded = useCallback(
+        async (label: string, op: (pin?: string) => Promise<void>): Promise<void> => {
+            try {
+                await op(undefined);
+            } catch (error) {
+                if (api.errorCode(error) !== "bad_pin") throw error;
+                setGateError(null);
+                const request: GateRequest = { label, run: (pin) => op(pin) };
+                gateRef.current = request;
+                setGate(request);
+            }
+        },
+        [],
     );
 
     const submitGate = useCallback(
@@ -165,7 +204,7 @@ export function useLedgerActions(deps: Deps) {
     const cancelPendingLimit = useCallback(
         (target: LimitTargetDto) => {
             attempt(t("pinGate.cancelPending", { target: targetLabel(target, depsRef.current.catalog) }), async (pin) => {
-                const effective = await api.cancelPendingLimit(target, pin);
+                await api.cancelPendingLimit(target, pin);
                 depsRef.current.notify("info", t("actions.pendingCancelled"));
                 depsRef.current.invalidate();
             });
@@ -213,45 +252,54 @@ export function useLedgerActions(deps: Deps) {
     const submitCategorize = useCallback(
         (primaryId: number, tagIds: number[]) => {
             if (categorizeTarget === null) return;
-            runExclusive(async () => {
-                await api.categorizeApp(categorizeTarget.appId, primaryId, tagIds);
-                depsRef.current.notify("success", t("actions.categorized", { app: categorizeTarget.appName }));
-                depsRef.current.invalidate();
-                setCategorizeTarget(null);
-            });
+            const target = categorizeTarget;
+            runExclusive(() =>
+                guarded(t("pinGate.recategorize", { app: target.appName }), async (pin) => {
+                    await api.categorizeApp(target.appId, primaryId, tagIds, pin);
+                    depsRef.current.notify("success", t("actions.categorized", { app: target.appName }));
+                    depsRef.current.invalidate();
+                    setCategorizeTarget(null);
+                }),
+            );
         },
-        [categorizeTarget, runExclusive],
+        [categorizeTarget, runExclusive, guarded],
     );
 
     const resetCategorize = useCallback(() => {
         if (categorizeTarget === null) return;
-        runExclusive(async () => {
-            await api.categorizeApp(categorizeTarget.appId, null, []);
-            depsRef.current.notify("info", t("actions.resetAutoDetect", { app: categorizeTarget.appName }));
-            depsRef.current.invalidate();
-            setCategorizeTarget(null);
-        });
-    }, [categorizeTarget, runExclusive]);
+        const target = categorizeTarget;
+        runExclusive(() =>
+            guarded(t("pinGate.recategorize", { app: target.appName }), async (pin) => {
+                await api.categorizeApp(target.appId, null, [], pin);
+                depsRef.current.notify("info", t("actions.resetAutoDetect", { app: target.appName }));
+                depsRef.current.invalidate();
+                setCategorizeTarget(null);
+            }),
+        );
+    }, [categorizeTarget, runExclusive, guarded]);
 
     const setSetting = useCallback(async (key: string, value: string) => {
+        const labelKey = SETTING_LABEL_KEYS[key];
+        const label = t("pinGate.changeSetting", { setting: labelKey ? t(labelKey) : key });
         try {
             setBusy(true);
-            await api.setSetting(key, value);
-            if (deps.refreshStatus) {
-                await deps.refreshStatus();
-            }
-            deps.invalidate();
-            deps.notify("success", t("actions.settingSaved"));
+            await guarded(label, async (pin) => {
+                await api.setSetting(key, value, pin);
+                await depsRef.current.refreshStatus?.();
+                depsRef.current.invalidate();
+                depsRef.current.notify("success", t("actions.settingSaved"));
+            });
         } catch (e) {
-            deps.notify("error", String(e));
+            depsRef.current.notify("error", api.describeError(e));
             throw e;
         } finally {
             setBusy(false);
         }
-    }, [deps, t]);
+    }, [guarded, t]);
 
     return {
         attempt,
+        guarded,
         busy,
         setSetting,
         editor,

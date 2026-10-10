@@ -1,227 +1,157 @@
 # Tether UI Architecture & Redesign Specification
 
-This document defines the frontend layout, design system tokens, and component architecture for the **Tether** dashboard. Verified against the codebase on **2026-09-13**.
+This document defines the frontend layout, design system tokens, and component architecture for the **Tether** dashboard. Verified against the codebase on **2026-10-03**.
 
 ---
 
-## 1. Design System & Brand Identity: Tether Solid Modern Workspace
+## 1. Design System & Brand Identity
 
-The application is branded as **Tether**, featuring an official brand mark depicting an architectural "T" encircled by an orbital tether connecting to a clock/timer orb in warm terracotta and caramel hues.
+The visual and interaction contract is **[`docs/DESIGN_SYSTEM.md`](DESIGN_SYSTEM.md)** (v2, approved 2026-10-03): who the app serves (`profile`: self or guardian), principles, the plum-and-orange palette taken from the app icon, Rubik + Unbounded type, shape, components and voice. This file describes how the code implements it.
 
-The UI utilizes a crisp, solid, high-contrast modern aesthetic (Obsidian Dark & Titanium Light) defined in `ui/src/styles/tokens.css`, `ui/src/styles/redesign.css`, and `ui/src/styles/app.css`. All glassmorphism (`backdrop-filter: blur`, semi-transparent frosted cards) has been completely eliminated in favor of opaque, tactile surfaces with 1px border contrast:
-
-### Core Palettes (4 Modern Cohesive Palettes)
-
-#### A. Midnight Cobalt (Signature Modern Dark Theme)
-- **Base Canvas**: `#0B0E17` (`--bg-app`, `--redesign-bg`) — Deep carbon base.
-- **Solid Surfaces**: `#121724` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Sleek carbon panel level 1.
-- **Elevated Surfaces**: `#182030` (`--bg-card-elevated`, `--redesign-panel-strong`) — Elevated carbon dialogs and cards.
-- **Recessed / Inputs**: `#0E121D` (`--bg-input`, `--bg-recessed`) — Recessed carbon inputs.
-- **Borders**: `#1E2638` (`--border-card`), `#161D2B` (`--border-subtle`), `#2A364F` (`--border-strong`).
-- **Typography**: `#F8FAFC` primary text (crisp slate white), `#94A3B8` secondary slate, `#64748B` muted text.
-- **Accents**: Electric Cobalt `#4F46E5` (`--color-primary`), Indigo `#6366F1`, Emerald `#10B981`, Rose `#F43F5E`.
-- **Character**: Precision dark cockpit / technical analytics workspace.
-
-#### B. Slate Charcoal (Clean Neutral Dark Charcoal & Ice Cyan)
-- **Base Canvas**: `#0D1117` (`--bg-app`, `--redesign-bg`) — Clean dark charcoal base.
-- **Solid Surfaces**: `#161B22` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Dark graphite panels.
-- **Elevated Surfaces**: `#21262D` (`--bg-card-elevated`, `--redesign-panel-strong`).
-- **Recessed / Inputs**: `#090D12` (`--bg-input`, `--bg-recessed`).
-- **Borders**: `#30363D` (`--border-card`), `#21262D` (`--border-subtle`), `#3D444D` (`--border-strong`).
-- **Typography**: `#F0F6FC` primary text (crisp neutral silver-white), `#8B949E` secondary graphite, `#6E7681` muted text.
-- **Accents**: Ice Cyan `#38BDF8` (`--color-primary`), Polar Blue `#0284C7`, Emerald `#3FB950`, Rose `#F85149`.
-- **Character**: Minimalist, distraction-free neutral dark workspace.
-
-#### C. Clean Titanium (Pure White Surfaces & Soft Porcelain)
-- **Base Canvas**: `#F8FAFC` (`--bg-app`, `--redesign-bg`) — Soft porcelain canvas, easy on eyes.
-- **Solid Surfaces**: `#FFFFFF` (`--bg-panel`, `--bg-card`, `--redesign-panel`) — Pure white cards.
-- **Elevated Surfaces**: `#FFFFFF` with soft elevation.
-- **Recessed / Inputs**: `#F1F5F9` (`--bg-input`, `--bg-recessed`).
-- **Borders**: `#E2E8F0` (`--border-card`), `#EEF2F6` (`--border-subtle`), `#CBD5E1` (`--border-strong`).
-- **Character**: Pure architectural minimalism / macOS studio workspace.
-
-#### D. Nordic Frost (Icy Slate Canvas & Arctic Cyan/Teal Theme)
-- **Base Canvas**: `#F0F4F8` (`--bg-app`) — Icy slate canvas.
-- **Solid Surfaces**: `#FFFFFF` (`--bg-panel`, `--bg-card`) — Crisp frosted white panels.
-- **Elevated Surfaces**: `#FFFFFF` with subtle frosty shadow.
-- **Recessed / Inputs**: `#FFFFFF`.
-- **Borders**: `#D0DEEB` (`--border-card`), `#DFE8F1` (`--border-subtle`), `#B8CDE0` (`--border-strong`).
-- **Typography**: `#0C1A24` primary text, `#304856` secondary text, `#5C7688` muted text.
-- **Accents**: Arctic Cyan `#0284C7` (`--color-primary`), Arctic Teal `#0D9488`.
-- **Character**: Crisp Nordic clarity / glacial precision workspace.
+- **Themes**: `light`, `dark`, `system` ("Like Windows"). Palettes are defined once in `ui/src/styles/redesign.css` (`:root, [data-theme="dark"]` and `[data-theme="light"]`); `tokens.css` holds the shared scales (fonts, spacing, radii, shadows, motion).
+- **Budget hues**: `--budget-{games,social,video}` with `-tile` / `-fill` variants and `--budget-other`. Components pick one with a `tt-hue-{games,social,video,total,other}` class from `ui/src/budgetHue.ts` (`hueFor(target, catalog)`: Games → games; Social Media and Short-Form Video → social; Video & Streaming → video; the total limit → total; everything else → other).
+- **Components for the v2 screens** live in `ui/src/styles/tether.css` (prefix `tt-`, loaded last): page head (`tt-page`, `tt-head`, `tt-title`, `tt-sub`), buttons (`tt-btn` + `--primary/--accent/--outline/--ghost/--danger/--sm`, `tt-link`), cards and rows (`tt-card`, `tt-row*`, `tt-columns`), budget rows (`tt-budget`, `tt-swatch`, `tt-meter`), notes (`tt-note`, `tt-note--calm`, `tt-banner`), inputs (`tt-input`, `tt-segmented` with `aria-pressed`, `tt-chips`), setup (`tt-setup*`, `tt-steps`, `tt-choice`, `tt-template`, `tt-code`) and settings (`tt-settings-grid`, `tt-range`). Older screens (Today, Downtime, Websites, dialogs) keep their classes in `app.css` / `redesign.css` and are reskinned through the tokens.
 
 ---
 
 ## 2. Layout Structure & Top Navigation
 
-The top chrome consists of a streamlined App Bar (TitleBar) and a horizontal Top Navigation Bar:
-
 ```
 +-----------------------------------------------------------------------------------------+
-| [TitleBar] Tether (34px, custom drag region, minimal title, minimize/maximize/close)    |
+| [TitleBar] Tether (34px, custom drag region, minimize/maximize/close)                   |
 +-----------------------------------------------------------------------------------------+
-| [Top Nav Bar: .app-sidebar] (58px sticky smoked glass)                                  |
-|  [Tether Logo + Live Pill]  |  [Dashboard] [Web Filter] [App Limits] [Settings]  | (< Today >)  |
-|                             |               (Horizontal Capsule)                 |             |
+| [Top bar: .app-sidebar]                                                                 |
+|  [mark] Tether [Live] | ( Today ) ( Limits ) ( Activity ) ( Settings ) | (< Today >)      |
 +-----------------------------------------------------------------------------------------+
-| [Main Content Area: .app-main-content]                                                  |
-|                                                                                         |
-|  (Active Tab View: overview | limits | web-filtering | settings)                        |
-|                                                                                         |
+| [Main content: .app-main-content]   overview | limits | activity | settings             |
 +-----------------------------------------------------------------------------------------+
 ```
 
 ### App Bar (`TitleBar.tsx` & `TitleBar.css`)
-- **Height**: 34px, `background: rgba(22, 10, 36, 0.98)` matching deep horizon obsidian purple.
-- **Left Cluster**: Clean "Tether" window title (`12px`, font-weight 650) without repeating the app logo.
-- **Window Controls**: Minimize, Maximize/Restore, Close caption buttons (46px hit width, hover states, `#e81123` close hover, with `transform: none !important` to prevent active-state distortion).
+- 34px, themed through `--bg-app` / `--border-subtle`. Window title "Tether"; minimize, maximize/restore and close (46px hit width). The close button says what it does ("Close window (Tether keeps running)").
 
 ### Navigation Bar (`Sidebar.tsx` & `redesign.css`)
-- **Container**: 58px min-height, `rgba(26, 11, 42, 0.94)` smoked glass, `backdrop-filter: blur(20px) saturate(135%)`.
-- **Brand Cluster**: Renders the 30px Tether squircle logo cleanly without any outer border/background wrapper, paired with "Tether" logotype (`1.05rem`, font-weight 750) and an inline **Live Status Pill** (`status-pill--live`).
-- **Center Nav Segmented Capsule**: Horizontal row (`flex-direction: row !important`) hosting the 4 section tabs side-by-side in a sleek floating pill track. Active tab is highlighted with an elevated warm terracotta gradient (`rgba(165, 91, 75, 0.35)` to `rgba(122, 62, 48, 0.28)`) and amber icon accent.
-- **Date Stepper Capsule**: Matching floating pill track on the right with responsive `<` and `>` buttons and an interactive "Today" / date label with calendar icon for returning to Today when viewing past ledger records.
+- **Brand**: `.brand-mark` squircle plus the "Tether" wordmark (`.logo-title`, display font) and the status pill (`status-pill--live` / `--offline`).
+- **Pill nav** (`.sidebar-nav`, radius 99px on `--bg-card`): the active item (`.nav-item--active`, `aria-current="page"`) is a filled `--color-primary` pill with `--color-on-primary` text. At ≤980px labels hide (each item keeps its `aria-label`); at ≤700px the bar wraps.
+- **Day stepper**: `<` / `>` and a "Today"/date label; only shown on Today (`visibility: hidden` elsewhere so the bar keeps its balance).
 
-### Nav Items
-1. **Dashboard** (`overview`): Daily timeline, top applications, weekly chart, category distribution (includes blocked app count badge).
-2. **Web Filter** (`web-filtering`): Domain block rules, bulk uploading, NSFW protection.
-3. **App Limits** (`limits`): Target limits (apps and categories), status filters, limit creator.
-4. **Settings** (`settings`): Language, Appearance, Advanced Parameters, Security & PIN, About.
+### Nav Items (`TabKey = "overview" | "limits" | "activity" | "settings"`)
+1. **Today** (`overview`, `nav.overview`): time left, the day strip and budget tiles (Section 3).
+2. **Limits** (`limits`, `nav.limits`): every rule in one place: budgets, schedules, websites (Section 4).
+3. **Activity** (`activity`): the week against the limits (Section 4).
+4. **Settings** (`settings`): six short groups (Section 4).
+
+There is no separate Web Filtering tab any more; websites live on Limits.
 
 ---
 
-## 3. Overview Tab Hierarchy (`overview`)
+## 3. Today (`overview`, `ui/src/pages/TodayPage.tsx`)
 
-The dashboard overview is structured as an interactive grid:
+Phase 2 of `docs/DESIGN_SYSTEM.md`: time **left** first. The day picker in the top bar is the only date control; past days use the same screen.
 
 ```
 +-----------------------------------------------------------------------------------------+
-| .overview-stack                                                                         |
-|                                                                                         |
-|  [Row 1: .overview-activity-grid] (1.38fr : 0.72fr)                                     |
-|  +--------------------------------------------+  +-----------------------------------+  |
-|  | .timeline-panel (card)                     |  | <UsageAside />                    |  |
-|  | - Header: "Today at a glance"              |  | - "Your activity / Most used"     |  |
-|  | - Date Stepper: [<] Today [>]              |  | - Ranked list: 01, 02, 03...      |  |
-|  | - <LedgerRule />: 24h timeline band        |  | - Duration bars & percentage      |  |
-|  | - Category Color Legend (from catalog)     |  |                                   |  |
-|  +--------------------------------------------+  +-----------------------------------+  |
-|                                                                                         |
-|  [Row 2: .overview-chart-grid] (1fr : 0.8fr)                                            |
-|  +--------------------------------------------+  +-----------------------------------+  |
-|  | .card (Weekly History)                     |  | <CategoryMix />                   |  |
-|  | - 7-day bar chart (<WeeklyChart />)        |  | - "Where time goes"               |  |
-|  | - Clickable day bars with hover tooltips   |  | - Conic-gradient donut breakdown  |  |
-|  |                                            |  | - Legend with % of total          |  |
-|  +--------------------------------------------+  +-----------------------------------+  |
+| .service-alert (only while the agent is unreachable; role="alert")                      |
++-----------------------------------------------------------------------------------------+
+| Hero card                                                                               |
+|  ( ring: time left of the total budget )  Headline ("You're on track today")            |
+|                                            "2h 55m used so far. Bedtime starts at 10 pm, |
+|                                             in 3h 18m."                                 |
+|                                            [day strip: day start -> +24 h, now line]    |
+|                                            legend: budgets · Everything else · Bedtime  |
++-----------------------------------------------------------------------------------------+
+| BlockedBanner (only while something is blocked): name + "Allow 15 more minutes"         |
++-----------------------------------------------------------------------------------------+
+| Budget tiles (one per enabled app/category limit): tint fills to the share left,        |
+| status pill, "20m left" / "Back at 4 AM", apps that counted, Edit                       |
++-----------------------------------------------------------------------------------------+
+| Suggestion (today only, when one applies): "From last week" · "Chrome was open about    |
+| 1h 8m a day last week, and no budget covers it. Add one?"   [Not now] [Add a budget]    |
++-----------------------------------------------------------------------------------------+
+| Schedule card (active or next schedule)   |  Websites card (sites blocked, Family DNS)  |
++-----------------------------------------------------------------------------------------+
+| Most used (UsageAside)                    |  This week (WeeklyChart)                    |
 +-----------------------------------------------------------------------------------------+
 ```
 
-### Component Details
-- **`LedgerRule.tsx`**: Visual 24-hour timeline bar (00 to 24 hours). Slices each usage interval, maps `appId` to `primary_category`, and renders each slice in its distinct category color using `categoryColors.ts`. Displays category legend at the bottom.
-- **`UsageAside.tsx`**: Compact right-side card displaying strictly the top 5 ranked applications with visual progress bars colored by their category, live timer countdowns, dedicated category pills (`.usage-category-pill`), and streamlined vertical spacing (`overflow: hidden`) to eliminate scrollability completely within the card bounds.
-- **`WeeklyChart.tsx`**: 7-day bar chart showing day-by-day totals with week-over-week deltas.
-- **`CategoryMix.tsx`**: Circular conic-gradient donut chart showing time distribution by category using the high-contrast category color taxonomy.
-- **`categoryColors.ts`**: Unified high-contrast color mapping across 16+ distinct categories (Games `#8B5CF6`, Social Media `#3B82F6`, Short-Form Video `#EC4899`, Video & Streaming `#EF4444`, Music `#10B981`, News `#F97316`, Shopping `#F59E0B`, Communication `#06B6D4`, Productivity `#0EA5E9`, Creativity `#A855F7`, Education `#14B8A6`, Finance `#84CC16`, AI `#6366F1`, Development `#64748B`, Utilities `#475569`, Adult `#BE123C`, Gambling `#991B1B`, Uncategorized `#94A3B8`), plus a 12-color fallback palette and alpha styling helpers.
+All numbers come from `ui/src/todayModel.ts` (pure functions, `now` passed in):
+- **`budgetStates`**: one entry per enabled app or category limit. Time left = the usage row's `limit_seconds - seconds` (the agent's own arithmetic, weekday overrides and tagged apps included); no row means nothing used. Status: `done` (nothing left), `low` (≤ 15 min or ≤ 20 % left), `extra` (a "+15 min" extension is running, until `timer_expires_utc`), else `plenty`. The apps listed are the day's apps that count toward it.
+- **`totalState`**: the total-screen-time limit for the viewed weekday; drives the ring. Without one the ring shows time used, with no arc.
+- **Headline** priority: total used up, a budget done, total low, a budget low, else "You're on track today" ("Here's your day so far" with no budgets). Past days show the date.
+- **`stripSegments`**: usage intervals placed on the agent's day (`dayWindowStart` = midnight + `day_start_minutes`), coloured by the budget the app counts toward (`hueForApp`: its own app limit, else a category limit on its primary category or a tag, else "Everything else"), merged when the same colour is less than 90 s apart.
+- **`scheduleBands` / `scheduleOutlook`**: enabled downtime schedules that overlap the day, hatched on the strip. An occurrence belongs to the weekday it starts on, as in `st_core::schedules` (Friday's 22:00-07:00 runs into Saturday morning). The subtitle names the schedule in force or the next one to start.
+- **Suggestion** (`suggestBudget` in `ui/src/activityModel.ts`, data from `useWeekDetail` over the seven days before today): the most used app that no enabled budget covers, has no switched-off budget of its own, and whose primary category can take a limit (`limitable`), if it averaged at least 45 min a day over the days that loaded. "Add a budget" opens the budget editor for that app; nothing changes until the person saves, and adding a budget only tightens, so no PIN. "Not now" hides that app's suggestion for seven days (per viewer, `localStorage` key `tether.suggestionDismissed`, best effort). Shown only on today and only when at least one budget exists; with none, the "No budgets yet" card already offers one.
+- Strip labels sit at their real positions (start, +6 h, +12 h, +18 h, end, "now"); labels near "now" are hidden. In Arabic the strip runs right to left with the page.
+
+Tiles use the budget hue tokens (`tt-hue-*`: `--hue`, `--hue-tile`, `--hue-fill`, `--hue-ink`). "Most used" bars use the same hue as the strip; the category is a neutral button that opens the categorize dialog (the old palette-coloured pills, an accessibility gap, are gone). "This week" bars are buttons that open that day; the viewed day is orange.
+
+Removed with this change: `ExecutiveHeader` (metric cards), `CategoryMix` (donut), `LedgerRule` (old 00-24 h timeline that ignored the day start), `dashboardMetrics.ts`, and ~180 translation keys and ~680 CSS lines they used.
 
 ---
 
 ## 4. Other Panels
 
-### App Limits (`LimitsPanel.tsx`)
-- Shell class: `.limits-page-shell`.
-- Intro header + `+ Add New Limit` action button.
-- Top metrics: Total Limits, Active Limits, Limits Reached.
-- `FilterTabs`: "All", "Active", "Disabled".
-- Limit cards grid displaying budget progress rings, weekday override badges, and quick toggles.
-- **Active +15m Extension Live Timer**:
-  - When an override is active (`activeTimerExpiresUtc`), the card receives an elevated amber border and glow (`.limit-card--extended`).
-  - Card Header Badge: Displays `<LiveTimer />` with an animated pulsing dot and countdown indicator.
-  - Card Body Banner (`.limit-card-extension-banner`): Dedicated frosted amber strip displaying `+15m Extension Active` with an animated pulsing dot and real-time second-by-second countdown.
-  - Dashboard Integration: Also surfaces the live countdown pill next to the app name in `UsageAside` on the Overview tab.
+### Limits (`ui/src/pages/LimitsPage.tsx`)
+One page for every rule. `View = "main" | "schedules" | "websites"`; the two subviews show a back button and their own level-1 heading.
 
-### Web Filtering (`WebFilteringPanel.tsx`)
-- Shell class: `.web-filter-page-shell`.
-- Command Panel (`.web-filter-command-panel`):
-  - Manual domain entry form input with real-time validation.
-  - Bulk import via text/CSV file with 100-domain safety limit.
-  - AI Prompt generator card with one-click clipboard copy.
-- Domain Rules Table Panel (`.web-filter-domain-panel`):
-  - Edge-to-edge full width table card (`padding: 0; overflow: hidden;`).
-  - Table Header Bar (`.web-filter-table-header`): Title "Active Domain Rules", amber counter pill badge (`{count} rules`), and real-time search input with clear trigger.
-  - Column Distribution:
-    - Domain (45%): Rounded amber icon box with globe icon, ellipsis-clipped monospace domain text.
-    - Category (23%): Pill badges distinguishing "Custom Block" from "Adult Content".
-    - Status (16%): Monospace "BLOCKED" pill badge with glowing red status indicator.
-    - Action (16%): Right-aligned "Remove" action button with danger-glow hover transition.
-  - Table Footer (`.web-filter-table-footer`):
-    - Left: Hidden NSFW domains unlock button (`EyeOff`).
-    - Right: Pagination controls (`PAGE_SIZE = 10`) with count indicator ("1–10 of 14") and chevron stepper buttons.
-  - Empty & Filter states: Dedicated empty views for zero domains and no search matches with a "Clear search" action.
+- **Header**: "Limits" plus a subtitle naming the cooldown ("Lowering a limit works right away. Raising one waits {{count}} hours…", plural keys; `subtitleNoWait` when the cooldown is 0), and "+ New budget" (`actions.startNewOrder`, opens `LimitEditorDialog`).
+- **Waiting banner**: one `tt-banner` row per `catalog.pending_limits` entry ("{{name}} changes to {{amount}} a day, {{when}}." / "{{name}} is removed {{when}}.", `formatWhen`), each with **Cancel** (`actions.cancelPendingLimit`).
+- **Budgets card**: one `tt-budget` row per limit: hue swatch, name, the rule (`limitRule`: same every day / weekday overrides), time left today against the budget (`role="progressbar"` meter that empties like the Today tiles, "Used up today" when nothing is left), an on/off switch (`actions.toggleLimit`) and **Edit** (`actions.openEditor`). Paused rows dim only the swatch and meter so text keeps its contrast. Rows stack under 760px.
+- **Schedules card** (side column): each downtime schedule with its clock range (`Intl` time format), days ("Every day" / "Weekdays" / "Weekends" / list from the bitmask), and a switch; **Manage** opens the Schedules subview (`DowntimeSection`: editor, delete, always-allowed apps).
+- **Websites card** (side column): add a site inline (`addManualBlock`), up to three blocked sites as chips (hidden adult-list domains excluded via `domains.ts` `isHiddenDomain`), "+N more", and the **Family DNS** switch (`family_dns` setting). **Manage** opens the Websites subview (`WebFilteringPanel`, v2 since 2026-10-09: **Add sites** card with the inline form, **Import a list** (text or CSV, up to 100 at a time) and a collapsed "Make a list with an AI chat" helper; **Blocked sites** card with a count of the visible sites, search, one row per site with an unblock icon (PIN), paging, and "N more sites are on the hidden adult list. Show them" (PIN), so the count always adds up).
 
-### Settings (`App.tsx` Settings Tab)
-- Shell class: `.settings-page`.
-- Cards:
-  - **Column 1**:
-    - `.settings-card--language`: Language and color theme (Dark, Light, System).
-    - `.settings-card--hud`: **Timer HUD & Gaming Overlay**:
-      - Continuous timer HUD toggle (`show_hud_overlay`): Enables continuous floating timer over limited apps. When disabled, the shortcut keybind still functions on demand.
-      - Continuous timer in full-screen games toggle (`show_hud_in_fullscreen`, defaults to disabled to preserve native display refresh rates, DWM Independent Flip, and driver frame limiters; recommend using in-game peek shortcut).
-      - Timer peek shortcut (`hud_peek_hotkey`, default `Ctrl+Alt+T`) with interactive keyboard recorder and reset button. Operates universally across all apps and games, even when continuous HUD is disabled.
-    - `.settings-card--alerts`: **Alert Sounds & Milestone Chimes**:
-      - Visual countdown milestone pills (`15 min`, `10 min`, `5 min`, `1 min`, and `Limit Reached`).
-      - Explanatory copy detailing the gentle, non-intrusive harmonic chime played when milestones are reached.
-      - "Preview Chime Sound" button with live audio playback via Win32 `PlaySoundW` and speaker icon (`VolumeIcon`).
-  - **Column 2**:
-    - `.settings-card--security`: Admin PIN, Strict Mode toggle, Family DNS Protection toggle with status indicator dot.
-    - `.settings-card--advanced`: Anti-impulse cooldown (hrs), idle threshold (sec), day rollover offset (min).
-    - `.settings-card--categories`: Application Directory launcher with detected app count.
-  - **Full Width**:
-    - `.settings-card--tutorial`: Collapsible onboarding tutorial walkthrough.
-    - `.settings-card--about`: Version and mode telemetry.
-- **Loading Animations Across Settings**: Every toggle (`show_hud_overlay`, `show_hud_in_fullscreen`, `strict_mode`, `family_dns`) and advanced parameter input displays a dedicated `<LoadingSpinner />` while persisting changes and locks input to prevent race conditions.
+### Activity (`ui/src/pages/ActivityPage.tsx`, `ui/src/activityModel.ts`)
+The week against the limits. Loads the weekly totals plus each of the seven days' summaries.
+- **Header**: "38h 22m this week, 7h 22m more than last week. Stayed under 6h on 5 of 7 days." (the last sentence only with a total-screen-time budget, using each weekday's budget), and a week stepper (previous / next, never past today; arrows mirror in Arabic).
+- **Screen time by day**: stacked bars split by budget colour (`dayByHue`, the same `hueForApp` as the Today strip), a dashed line at the total budget, hour gridlines; days over the total budget in danger text. Each bar is a button that opens that day on Today. The chart is a labelled group with a text summary for screen readers.
+- **Budgets this week** (`budgetWeek`): per enabled app/category budget, the daily average and the days it ran out, over the days that loaded; plus the total-screen-time budget (`totalWeek`, from the same day totals as the chart).
+- **Most used this week** (`weekTopApps`), under the chart in the main column.
+- **When time ran out**: counts of the block-screen answers for the week (`BlockReasons`), as bars.
+- Not yet: borrowing.
+
+### Budget editor (`LimitEditorDialog.tsx`)
+Target picker (app / category / total, a pill switcher), duration slider (ticks from 1h; no browser spin arrows on the h/m inputs) + presets as pills, weekday overrides (day buttons, quick picks, a per-day adjuster), and a **Budget is on** switch. The app's category shows as a neutral tag with a **Change category** link. **Before the save button it says when the change applies**:
+- `limitRules.ts` `waitsForCooldown(existing, minutes, weekdayMinutes, enabled)` mirrors the agent's `is_loosening` (`crates/agent/src/ipc_server/limits.rs`): raising the daily limit or any day's effective limit waits; lowering, a new limit and switching a limit off apply now (removing or disabling applies instantly by owner decision).
+- If it waits (and `cooldownHours > 0`): an orange `tt-note` "Applies {{when}}" with the reason, and the button reads "Save, applies later" (`limitEditor.saveLater`). Otherwise a calm note "Applies right away."
+- `cooldownHours` comes from `statusInfo.limit_cooldown_hours` (24 by default). The agent stays the authority; the note is a preview.
+
+### Settings (`ui/src/pages/SettingsPage.tsx`)
+Six groups in a `tt-settings-grid` (two columns when there is room):
+1. **Protection**: who it's for (segmented Me / Someone I look after → `profile`), PIN (set or change, `actions.openPinSetup`), strict mode, cooldown hours.
+2. **Timer on screen**: show timer (`show_hud_overlay`), in full-screen games (`show_hud_in_fullscreen`), peek shortcut recorder + reset (`hud_peek_hotkey`), chime volume (`alert_volume`) with Play (`previewAlertSound`).
+3. **Day and tracking**: day starts at (`<input type="time">` → `day_start_minutes`), idle after (`idle_threshold_secs`).
+4. **Language and look**: language segmented control, theme Light / Dark / Like Windows.
+5. **Apps**: opens the app directory.
+6. **Help**: collapsible tutorial and the version.
+
+Every switch and input shows a spinner while saving (`settingPending`). Changes go through `actions.setSetting`; the agent's authorization gate decides which need the PIN, and the UI prompts for it when asked.
 
 ### Application Directory & Categorization
-- **Interactive Category Pills**:
-  - `UsageAside.tsx`: In the "Most used" activity list, `.usage-category-pill` has `.usage-category-pill--clickable` with hover illumination and click-to-categorize trigger, opening `<CategorizeDialog />`.
-  - `LimitsPanel.tsx`: App limit cards feature clickable `.target-badge--category-tag.target-badge--clickable` badges to re-categorize apps directly from their limits. A "Manage Apps" header button (`<FolderTree />`) provides quick entry to the full directory.
-  - `LimitEditorDialog.tsx`: When an app target is selected, displays an inline category preview badge and a "Change" button.
-- **`<AppDirectoryDialog.tsx>`**:
-  - Full-screen modal for managing discovered applications on the machine.
-  - Live search input with instant filtering across app display names, keys, and category names.
-  - Status filter chips: All, Categorized, and Uncategorized.
-  - App row layout with category color swatches, app names, keys, `[Custom]` badges for user-classified entries, and direct category change triggers.
-- **`<CategorizeDialog.tsx>`**:
-  - Theme-aware selection dropdown (`CategorySelect`) styled with CSS tokens (`var(--bg-card-elevated)`, `var(--border-subtle)`, `var(--bg-surface-hover)`) for dark and light modes.
-  - Multi-tag category checkboxes and "Auto-detect" reset button.
+- **`AppDirectoryDialog.tsx`**: search, All / Categorized / Uncategorized chips, rows with category swatch, name, path, `[Custom]` badge and **Change**. Opened from Settings → Apps.
+- **`CategorizeDialog.tsx`**: multi-tag category checkboxes and "Auto-detect" reset. Also opened from the Today "Most used" category pills and from the budget editor's category preview.
 
-### Onboarding Flow (`OnboardingSlider.tsx`)
-- Multi-step first-run wizard:
-  1. Welcome to Tether
-  2. Language Selection (English / العربية)
-  3. Track Your Time
-  4. Set Limits
-  5. **Family DNS Protection**: Interactive card allowing the user to opt-in to system-wide adult content filtering with automatic preservation of existing DNS, backed by `<ToggleSwitch />` and `<LoadingSpinner />`.
-  6. Stay Focused
+### Setup (`ui/src/components/setup/SetupFlow.tsx`)
+Shown on first run (`localStorage` `screentime_first_run_completed`). Four steps with a step list (`aria-current="step"`) and a language switch in the top `<header>`:
+1. **Who is this for?** Me / Someone I look after → saves `profile`.
+2. **Starting budgets**: templates (there is no usage history yet): Games 1h (2h on weekends), Social 30m, Video 1.5h, Bedtime 10 pm–7 am (a schedule), Total 4h (off by default). Each picked template is created with `set_limit` / `create_schedule`; failures are counted and the user can continue.
+3. **PIN**: at least 4 digits plus confirmation → `set_pin`, then the recovery code (`tt-code`) and "I wrote it down". Skipping is offered only for "Me". If a PIN already exists the step says so.
+4. **Websites**: Family DNS switch; **Finish** marks setup done.
 
 ### App-Wide Loading Animations & Shimmer Skeletons
-- **`LoadingSpinner.tsx`**: Reusable SVG vector spinner with animated dashed stroke and smooth rotation in sizes `xs`, `sm`, `md`, and `lg`. Integrated into form submissions, PIN verification buttons (`PinGate`, `PinSetupDialog`), and order updates (`LimitEditorDialog`).
-- **Web Filtering Shimmer Skeleton**: When querying domain rules, the table renders animated multi-column skeleton rows (`.skeleton-shimmer`) with staggered widths in Color Hunt obsidian/terracotta gradients instead of static loading text.
-- **Async Action Buttons**: Bulk upload in `WebFilteringPanel` displays `<LoadingSpinner size="xs" />` during multi-domain parsing and importation.
+- **`LoadingSpinner.tsx`**: SVG spinner (`xs`, `sm`, `md`, `lg`) used in form submissions, PIN buttons (`PinGate`, `PinSetupDialog`), the budget editor and settings controls.
+- **Websites subview**: skeleton rows (`.skeleton-shimmer`) while domain rules load; bulk import shows a spinner while it parses.
 
 ---
 
 ## 5. Overlays: Win32 Draggable HUD & Hardware-Accelerated Block Overlay
 
 ### A. Timer HUD Overlay (`crates/session/src/hud.rs` & `crates/session/src/mpo.rs`)
-- **Visual Design**: Solid, high-contrast 92x28 pill (14px corner radius) with zero glassmorphism.
-  - Dark Theme: Solid Obsidian `#0B0D13` background, `#202534` 1px border, `#F3F4F6` digits.
-  - Light Theme: Solid Titanium `#FFFFFF` background, `#E5E7EB` 1px border, `#111827` digits.
-  - Dynamic Status Dot:
-    - Normal Active Tracking: Electric Cobalt `#3B82F6` (D2D / GDI).
-    - +15m Extension Timer: Amber Gold `#F59E0B`.
-    - Warning (≤60 seconds): Rose Coral `#F43F5E`.
-  - Digits: Bold monospace ClearType `Consolas` tabular time readout.
+- **Visual Design** (Phase 2): 92x28 pill, colours from one pure module, `crates/session/src/hud_palette.rs` (`hud_colors`, unit-tested), shared by the Direct2D (`mpo.rs`) and GDI (`hud.rs`) renderers so they cannot drift.
+  - Dark: plum `#1C1229`, border `#3A2752`, digits `#F4EEFB`, lilac dot `#C9B6F2`.
+  - Light: white, border `#E7E0F0`, digits `#23163A`, violet dot `#8F6CE6`.
+  - A running "+15 min" extension shows an orange dot `#F08A3C`.
+  - Last minute (≤ 60 s): the whole pill turns orange with plum digits.
+  - Digits: Segoe UI bold (tabular figures; Consolas before).
 - **Direct Dragging & Multi-Monitor Window Clamping**:
   - Registered with `WS_EX_NOACTIVATE` so mouse dragging never steals keyboard focus or activates the overlay over fullscreen games or typing apps.
   - Dragging uses Win32 `SetCapture` / `ReleaseCapture` upon `WM_LBUTTONDOWN`, `WM_MOUSEMOVE`, and `WM_LBUTTONUP`.
@@ -234,7 +164,7 @@ The dashboard overview is structured as an interactive grid:
   - Adaptive trajectory: If positioned in the top half of the window, gracefully slides **down** from `target_y - 24` to `target_y`. If positioned in the bottom half, gracefully slides **up** from `target_y + 24` to `target_y`.
   - Drag interruption: If the user begins dragging while the animation is playing, the animation cancels cleanly and mouse drag takes immediate precedence.
 - **Theme Synchronization**:
-  - Overlays continuously adapt to the user's active theme by synchronizing with `%LOCALAPPDATA%\screentime\theme.txt`.
+  - Overlays continuously adapt to the user's active theme by synchronizing with `%LOCALAPPDATA%\screentime\theme.txt` (`light`, `dark` or `system`; `theme_is_light`). `system` follows Windows' app mode (`HKCU\...\Themes\Personalize\AppsUseLightTheme`); it used to be read as dark.
 
 ### B. Hardware-Accelerated Tauri 2 React Block Overlay (`BlockOverlay.tsx` & `overlay_bridge.rs`)
 - **Architecture**: Hardware-accelerated transparent secondary webview window in Tauri 2 commanded over named pipe `\\.\pipe\screentime_overlay_bridge`.
@@ -248,69 +178,56 @@ The dashboard overview is structured as an interactive grid:
 - **Immediate Dismissal & Ghost Click Elimination**:
   - On `OverlayBridgeRequest::Hide`, Tauri immediately calls `window.hide()` in 0 ms.
   - Eliminates ghost click stealing and prevents focus oscillation loops where mouse clicks near the overlay area would reactivate `screentime-ui.exe`.
-- **Native OS Input Blocking Without Hooks**:
-  - Upon limit trip, `screentime-session` calls `EnableWindow(target_hwnd, FALSE)` to make the blocked application completely inert to mouse, keyboard, and drag events natively at the Win32 OS level.
-  - Eliminates machine-wide key swallowing, allows uninhibited `Alt+Tab` and Windows key usage, and removes antivirus/EDR false positives.
-  - Upon unlock or focus dismissal, `screentime-session` calls `EnableWindow(target_hwnd, TRUE)` to instantly re-enable normal app interaction.
-- **Visual Design (Solid Crisp Styling — No Glassmorphism)**:
-  - Full-window Backdrop: Solid high-opacity veil (`var(--bg-modal-backdrop, rgba(11, 13, 19, 0.92))`).
-  - Centered Solid Card: 480px card (`--bg-card, #131620`) with crisp 1px border (`--border-card, #202534`) and deep elevation shadow (`0 24px 64px rgba(0, 0, 0, 0.6)`).
-  - Header: Tether brand lock badge paired with `LIMIT REACHED` status pill.
-  - App Label: Bold display typography with category accent dot.
-  - Dual Input PIN Support:
-    - **Physical Keyboard**: Global listener intercepts digits `0–9`, `Backspace`, `Enter` (to submit), and `Escape` (to quit app).
-    - **3x4 Tactile On-Screen Keypad**: Tactile numeric grid with interactive hover, active scaling, and Clear (`C`) / Submit (`OK`) keys.
-    - **Masked Indicator Dots**: Glowing indicator bubbles with warm terracotta illumination and dynamic shake keyframe animation on invalid entry.
-  - Multi-Lingual & RTL: Full bilingual support in English and Arabic (`dir="rtl"`), ensuring native bidirectional layout and typography.
+- **No input hooks**: the block screen is an always-on-top window covering the app; there is no keyboard hook and the blocked window is not disabled (`EnableWindow` was documented here but never implemented). What keeps the block in place is the session re-asserting it:
+- **Self-healing delivery (2026-10)**: while the block holds and the app is focused, the session re-sends `Show` every 2 s (backoff 1 s → 10 s while unacknowledged) and relaunches the UI (`screentime-ui.exe` / `Tether.exe`) at most every 15 s if the bridge pipe is missing. `Show` is idempotent. `overlay_update` is re-emitted only when the target changes or the window was hidden, so a PIN being typed survives.
+- **Sizing**: at least 520×820 logical pixels with a PIN (560 tall without), scaled by the monitor's scale factor (the floors used to be physical pixels, so at 150 % the window was two-thirds of the intended size), centered on the app and clamped to its monitor. The page scrolls instead of clipping and drops its badge below 640px, so "Close" is always reachable.
+- **Quit is honest**: the overlay hides only after the app actually closed (local close, or the agent's `CloseApps`, which needs no PIN for a *blocked* app). Otherwise it shows "Couldn’t close the app: …" and stays up.
+- **Peer verification**: both bridge ends check the other process is a genuine Tether binary from the same install (`st_win32::peer_is_trusted`).
+- **"Pause and choose" design (Phase 2, `docs/DESIGN_SYSTEM.md`)**: always the dark palette (the root sets `data-theme="dark"`), an opaque plum backdrop, no card:
+  - **Why it is blocked**, re-derived by `ui/src/blockModel.ts` in the agent's own order (`enforcer.rs`): a downtime schedule in force (unless the app is always allowed), then the app's budget, then total screen time. The overlay loads status, catalog, today's summary, schedules and the allowlist itself; the bridge DTO only names the app.
+  - Badge (empty budget ring in the budget's hue, or a moon for downtime), eyebrow ("TikTok · 20m every day, all used" / "Downtime · 6:50 PM – 8:50 PM"), title ("Time's up for TikTok today" / "Homework time is on"), and "TikTok is waiting behind this screen, so nothing is lost."
+  - Strip of the agent's day, hatched orange from now until the app comes back ("back at 12 AM · in 4h 39m"): the day reset for budgets, the schedule's end for downtime.
+  - **Close {app}** (orange, primary). Extra time is offered only when it can work: never during downtime (the agent re-blocks every tick, an override does not lift a schedule) and not in strict mode. With a PIN it is a link ("A grown-up can add 15 minutes with the PIN" for the guardian profile, "Add 15 minutes with the PIN" for self) that opens the PIN pad; without one, a secondary "Allow 15 more minutes" button. During downtime a note says the schedule is changed on Limits.
+  - Keyboard: digits, Backspace and Enter drive the PIN pad once it is open; **Escape only closes the pad**. (It used to quit the blocked app, which a reflex press in a game would do by accident.)
+  - **"What were you about to do? You can skip this."**: three chips (Finish what I was doing / I was bored / Just habit, `aria-pressed`) recorded with `RecordBlockReason`; optional, a failure to save is silent.
+  - Not yet: borrowing from tomorrow (needs a decision on the PIN, see `docs/DESIGN_SYSTEM.md`).
 
 ---
 
-## 6. Theme System & Component Standardization (Horizon Dark, Horizon Light, Classic Dark, Classic Light, System)
+### C. Tray panel (`TrayPanel.tsx`, `ui/src-tauri/src/tray_panel.rs`)
+- A left click on the tray icon opens a 360px-wide window, as tall as its content (the panel reports its height and `fit_tray_panel` resizes it against the taskbar, 160-560px), (`tray`, `?view=tray`) next to the taskbar: the ring (time left of the total budget, or time used), time used and the active or next schedule, one row per budget (time left, "Done, back at …" or "Extra time until …", a bar in the budget's hue), and **Open Tether** (`open_dashboard`). Right click still shows the menu.
+- Placement (`panel_origin`, unit-tested): opens from whichever side the taskbar is on (the side the click is outside the monitor's work area), centered on the click, clamped on screen; sizes are logical pixels scaled by the monitor.
+- Hides on Escape and when it loses focus; a click on the tray icon right after a focus-loss hide is ignored, so clicking the icon toggles it closed instead of reopening it.
+- Only the host shows it (`tray_panel::toggle`). `main.tsx` shows its own window once loaded only for `main`; before 2026-10-07 it showed every window, so the tray panel and the transparent block-screen window opened at startup over the dashboard and caught its clicks.
+- Reloads its numbers every time it opens (`tray_panel_shown`) and every 30 s while open, with the same pure functions as Today (`todayModel.ts`). Follows the app theme; mirrors in Arabic.
+- The tray menu's "Reset network settings" and "Stop Tether and its service" go through the dashboard's PIN prompt (`run_tray_action`, see `docs/IPC_CATALOG.md`).
 
-### A. Quad-Theme Engine & Zero-Emoji Architecture
-- **Hook (`useTheme.ts`)**: Manages theme state (`horizon-dark`, `horizon-light`, `classic-dark`, `classic-light`, `system`), persists choice in `localStorage` under `tether_theme`, and sets `<html data-theme="..." data-theme-mode="dark|light">`.
-- **Zero FOUC Startup Script (`index.html`)**: An early synchronous script in `<head>` immediately reads `localStorage.getItem("tether_theme")`, resolves system preference, and stamps `data-theme` before CSS or React mounts, ensuring zero visual flash on app restarts.
-- **Backwards Compatibility**: Automatically migrates legacy `"dark"` to `"horizon-dark"` and `"light"` to `"horizon-light"`.
-- **Zero-Emoji Theme Selector (`App.tsx`)**: Replaced raw emojis (`🌙`, `☀️`, `⊙`) with clean, professional localized buttons featuring live color swatch indicators:
-  1. **Horizon Dark**: Signature warm obsidian floor (`#210F37`), elevated cards (`rgba(79, 28, 81, 0.80)`), warm terracotta (`#A55B4B`) and amber gold (`#DCA06D`) accents.
-  2. **Horizon Light**: Signature warm cream canvas (`#F5EDE8`), parchment cards (`rgba(255, 250, 247, 0.95)`), soft terracotta lines (`rgba(165, 91, 75, 0.20)`), and amber highlights (`#8B6B1A`).
-  3. **Classic Dark**: Clean, neutral dark slate canvas (`#0B0F17`), deep slate cards (`#141A26`), modern indigo accents (`#6366F1`), and cyan telemetry (`#38BDF8`) with 0% purple tint.
-  4. **Classic Light**: Clean, neutral cool slate canvas (`#F8FAFC`), pure white cards (`#FFFFFF`), slate dividers (`#CBD5E1`, `#E2E8F0`), and royal blue accents (`#2563EB`) with 0% warm terracotta tint.
-  5. **System**: Automatically evaluates OS `prefers-color-scheme: dark` in real time with reactive media query change listeners.
+---
 
-### B. Standardized Switch Toggles
-- **Implementation**: Standardized across Settings, App Limits, and Onboarding via semantic `<input type="checkbox" className="toggle-switch" role="switch">`.
-- **Geometry**: Precision 40x22px capsule with 16px thumb, 2px padding, and smooth cubic-bezier transitions (`translateX(18px)`).
-- **Light Theme Cohesion**: Soft terracotta track when unchecked (`rgba(165, 91, 75, 0.18)`), vibrant terracotta when checked (`#A55B4B`), and clean white thumb (`#FFFFFF`) with zero overflow or double-rendering artifacts.
+## 6. Theme System & Component Standardization
 
-### C. Stabilized Top Date Stepper
-- Fixed `196px` width with `justify-content: space-between` and flex `min-width: 0` ensures the date pill and central navigation tabs never shift or resize when toggling between "Today" and past date ranges.
+### A. Light, Dark and Like Windows
+- **Hook (`useTheme.ts`)**: `ThemePreference = "light" | "dark" | "system"`, `EffectiveTheme = "light" | "dark"`. The choice is persisted in `localStorage` (`tether_theme`) and through the Tauri `set_theme` command; `applyTheme` sets both `data-theme` and `data-theme-mode` on `<html>` to the effective theme. `system` follows `prefers-color-scheme` live.
+- **Migration**: retired names map to the new ones in three places that must agree: `useTheme.ts` `normalizePref`, the `index.html` bootstrap script, and `ui/src-tauri/src/lib.rs` `normalize_theme` (`THEMES = ["light", "dark", "system"]`). Dark: `midnight-cobalt`, `slate-charcoal`, `cyber-emerald`, `horizon-dark`, `classic-dark`. Light: `clean-titanium`, `nordic-frost`, `horizon-light`, `classic-light`.
+- **Zero FOUC**: the `index.html` script stamps the theme before CSS or React load.
+- **Native HUD**: `crates/session/src/hud.rs` reads `theme.txt` and treats any value containing "light" as light, so it needs no change for the new names.
+
+### B. Switches
+- One definition (`.toggle-switch` in `redesign.css`): 42×24, off track `--border-strong`, on track `--color-primary` with a `--color-accent` knob; the knob moves toward the inline end (RTL aware); `:focus-visible` ring. Always rendered through `ToggleSwitch` with an accessible `label`.
+
+### C. Top Date Stepper
+- Fixed width so the nav never shifts between "Today" and a past date. Shown only on Today; elsewhere `visibility: hidden` and out of the tab order.
 
 ---
 
 ## 7. Scheduled Downtime & Bedtime Mode (Phase A)
 
-### A. Sub-Navigation Architecture in App Limits
-- **Segment Control (`FilterTabs`)**: Integrates seamlessly at the top of `LimitsPanel.tsx`, offering instant switching between **"Daily Limits"** and **"Scheduled Downtime"**.
-- **Dedicated Viewport (`DowntimeSection.tsx`)**:
-  - **Metric Cluster**: Surfaces 3 live status cards:
-    - *Active Schedules*: Ratio of enabled schedules (e.g. `1 / 2`).
-    - *Downtime Status*: Real-time enforcement indicator (`Active now` with amber badge or `Inactive`).
-    - *Always Allowed*: Counter of exempt applications.
-  - **Recurring Schedule Rows**:
-    - Displays schedule name (e.g. "Bedtime", "Deep Work"), time interval badge (`10:00 PM – 7:00 AM`), active weekday pills (`M T W T F S S`), overnight indicator badge, quick toggle switch, edit button, and delete action.
-  - **Schedule Editor Modal (`ScheduleEditorModal`)**:
-    - Backed by accessible `Dialog` modal.
-    - Configures schedule name, HTML5 start and end time pickers (converted to 0–1439 minute integers), overnight calculation badge, and 7 interactive day bitmask pills with quick presets ("Every day", "Weekdays", "Weekends").
-  - **Always-Allowed Apps (Downtime Allowlist)**:
-    - Searchable application dropdown powered by detected apps from `catalog.apps`.
-    - Allows user to exempt critical tools (e.g. Calculator, Phone, Notes) that remain fully accessible during scheduled downtime.
-    - Visual tag list with remove buttons for quick exemption management.
-
-### B. End-to-End Pipeline
-- **Backend IPC**: Full round-trip support in `st-agent::ipc_server` for `ListSchedules`, `CreateSchedule`, `UpdateSchedule`, `SetScheduleEnabled`, `DeleteSchedule`, `ListAllowlist`, and `SetAllowlist`.
-- **Enforcement Integration**: `st-agent::enforcer` checks active minute against weekday bitmasks (supporting overnight rollover) on each tick; non-allowlisted apps are blocked with `OverlayMode::DowntimeActive`.
-
+### A. Schedules on the Limits page
+- **Entry point**: the Schedules card on Limits lists each schedule with a switch; its **Manage** link opens the Schedules subview (back button + level-1 "Schedules" heading) that hosts `DowntimeSection`.
+- **Schedules subview (`DowntimeSection.tsx`)**, v2 since 2026-10-09: level-1 "Schedules" heading and "During a schedule only allowed apps open."
+  - **Your schedules** card: one `tt-row` per schedule: name (an "On now" tag while it runs), "10 PM – 7 AM (overnight) · Mon–Fri" in the app's clock format (`clockLabel`, `daysLabel`), a switch, **Edit**, and a delete icon that asks once more inline ("Delete?", times out after 5 s). **New schedule** in the card head.
+  - **Schedule editor** (dialog): Name, From / Until (`type="time"`), "Runs overnight, until 7 AM the next morning." when the end is before the start, Days as quick picks (Every day / Weekdays / Weekends) plus seven day pills, Cancel / Save.
+  - **Always allowed** card: a styled select of detected apps + **Allow**, and the allowed apps as removable chips. Empty: "None yet. During a schedule every app closes except system tools." (the enforcer exempts the allowlist and `never_block` categories).
 ---
 
 ## 8. Timer Overlay (HUD Pill) Focus Reconciliation & Low-Latency Dismissal
@@ -381,32 +298,12 @@ When running full-screen or borderless 3D games with driver-level frame rate lim
 
 ---
 
-## 10. Multi-Theme Architecture & Semantic Token Alignment
+## 10. Semantic Token Alignment
 
-The application supports four distinct, beautifully tuned visual themes plus OS automatic matching:
-1. **Midnight Cobalt** (`midnight-cobalt`): Deep carbon base (`#0B0E17`), sleek steel borders (`#1E2638`), crisp titanium text (`#F1F5F9`), and electric cobalt/indigo accents (`#4F46E5`, `#6366F1`).
-2. **Slate Charcoal** (`slate-charcoal`): Clean dark charcoal base (`#0D1117`), graphite panels (`#161B22`), crisp silver-white text (`#F0F6FC`), and ice cyan accents (`#38BDF8`, `#0284C7`).
-3. **Clean Titanium** (`clean-titanium`): Soft porcelain canvas (`#F8FAFC`), pure white surfaces (`#FFFFFF`), deep slate text (`#0F172A`), and royal cobalt accents (`#4338CA`, `#4F46E5`).
-4. **Nordic Frost** (`nordic-frost`): Icy slate canvas (`#F0F4F8`), crisp white panels (`#FFFFFF`), deep fjord navy text (`#0C1929`), and arctic cyan/teal accents (`#0284C7`, `#0D9488`).
-
-### A. Semantic Surface Hierarchy & Theme Selectors
-- **Unified Dual-Selector Syntax**:
-  - To maintain backward compatibility with legacy preferences while supporting new themes, all component rules in `redesign.css` support both new IDs (`midnight-cobalt`, `slate-charcoal`, `clean-titanium`, `nordic-frost`) and aliases (`dark`, `light`, `horizon-dark`, `horizon-light`, `classic-dark`, `classic-light`).
-- **Top Navigation Bar & App Bar Theming**:
-  - The top App Bar (`.titlebar`) dynamically inherits `var(--bg-app)` and `var(--border-subtle)` with high-contrast text and control buttons across all 4 themes.
-  - The sticky Navigation Bar (`.app-sidebar`), segmented button capsule (`.sidebar-nav`, `.nav-item`), and day stepper (`.day-stepper`, `.stepper-btn`) adapt seamlessly with warm parchment surfaces and espresso ink in Horizon Light, crisp slate in Classic Dark, and clean neutral slate in Classic Light.
-
-### B. Component Visual Overhauls
-- **Site Block List (`WebFilteringPanel.css`)**:
-  - Completely decoupled from hardcoded dark purple (`#210F37` / `#4F1C51`).
-  - Base rules derive entirely from semantic tokens (`var(--bg-card)`, `var(--border-card)`, `var(--bg-input)`, `var(--text-primary)`, `var(--color-primary)`).
-  - Four explicit theme blocks provide tailored card surfaces, table headers, count badges, search inputs, and domain removal buttons for Horizon Dark, Horizon Light, Classic Dark, and Classic Light.
-- **App Limits Panel (`LimitsPanel.css`)**:
-  - Overhauled with semantic tokens and theme override blocks for consistent card elevation, progress tracks, and extension banners across all 4 palettes.
-- **Weekly Chart Bars**:
-  - In Horizon Light, `.bar-track` uses `rgba(165, 91, 75, 0.08)` and `.bar-fill` uses `rgba(165, 91, 75, 0.28)`, with selected bars highlighted in primary terracotta `#A55B4B`.
-- **Modals, Dialogs & Controls**:
-  - `.dialog`, `.pin-input`, `.toggle-switch`, and `.skeleton-shimmer` dynamically update their background, borders, and animations based on the active theme.
+Superseded by the v2 palette (Section 1 and `docs/DESIGN_SYSTEM.md`). What still holds:
+- Component rules read semantic tokens (`--bg-card`, `--border-card`, `--text-primary`, `--color-primary`, …); light-only adjustments use `[data-theme-mode="light"]` and tokens, not hardcoded colours.
+- Text uses the text-safe tokens (`--color-*-text`, `--color-on-primary`); fills use the fill tokens.
+- The weekly chart, dialogs, PIN inputs and skeletons have no per-theme blocks; they follow the tokens.
 
 ---
 
@@ -454,11 +351,8 @@ The application supports four distinct, beautifully tuned visual themes plus OS 
 
 ## 13. UI De-Cardenisation Architecture
 
-### A. Unified Telemetry Bar (`MetricCards.tsx` & `MetricCards.css`)
-- Replaces disjointed floating card boxes with a cohesive horizontal telemetry bar:
-  - Enclosed in a single unified panel (`.metric-cards-grid`) with subtle 1px border (`var(--border-subtle)`).
-  - Individual metric segments (`.metric-card-link`) are separated by vertical hairline dividers (`border-right: 1px solid var(--border-subtle)`).
-  - Hover states apply clean surface tinting (`var(--bg-card-hover)`) without shifting surrounding geometry.
+### A. Metric cards (removed 2026-10-09)
+- `MetricCards` (stat strips on the Schedules and Websites subviews) is gone; those views state counts in their card titles instead.
 
 ### B. Linear-Style Unified Settings Sections (`redesign.css`)
 - Replaces 8 detached floating settings cards with unified grouped panels:
@@ -477,4 +371,86 @@ The application supports four distinct, beautifully tuned visual themes plus OS 
 ### B. Limit Block Overlay Animation & Cross-Window Theme Sync (`BlockOverlay.tsx`, `overlay_bridge.rs`)
 - **Graceful Dismissal**: When limits thaw or are granted overrides, `overlay_bridge.rs` invokes `hide_overlay_gracefully` to trigger CSS exit animations (`overlay-exit-scale` & `backdrop-exit-fade`) before calling native `window.hide()`.
 - **Theme Synchronization**: Listens for the `theme_changed` Tauri event to synchronize theme tokens across all windows in real time, eliminating hardcoded dark fallbacks and ensuring seamless visual consistency across light and dark modes.
+
+---
+
+## 15. UX Consistency Pass (2026-10)
+
+Rules established by the October 2026 pass. Follow them in new UI:
+
+- **Fonts are bundled** (now `@fontsource-variable/rubik`, `@fontsource-variable/unbounded`, `@fontsource-variable/jetbrains-mono`, imported in `main.tsx`; Hanken Grotesk until Phase 1). The Tauri CSP (`default-src 'self'`) blocks Google Fonts, so the designed typography previously never rendered in the shipped app, and never offline. Do not add remote font or stylesheet links.
+- **Durations are amounts, not clocks.** `formatDuration` renders `6h 11m`, `44m`, `35s` with localized units (`time.short.*`). Only live countdowns (`LiveTimer`) use clock form. The dashboard hero renders the same parts as a large display figure with small muted units.
+- **Honest states.** Unreachable agent → `.service-alert` banner and "Protection: Not running". An unknown catalog shows "—", never "No limits".
+- **Progress carries state.** Limit cards use `rich-limit-progress-fill--ok | --warn (≥80%) | --over`. Never force a color with `!important` over a state class.
+- **Budgets come from the agent.** A card's budget is the row's `limit_seconds` (weekday-aware). Disabled limits and the total limit fall back to today's weekday-resolved minutes.
+- **Every user-visible string goes through i18n**, including `aria-label`, `title`, placeholders and toasts. Weekday names come from `Intl.DateTimeFormat` in the UI language (`weekdayShortNames()`). Arabic plural forms (`_zero/_one/_two/_few/_many/_other`) are provided where counts appear. Numbers embedded in Arabic sentences are wrapped in Unicode isolates (U+2068/U+2069) so they don't reorder.
+- **Filter tabs** keep stable keys and a separate labels map, so translation can't break filtering (`FilterTabs` itself was removed in Phase 1; segmented controls now use `aria-pressed`).
+- **Copy**: plain verbs, sentence case, and the same name for an action through the whole flow ("Allow 15 more minutes"). The window's close button says what it does ("Close window (Tether keeps running)").
+- **Removed dead components**: `Hero`, `LedgerSection`, `FrictionBanner`, `Masthead`, `Section`, `TetherLogo`. `noUnusedLocals` is on in `tsconfig.json`.
+- **Accessibility**: icon-only states (narrow window nav, title bar, pagination, steppers) carry `aria-label`; the active nav item has `aria-current="page"`; limit progress bars are `role="progressbar"` with values; the offline alert is `role="alert"`.
+- **"Today" follows the agent's day boundary.** `format.ts` mirrors `day_start_minutes` from every status poll (`setDayStartMinutes`), so `todayKey()` and the dashboard's rollover timer agree with how the agent buckets usage (a 04:00 day start keeps 02:00 on yesterday).
+- **Dates and clock times use the UI language.** `formatDayLabel`, `formatClock` and the limit-change toast (`effectClause`: "Applied." / "Takes effect {{when}}.") format through `Intl` with `i18n.language`; there are no hardcoded English month or weekday tables in `format.ts`.
+- **Limit editor copy speaks in limits, not ledger "orders".** "New limit" / "Save limit" / "Limit is on" / "Daily limit" / "Different limit on some days". Presets, the h/m inputs and the slider ticks format through `formatDuration`, so they localize. Slider tick labels sit at their true position on the 5–480 min linear scale (`--at`, `inset-inline-start`, RTL-safe); they used to be evenly spaced, which put "1h" at the 2h mark.
+- **App directory** has its own description (`categorize.directoryDesc`), shows the executable path without the internal `exe:` key prefix (full key on hover), and its row action says "Change". The web filter's rule count is a plural key (`webFilter.ruleCount_*`).
+- **Arabic typography**: no letter-spacing on Arabic (`:lang(ar) *`), and `--font-mono` falls through to a proportional face for Arabic glyphs while keeping JetBrains Mono for digits. Both tracking and monospace fallback were pulling connected letters apart.
+- **One toggle switch definition** (`.toggle-switch` in `redesign.css`; the duplicate `app.css` block and every `!important` on it are gone, verified pixel-identical in all LTR scenarios). The knob travels toward the inline end (left = on in Arabic), and keyboard focus shows a `:focus-visible` ring (it was suppressed with `outline: none !important`).
+- **Top bar CSS is defined once** (`redesign.css`). The old side-rail rules in `app.css` (from when the nav was a vertical sidebar) are gone, along with ~230 `!important`s on the top bar, status pill, day stepper and their light-theme overrides; 980px media declarations that could never apply were dropped instead of revived. Pixel-identical except two stray lines that the legacy rules drew: a hairline across the top bar beside the day stepper (`.sidebar-footer` `border-top`) and a vertical edge line in Arabic (`[dir="rtl"] .app-sidebar` `border-left`).
+- Limit cards say "Same limit every day" / "Varies by day" for their schedule line (was a bare "/ day").
+- **No ledger vocabulary in copy.** PIN prompts, toasts and errors talk about limits ("Pause the limit for TikTok", "Limit paused."), not "standing orders" or "the books". Some i18n keys keep their historical names (`actions.orderRecorded`, `pinGate.applyOrder`); only the values changed.
+- **Accessibility audit (axe-core, every screenshot scenario).** All critical/serious findings except data-driven category pills are fixed:
+  - **Text-safe color tokens.** Fill colors are not text colors. Each theme defines `--color-primary-text`, `--color-accent-text`, `--color-danger-text`, `--color-success-text`, `--color-warning-text` (≥4.5:1 on that theme's surfaces and tints) and `--color-on-primary` (text on a primary fill; dark on slate's light cyan). Any `color:` uses the `*-text` token; `background`/`border`/`accent-color` keep the fill token. Dark `--text-muted` was raised to `#7C8CA2` (midnight) / `#848D97` (slate).
+  - **Names.** Every switch, number input, slider and select has an accessible name (`ToggleSwitch` takes `label`; settings controls reuse their visible label). The overlay keypad's icon keys are "Clear PIN" / "Confirm PIN".
+  - **Structure.** The title bar is a `<header>`; onboarding and the overlay are `role="main"`. Each page has one level-1 heading (`aria-level={1}` on the visible page title, a `.sr-only` `h1` on the dashboard) and section headings are level 2.
+  - Known gap: category pills draw text in the category's own palette color (some under 4.5:1). (The Nordic Frost theme with a 4.1:1 primary button was retired in Phase 1.)
+- **Theme colors live in `redesign.css`.** `tokens.css` used to define all four palettes too, but `redesign.css` loads after it and overrode them. The 83 dead duplicates were removed by simulating the custom-property cascade for every theme (including Nordic Frost, which also matches `[data-theme-mode="light"]`) and keeping only declarations that change an effective value; screenshots are unchanged. `tokens.css` now holds the shared scales (fonts, spacing, radii, shadows, motion) and the few theme tokens `redesign.css` doesn't set.
+- **Built-in category names are translated** once in `useDashboard` (`categoryNames.<slug>`). `categoryColors.ts` registers every localized name against its English palette entry, so colors never change with the language.
+- **CSS hygiene**: about 2,600 lines of dead rules were removed (classes no source references, plus selectors for retired theme names that `useTheme` and the `index.html` bootstrap always migrate away from). Every screenshot scenario was verified pixel-identical before and after. The accent tokens are named `--redesign-accent` / `--redesign-accent-deep` (they were `--redesign-orange*` while holding cobalt). The Tauri `get_theme` / `set_theme` share one `THEMES` list and migrate retired names instead of accepting them.
+
+---
+
+## 16. Redesign Phase 1 (2026-10-03)
+
+Implements Phase 1 of `docs/DESIGN_SYSTEM.md`:
+- **New palette and type**: plum/orange light and dark themes replace the four previous palettes; Rubik (body, Arabic) and Unbounded (display) are bundled with fontsource (`@fontsource-variable/rubik`, `@fontsource-variable/unbounded`); JetBrains Mono stays for code. Hanken Grotesk was removed.
+- **Information architecture**: Today · Limits · Settings. Web filtering moved into Limits.
+- **Setup flow** replaces the onboarding slider and asks who Tether is for (new `profile` setting, see `docs/IPC_CATALOG.md`).
+- **"Applies when"** note in the budget editor and a waiting banner with Cancel on Limits.
+- **Removed**: `OnboardingSlider`, `LimitsPanel`, `FilterTabs` (and their CSS), about 470 lines of CSS that no longer matched any element.
+- **Accessibility** (axe-core over every screenshot scenario, light and dark, plus Arabic and narrow): no new findings. Light success text darkened to `#176A52`. The known gap (category pills drawn in their palette colour on Today) remains until Phase 2.
+- **Not yet**: Today restyle (ring, day strip, budget tiles), the "pause and choose" block screen, timer/tray restyle (Phase 2); budgets for custom app groups, borrowing time, reasons and suggestions from last week (need agent work, Phase 4); Activity.
+
+---
+
+## 17. Redesign Phase 2 (2026-10-04)
+
+- **Today** (Section 3): ring, day strip, budget tiles, schedule and website cards; `todayModel.ts`.
+- **Block screen** (Section 5B): "pause and choose", reason re-derived by `blockModel.ts`, extra time only when it can work, Escape no longer quits the app, DPI-scaled window floors.
+- **Timer HUD** (Section 5A): plum palette shared by both renderers, orange last minute, `system` theme resolved.
+- **Dialogs and older screens**: shared dialog styles (`.dialog`, `.btn`, `.field`, `.pin-input`, `.linklike` in `app.css`) follow v2: pill buttons, sentence-case labels, Rubik. Monospace and uppercase labels were removed from the budget editor, the Websites and Schedules views and the metric cards; monospace stays only where it helps reading (recovery codes, file paths, domain names, raw error text). All numbers use tabular figures (`body` in `tether.css`). The PIN prompt says "PIN needed". The Websites view speaks of sites, not "domain rules".
+- **Tray**: plain labels ("Reset network settings", "Stop Tether and its service", "Close the Tether app"), tooltip "Tether".
+- **Installer**: styled NSIS installer, see `packaging/README.md`.
+- The category-pill contrast gap from Phase 1 is gone (neutral category buttons).
+- **Activity** page (Section 4).
+- **Block-screen reasons** (Section 5B) and the Activity "When time ran out" card.
+- **Suggestion from last week** on Today (Section 3).
+- **Not yet**: custom budget groups; borrowing time (it would let a blocked app run without the PIN, so it waits on an owner decision).
+
+---
+
+## 18. Polish pass (2026-10-09)
+
+- **Setup** shows the title bar (the window has no system frame, so without it setup could not be moved, minimized or closed). Steps are top-aligned, so the heading stays put.
+- **Scrolling**: switching tabs, or opening and leaving the Schedules and Websites subviews, starts at the top (`scrollTop.ts`).
+- **PIN prompts** name settings as the Settings page does (`SETTING_LABEL_KEYS` in `useLedgerActions.ts`).
+- **"Back at midnight"** instead of "12 AM" on tiles, the tray panel and the block screen (`limitText.ts` `backAtLabel`). Setup's bedtime uses the app's clock format.
+- **Dialogs** put the main button last (PIN prompt, recovery, PIN setup), like the budget editor.
+- **Limits** budget meters show time left; the "Waiting" banner uses the neutral plum panel, not the warning tint.
+- **Today**: the ring says "Done · all 6h used" when the total is used up; tiles are shorter (168px); the week card shows a sentence instead of empty bars and "−100%" when nothing is recorded, and its bars fill the card's height.
+- **Dark theme**: "Everything else" `#8A7CA6` and weekly bars (`--week-bar`) meet 3:1 on cards; "Not now" is an outline button.
+- **Activity**: most-used apps under the chart; the budget table includes total screen time.
+- **Schedules and Websites subviews** rebuilt on the v2 components (Section 7A, Section 4 Limits); `MetricCards` and `WebFilteringPanel.css` removed. Websites counts add up: visible sites in the title, the hidden adult list in its own line.
+- **Budget editor** restyled (Section 4): pills, no spin arrows, a switch, a neutral category tag, "budget" in its wording.
+- **Settings › About and help**: the real version (`agent_version`) and six accurate help topics replace the old tutorial (`TutorialContent` removed).
+- **Title bar** is a labelled "Window" region (not a banner), so setup keeps its own header.
+- **Cleanup**: 54 unused translation keys, about 240 lines of CSS no element used, and the `t("key", "fallback")` English fallbacks for keys that exist.
 

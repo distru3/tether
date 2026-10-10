@@ -9,9 +9,9 @@
 //! samples the foreground window locally, and ships collapsed observations to
 //! this process over `ReportUsage` on the named pipe. Everything this process
 //! touches — SQLite, the limits engine, the pipe server — is desktop-free, so
-//! running it as LocalSystem costs nothing. The GDI block overlay lives in the
-//! session helper too, so blocking still reaches the user's screen even though
-//! this process can never draw one itself.
+//! running it as LocalSystem costs nothing. The session helper drives the
+//! block overlay (rendered by the UI's overlay window), so blocking still
+//! reaches the user's screen even though this process can never draw one.
 //!
 //! # Lifecycle (`sc start ScreentimeAgent`)
 //!
@@ -255,7 +255,17 @@ mod win {
     pub(super) fn install() -> Result<()> {
         let exe = current_exe_for_sc()?;
         let created = run_sc(&cli::install_create_command(&exe))?;
-        require_sc_success(&created)?;
+        // Already registered (an upgrade, or an earlier install elsewhere):
+        // carry on, so the ImagePath below points it at THIS executable.
+        // Bailing here left reinstalls running the old binary.
+        if created.status.code() == Some(cli::ERROR_SERVICE_EXISTS) {
+            println!(
+                "service already registered; pointing it at {}",
+                exe.display()
+            );
+        } else {
+            require_sc_success(&created)?;
+        }
         // sc.exe cannot carry "--service" inside binPath (single-token option
         // values), so the canonical ImagePath is written straight to the SCM
         // database afterwards; see cli::install_imagepath_command.

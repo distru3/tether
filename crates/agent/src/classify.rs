@@ -231,20 +231,9 @@ pub fn classify(
     if let AppKey::WindowsExe(path) = key {
         let path_lower = path.to_lowercase();
 
-        // Game launcher & generic game directories
-        if path_lower.contains("steam\\steamapps\\common\\")
-            || path_lower.contains("epic games\\")
-            || path_lower.contains("gog galaxy\\games\\")
-            || path_lower.contains("xboxgames\\")
-            || path_lower.contains("battle.net\\")
-            || path_lower.contains("\\games\\")
-            || path_lower.contains("\\game\\")
-            || path_lower.contains("\\steamlibrary\\")
-            || path_lower.contains("\\riot games\\")
-            || path_lower.contains("\\ubisoft\\")
-            || path_lower.contains("\\electronic arts\\")
-            || path_lower.contains("\\ea games\\")
-        {
+        // Game launcher libraries and generic game directories (shared
+        // with the session helper's HUD suppression: `st_core::games`).
+        if st_core::games::is_game_path(&path_lower) {
             return Some(Classification {
                 primary: "games",
                 tags: &[],
@@ -375,12 +364,9 @@ pub fn classify(
         }
     }
 
-    // Layer 5: Name pattern matching
-    if basename.ends_with("_win64-shipping.exe")
-        || basename.ends_with("_shipping.exe")
-        || basename.ends_with("_launcher.exe")
-        || basename.ends_with("_game.exe")
-    {
+    // Layer 5: Known game binaries and engine naming patterns
+    // (`st_core::games`, shared with the session helper).
+    if st_core::games::is_game_executable(&basename) {
         return Some(Classification {
             primary: "games",
             tags: &[],

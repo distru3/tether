@@ -9,10 +9,15 @@
 //! implementation: fixes and audits land in one place. Existing crates adopt
 //! it later; nothing here depends on them.
 
+pub mod audio;
+pub mod session_launch;
+
+use std::path::Path;
+
 use std::os::windows::ffi::OsStrExt;
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ALREADY_EXISTS, HANDLE};
-use windows::Win32::Storage::FileSystem::GetShortPathNameW;
+use windows::Win32::Storage::FileSystem::{GetLongPathNameW, GetShortPathNameW};
 use windows::Win32::System::Threading::{
     CreateMutexW, OpenProcess, QueryFullProcessImageNameW, PROCESS_NAME_WIN32,
     PROCESS_QUERY_LIMITED_INFORMATION,
@@ -170,6 +175,33 @@ pub fn short_path(path: &std::path::Path) -> windows::core::Result<std::path::Pa
     Ok(std::path::PathBuf::from(String::from_utf16_lossy(&out)))
 }
 
+/// The long form of `path`: every 8.3 component (`PROGRA~1`) expanded.
+///
+/// The service is registered under its short path (see [`short_path`]), so
+/// the agent's own `current_exe()` comes back as `C:\PROGRA~1\...` while
+/// the processes it talks to report `C:\Program Files\...`. Anything that
+/// compares the two must expand both first. Fails when the file does not
+/// exist.
+pub fn long_path(path: &std::path::Path) -> windows::core::Result<std::path::PathBuf> {
+    let wide: Vec<u16> = path
+        .as_os_str()
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect();
+    // First call measures; second copies.
+    let len = unsafe { GetLongPathNameW(PCWSTR(wide.as_ptr()), None) };
+    if len == 0 {
+        return Err(windows::core::Error::from_win32());
+    }
+    let mut out = vec![0u16; len as usize];
+    let written = unsafe { GetLongPathNameW(PCWSTR(wide.as_ptr()), Some(&mut out)) };
+    if written == 0 {
+        return Err(windows::core::Error::from_win32());
+    }
+    out.truncate(written as usize);
+    Ok(std::path::PathBuf::from(String::from_utf16_lossy(&out)))
+}
+
 /// Acquires the named mutex as a single-instance guard, or reports
 /// [`AlreadyRunning`].
 ///
@@ -277,8 +309,140 @@ pub fn wide_to_string(buf: &[u16]) -> String {
     String::from_utf16_lossy(&buf[..end])
 }
 
+/// Whether `peer_image` is one of our own install's executables named in
+/// `names`.
+///
+/// The named pipes admit every local user, so a process can claim to be the
+/// session helper or the UI simply by connecting (or by creating the pipe
+/// first). This check pins the *program*: the file name must match
+/// (case-insensitively) and it must live in our own directory, its parent, or
+/// its `bin` child, which covers `target/debug` in development and
+/// `$INSTDIR` + `$INSTDIR\bin` when installed. A standard user cannot plant
+/// files in Program Files, so a match means a genuine Tether binary.
+///
+/// Both paths must already be in long form (see [`peer_is_trusted`]); a
+/// verbatim `\\?\` prefix on either is ignored.
+pub fn is_trusted_peer(peer_image: &Path, own_exe: &Path, names: &[&str]) -> bool {
+    let lower = |p: &Path| {
+        let text = p.to_string_lossy().to_lowercase();
+        text.strip_prefix(r"\\?\")
+            .map(str::to_owned)
+            .unwrap_or(text)
+    };
+    let Some(file) = peer_image
+        .file_name()
+        .map(|f| f.to_string_lossy().to_lowercase())
+    else {
+        return false;
+    };
+    if !names.iter().any(|n| n.to_lowercase() == file) {
+        return false;
+    }
+    let (Some(peer_dir), Some(own_dir)) = (peer_image.parent(), own_exe.parent()) else {
+        return false;
+    };
+    let peer_dir = lower(peer_dir);
+    let mut allowed = vec![lower(own_dir), lower(&own_dir.join("bin"))];
+    if let Some(parent) = own_dir.parent() {
+        allowed.push(lower(parent));
+    }
+    allowed
+        .iter()
+        .any(|dir| dir.trim_end_matches(['\\', '/']) == peer_dir.trim_end_matches(['\\', '/']))
+}
+
+/// Verdict on a pipe peer: `Some(true)` trusted, `Some(false)` definitely a
+/// different program, `None` when the process could not be inspected (it may
+/// already have exited). Callers decide how to treat `None`; rejecting it
+/// outright would turn a transient lookup failure into lost usage or a
+/// missing block screen.
+pub fn peer_is_trusted(pid: Option<u32>, names: &[&str]) -> Option<bool> {
+    let pid = pid?;
+    if pid == std::process::id() {
+        // Same process (tests, or a server talking to itself).
+        return Some(true);
+    }
+    let image = std::path::PathBuf::from(process_image_path(pid).ok()?);
+    let own = std::env::current_exe().ok()?;
+    // The service runs from its 8.3 short path (`C:\PROGRA~1\Tether\bin`),
+    // and so does a helper it relaunches; everything else runs from the long
+    // one. Compare long forms, or the agent refuses the helper's usage.
+    let expand = |p: std::path::PathBuf| long_path(&p).unwrap_or(p);
+    Some(is_trusted_peer(&expand(image), &expand(own), names))
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn trusted_peers_are_our_own_binaries_next_to_us() {
+        use super::is_trusted_peer;
+        use std::path::Path;
+        let own = Path::new(r"C:\Program Files\Tether\bin\screentime-agent.exe");
+        let session = [r"screentime-session.exe"];
+        assert!(is_trusted_peer(
+            Path::new(r"C:\Program Files\Tether\bin\Screentime-Session.EXE"),
+            own,
+            &session
+        ));
+        // The UI lives one level up from bin/.
+        let ui = own
+            .parent()
+            .and_then(Path::parent)
+            .expect("dir")
+            .join("Tether.exe");
+        assert!(is_trusted_peer(
+            &ui,
+            own,
+            &["screentime-ui.exe", "Tether.exe"]
+        ));
+        // Right name, wrong place.
+        assert!(!is_trusted_peer(
+            Path::new(r"C:\Users\kid\Downloads\screentime-session.exe"),
+            own,
+            &session
+        ));
+        // Right place, wrong name.
+        assert!(!is_trusted_peer(
+            Path::new(r"C:\Program Files\Tether\bin\evil.exe"),
+            own,
+            &session
+        ));
+        // current_exe() may carry a verbatim prefix.
+        assert!(is_trusted_peer(
+            Path::new(r"C:\Program Files\Tether\bin\screentime-session.exe"),
+            Path::new(r"\\?\C:\Program Files\Tether\bin\screentime-agent.exe"),
+            &session
+        ));
+    }
+
+    #[test]
+    fn a_short_path_expands_back_to_the_long_one() {
+        // The service runs from its 8.3 path; peer checks expand it first.
+        let dir = std::env::temp_dir().join("tether long path test");
+        std::fs::create_dir_all(&dir).expect("temp dir");
+        let file = dir.join("screentime-session.exe");
+        std::fs::write(&file, b"").expect("temp file");
+        let long = super::long_path(&file).expect("long path");
+        assert_eq!(
+            long.to_string_lossy().to_lowercase(),
+            super::long_path(&std::env::temp_dir())
+                .expect("long temp")
+                .join("tether long path test")
+                .join("screentime-session.exe")
+                .to_string_lossy()
+                .to_lowercase()
+        );
+        // Volumes without 8.3 names have no short form to round-trip.
+        if let Ok(short) = super::short_path(&file) {
+            let back = super::long_path(&short).expect("expand short path");
+            assert_eq!(
+                back.to_string_lossy().to_lowercase(),
+                long.to_string_lossy().to_lowercase()
+            );
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     use super::*;
 
     #[test]

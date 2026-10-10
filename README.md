@@ -77,7 +77,9 @@ Most commercial focus and screen-time applications fall into one of two traps:
 
 ### 🎨 Solid Modern Analytics UI
 - **Tauri 2 Native Desktop Shell**: Low memory footprint (~35 MB RAM), hardware-accelerated rendering, frameless native window with custom title bar.
-- **Obsidian Dark & Titanium Light**: Crisp, high-contrast solid themes with zero glassmorphism (`backdrop-filter: blur` eliminated in favor of opaque, tactile surfaces with 1px border contrast).
+- **Light, Dark or Like Windows**: Plum and orange themes taken from the app icon, Rubik and Unbounded type, opaque surfaces (see `docs/DESIGN_SYSTEM.md`).
+- **Guided setup**: First run asks who Tether is for (you, or someone you look after), offers starting budgets, a PIN and website protection.
+- **One place for rules**: The Limits page holds budgets, schedules and blocked websites, and says before you save whether a change applies now or after the cooldown.
 - **Synchronized Overlays**: Overlays dynamically match your active theme preference in real-time.
 - **Durable File Store Persistence**: Synchronous DOM bootstrapping combined with asynchronous Tauri file store (`theme.txt`) guarantees zero flash-of-unstyled-content (FOUC) and persistent theme retention across restarts.
 - **Full Internationalization (i18n)**: 100% complete localization in English (`en`) and Arabic (`ar`, with proper RTL layout alignment).
@@ -269,10 +271,10 @@ Options:
 │   ├── tracker-linux/     # Linux X11/Wayland tracker (stub)
 │   ├── enforce-win/       # Win32 NtSuspendProcess / ResumeProcess tree enforcement & hosts file writer
 │   ├── enforce-linux/     # Linux cgroups/SIGSTOP enforcement (stub)
-│   └── dnsproxy/          # Cloudflare Family DNS adapter configurator & original DNS backup/restore
+│   └── family-dns/        # Cloudflare Family DNS adapter configurator & original DNS backup/restore
 ├── ui/
 │   ├── src/               # React 18 application (Dashboard, Daily Timeline, Limits, Settings)
-│   │   ├── components/    # Smoked-glass components, dialogs, charts, SVG icons
+│   │   ├── components/    # Components, dialogs, charts, setup flow, SVG icons
 │   │   ├── hooks/         # React hooks (useLedger, useLimits, useTheme, useDowntime)
 │   │   ├── locales/       # Internationalization dictionaries (en, ar)
 │   │   └── styles/        # CSS design system (tokens.css, app.css, redesign.css)

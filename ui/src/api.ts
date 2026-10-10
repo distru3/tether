@@ -1,3 +1,4 @@
+import type { BlockReasonsDto } from "./types/generated/BlockReasonsDto";
 import { invoke } from "@tauri-apps/api/core";
 
 import type { ErrorCode } from "./types/generated/ErrorCode";
@@ -60,13 +61,42 @@ export function recoverPin(recoveryCode: string, newPin: string): Promise<PinVau
     return invoke("recover_pin", { recoveryCode, newPin });
 }
 
+/** Check a PIN without changing anything; rejects with `bad_pin` on mismatch. */
+export function verifyPin(pin: string): Promise<void> {
+    return invoke("verify_pin", { pin });
+}
+
+/**
+ * Run a tray action that loosens protection (`reset_network`, `stop_all`).
+ * The host asks the agent to check the PIN first; `stop_all` exits the app.
+ */
+export function runTrayAction(action: string, pin?: string): Promise<void> {
+    return invoke("run_tray_action", { action, pin });
+}
+
+/** The block screen's "What were you about to do?" (`finish`, `bored`, `habit`). */
+export function recordBlockReason(appId: number, reason: string): Promise<void> {
+    return invoke("record_block_reason", { appId, reason });
+}
+
+/** How often each block-screen reason was given between two day keys. */
+export function blockReasons(fromDay: number, toDay: number): Promise<BlockReasonsDto> {
+    return invoke("block_reasons", { fromDay, toDay });
+}
+
 /** Dismantle the vault; the credential may be the PIN or the recovery code. */
 export function removePin(credential: string): Promise<void> {
     return invoke("remove_pin", { credential });
 }
 
-export function setSetting(key: string, value: string): Promise<void> {
-    return invoke("set_setting", { key, value });
+/**
+ * Requests that loosen enforcement take an optional `pin`. Callers normally go
+ * through `useLedgerActions().guarded`, which first tries without one and only
+ * prompts when the agent answers `bad_pin` — the agent alone decides which
+ * changes are loosening.
+ */
+export function setSetting(key: string, value: string, pin?: string): Promise<void> {
+    return invoke("set_setting", { key, value, pin });
 }
 
 export function setLimit(
@@ -97,8 +127,13 @@ export function grantOverride(target: LimitTargetDto, seconds: number, pin: stri
     return invoke("grant_override", { target, seconds, pin });
 }
 
-export function categorizeApp(appId: number, primaryCategoryId: number | null, tagCategoryIds: number[]): Promise<void> {
-    return invoke("categorize", { appId, primary: primaryCategoryId, tags: tagCategoryIds });
+export function categorizeApp(
+    appId: number,
+    primaryCategoryId: number | null,
+    tagCategoryIds: number[],
+    pin?: string,
+): Promise<void> {
+    return invoke("categorize", { appId, primary: primaryCategoryId, tags: tagCategoryIds, pin });
 }
 
 export function listManualBlocks(): Promise<{ domains: string[] }> {
@@ -138,16 +173,17 @@ export function updateSchedule(
     weekdayMask: number,
     startMinute: number,
     endMinute: number,
+    pin?: string,
 ): Promise<void> {
-    return invoke("update_schedule", { id, name, weekdayMask, startMinute, endMinute });
+    return invoke("update_schedule", { id, name, weekdayMask, startMinute, endMinute, pin });
 }
 
-export function setScheduleEnabled(id: number, enabled: boolean): Promise<void> {
-    return invoke("set_schedule_enabled", { id, enabled });
+export function setScheduleEnabled(id: number, enabled: boolean, pin?: string): Promise<void> {
+    return invoke("set_schedule_enabled", { id, enabled, pin });
 }
 
-export function deleteSchedule(id: number): Promise<void> {
-    return invoke("delete_schedule", { id });
+export function deleteSchedule(id: number, pin?: string): Promise<void> {
+    return invoke("delete_schedule", { id, pin });
 }
 
 export function listAllowlist(): Promise<AllowlistDto> {
@@ -158,8 +194,9 @@ export function setAllowlist(
     subjectType: string,
     subjectId: number,
     allowed: boolean,
+    pin?: string,
 ): Promise<void> {
-    return invoke("set_allowlist", { subjectType, subjectId, allowed });
+    return invoke("set_allowlist", { subjectType, subjectId, allowed, pin });
 }
 
 // -- Block Overlay Bridge -----------------------------------------------------
@@ -195,7 +232,17 @@ export function mapErrorCode(code: string, message?: string): string {
         case "not_found":
             return i18n.t("api.errors.not_found");
         case "bad_request":
-            return i18n.t("api.errors.bad_request");
+            // The agent's validation messages ("alert_volume must be a whole
+            // number from 0 to 100") are more useful than a generic line.
+            return message !== undefined && message.trim().length > 0
+                ? i18n.t("api.errors.bad_request_detail", { detail: message })
+                : i18n.t("api.errors.bad_request");
+        case "rate_limited": {
+            const seconds = message?.match(/(\d+) seconds/)?.[1];
+            return seconds !== undefined
+                ? i18n.t("api.errors.rate_limited", { seconds })
+                : i18n.t("api.errors.rate_limited_generic");
+        }
         case "internal":
             return i18n.t("api.errors.internal");
         case "unreachable":
@@ -215,6 +262,11 @@ function errorFields(e: unknown): { code: string; message: string } | null {
     if (typeof record.code !== "string") return null;
     const message = typeof record.message === "string" ? record.message : "";
     return { code: record.code, message };
+}
+
+/** The wire error code of a failed command, or null for transport failures. */
+export function errorCode(e: unknown): string | null {
+    return errorFields(e)?.code ?? null;
 }
 
 export function describeError(e: unknown): string {

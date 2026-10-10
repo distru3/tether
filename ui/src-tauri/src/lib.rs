@@ -19,6 +19,7 @@
 mod ipc_client;
 mod overlay_bridge;
 mod tray;
+mod tray_panel;
 
 #[cfg(windows)]
 mod corners {
@@ -48,28 +49,6 @@ mod corners {
 use serde::Serialize;
 use st_ipc::{ErrorCode, Response};
 use tauri::{Emitter, Manager};
-
-/// Everything the header needs, plus one host-owned fact: whether the IPC
-/// round trip succeeded at all. `StatusDto` describes the agent's own state;
-/// `agent_connected` describes the *link*, which only this process knows.
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "snake_case")]
-pub struct AgentStatus {
-    pub version: String,
-    pub agent_connected: bool,
-    pub tracker_backend: String,
-    pub filter_backend: String,
-    pub tracking_available: bool,
-    pub pin_configured: bool,
-    pub strict_mode: bool,
-    pub show_hud_overlay: bool,
-    pub show_hud_in_fullscreen: bool,
-    pub hud_peek_hotkey: String,
-    pub limit_cooldown_hours: i64,
-    pub idle_threshold_secs: i64,
-    pub day_start_minutes: i64,
-    pub family_dns_enabled: bool,
-}
 
 /// Structured failure for every fallible command.
 ///
@@ -118,56 +97,16 @@ fn serde_plain_string(code: ErrorCode) -> String {
 
 type CmdResult<T> = Result<T, CommandError>;
 
-/// Snapshot of what the UI should show in its header.
-///
-/// This is intentionally a *description* of the current situation rather than a
-/// list of individually queryable fields: the header must render a coherent
-/// state (either "connected, tracking" *or* "disconnected") and splitting it
-/// across several commands invites the two halves to disagree.
-///
-/// When the agent is not running, the command still succeeds but reports
-/// `agent_connected: false` so the frontend renders a graceful banner instead
-/// of an error state.
+/// Agent status, verbatim. When the agent is unreachable this fails with
+/// `unreachable` like every other command, and the dashboard's poll switches
+/// to its offline state.
 #[tauri::command]
-fn get_status() -> AgentStatus {
+fn get_status() -> CmdResult<st_ipc::StatusDto> {
     match ipc_client::request(st_ipc::Request::Status) {
-        Ok(Response::Status(dto)) => AgentStatus {
-            version: dto.agent_version,
-            agent_connected: true,
-            tracker_backend: dto.tracker_backend,
-            filter_backend: dto.filter_backend,
-            tracking_available: dto.tracking_available,
-            pin_configured: dto.pin_configured,
-            strict_mode: dto.strict_mode,
-            show_hud_overlay: dto.show_hud_overlay,
-            show_hud_in_fullscreen: dto.show_hud_in_fullscreen,
-            hud_peek_hotkey: dto.hud_peek_hotkey,
-            limit_cooldown_hours: dto.limit_cooldown_hours,
-            idle_threshold_secs: dto.idle_threshold_secs,
-            day_start_minutes: dto.day_start_minutes,
-            family_dns_enabled: dto.family_dns_enabled,
-        },
-        Ok(_) | Err(_) => AgentStatus {
-            version: env!("CARGO_PKG_VERSION").to_string(),
-            agent_connected: false,
-            tracker_backend: if cfg!(windows) { "win32" } else { "x11-stub" }.into(),
-            filter_backend: if cfg!(windows) {
-                "windows-hosts"
-            } else {
-                "linux-stub"
-            }
-            .into(),
-            tracking_available: false,
-            pin_configured: false,
-            strict_mode: false,
-            show_hud_overlay: true,
-            show_hud_in_fullscreen: false,
-            hud_peek_hotkey: "Ctrl+Alt+T".to_string(),
-            limit_cooldown_hours: 24,
-            idle_threshold_secs: 60,
-            day_start_minutes: 0,
-            family_dns_enabled: false,
-        },
+        Ok(Response::Status(dto)) => Ok(dto),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
     }
 }
 
@@ -245,13 +184,22 @@ fn recover_pin(recovery_code: String, new_pin: String) -> CmdResult<PinVaultOut>
     }
 }
 
-/// Dismantle the vault. `credential` may be the current PIN or the standing
-/// recovery code.
+/// Change one setting. `pin` is only required (once a PIN is configured) when
+/// the agent judges the change to loosen enforcement; the UI first tries
+/// without one and prompts on `bad_pin`.
 #[tauri::command]
-fn set_setting(key: String, value: String) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::SetSetting { key, value })
+fn set_setting(key: String, value: String, pin: Option<String>) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::SetSetting { key, value, pin })
 }
 
+/// Check a PIN without changing anything (UI-only reveals).
+#[tauri::command]
+fn verify_pin(pin: String) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::VerifyPin { pin })
+}
+
+/// Dismantle the vault. `credential` may be the current PIN or the standing
+/// recovery code.
 #[tauri::command]
 fn remove_pin(credential: String) -> CmdResult<()> {
     match ipc_client::request(st_ipc::Request::RemovePin { credential }) {
@@ -348,12 +296,37 @@ fn accepted_cmd(request: st_ipc::Request) -> CmdResult<()> {
     }
 }
 
+/// Run a tray action that loosens protection (`tray::TrayAction`), once the
+/// agent has checked the PIN with `VerifyPin`: allowed when no PIN is set,
+/// rate limited like every other PIN check. Fails closed when the agent
+/// cannot be reached, since nothing could check the PIN.
 #[tauri::command]
-fn categorize(app_id: i64, primary: Option<i64>, tags: Vec<i64>) -> CmdResult<()> {
+fn run_tray_action(app: tauri::AppHandle, action: String, pin: Option<String>) -> CmdResult<()> {
+    let Some(action) = tray::TrayAction::parse(&action) else {
+        return Err(CommandError {
+            code: "bad_request".into(),
+            message: format!("unknown tray action: {action}"),
+        });
+    };
+    accepted_cmd(st_ipc::Request::VerifyPin {
+        pin: pin.unwrap_or_default(),
+    })?;
+    tray::run_action(&app, action);
+    Ok(())
+}
+
+#[tauri::command]
+fn categorize(
+    app_id: i64,
+    primary: Option<i64>,
+    tags: Vec<i64>,
+    pin: Option<String>,
+) -> CmdResult<()> {
     accepted_cmd(st_ipc::Request::Categorize {
         app_id,
         primary,
         tags,
+        pin,
     })
 }
 
@@ -392,6 +365,27 @@ fn list_schedules() -> CmdResult<st_ipc::SchedulesDto> {
     }
 }
 
+/// The block screen's answer to "What were you about to do?".
+#[tauri::command]
+fn record_block_reason(app_id: i64, reason: String) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::RecordBlockReason { app_id, reason })
+}
+
+/// Counts of block-screen reasons between two day keys (inclusive).
+#[tauri::command]
+fn block_reasons(from_day: i32, to_day: i32) -> CmdResult<st_ipc::BlockReasonsDto> {
+    let request = st_ipc::Request::BlockReasons {
+        from_day: st_core::daykey::DayKey(from_day),
+        to_day: st_core::daykey::DayKey(to_day),
+    };
+    match ipc_client::request(request) {
+        Ok(Response::BlockReasons(dto)) => Ok(dto),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
 #[tauri::command]
 fn create_schedule(
     name: String,
@@ -419,6 +413,7 @@ fn update_schedule(
     weekday_mask: u8,
     start_minute: u32,
     end_minute: u32,
+    pin: Option<String>,
 ) -> CmdResult<()> {
     accepted_cmd(st_ipc::Request::UpdateSchedule {
         id,
@@ -426,17 +421,18 @@ fn update_schedule(
         weekday_mask,
         start_minute,
         end_minute,
+        pin,
     })
 }
 
 #[tauri::command]
-fn set_schedule_enabled(id: i64, enabled: bool) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::SetScheduleEnabled { id, enabled })
+fn set_schedule_enabled(id: i64, enabled: bool, pin: Option<String>) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::SetScheduleEnabled { id, enabled, pin })
 }
 
 #[tauri::command]
-fn delete_schedule(id: i64) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::DeleteSchedule { id })
+fn delete_schedule(id: i64, pin: Option<String>) -> CmdResult<()> {
+    accepted_cmd(st_ipc::Request::DeleteSchedule { id, pin })
 }
 
 #[tauri::command]
@@ -450,75 +446,45 @@ fn list_allowlist() -> CmdResult<st_ipc::AllowlistDto> {
 }
 
 #[tauri::command]
-fn set_allowlist(subject_type: String, subject_id: i64, allowed: bool) -> CmdResult<()> {
+fn set_allowlist(
+    subject_type: String,
+    subject_id: i64,
+    allowed: bool,
+    pin: Option<String>,
+) -> CmdResult<()> {
     accepted_cmd(st_ipc::Request::SetAllowlist {
         subject_type,
         subject_id,
         allowed,
+        pin,
     })
 }
 
-#[tauri::command]
-fn get_focus_session() -> CmdResult<Option<st_ipc::FocusSessionDto>> {
-    match ipc_client::request(st_ipc::Request::GetFocusSession) {
-        Ok(Response::FocusSession { session }) => Ok(session),
-        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
-        Ok(_) => Err(CommandError::unexpected()),
-        Err(e) => Err(CommandError::unreachable(e)),
-    }
-}
+/// Selectable themes, mirroring `ThemePreference` in `ui/src/hooks/useTheme.ts`.
+const THEMES: [&str; 3] = ["light", "dark", "system"];
 
-#[tauri::command]
-fn start_focus_session(duration_minutes: u32, name: Option<String>) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::StartFocusSession {
-        duration_minutes,
-        name,
-    })
-}
-
-#[tauri::command]
-fn end_focus_session(pin: Option<String>) -> CmdResult<()> {
-    accepted_cmd(st_ipc::Request::EndFocusSession { pin })
-}
-
-#[tauri::command]
-fn emergency_reset_network() -> CmdResult<()> {
-    tray::run_emergency_network_reset();
-    Ok(())
-}
-
-#[tauri::command]
-fn stop_all_services(app: tauri::AppHandle) -> CmdResult<()> {
-    tray::stop_all_services(&app);
-    Ok(())
+/// Map a stored preference to a current theme. Retired names written by
+/// earlier versions migrate instead of being rejected, matching `useTheme`'s
+/// `normalizePref` and the bootstrap script in `index.html`.
+fn normalize_theme(t: &str) -> Option<&'static str> {
+    let migrated = match t {
+        "midnight-cobalt" | "slate-charcoal" | "cyber-emerald" | "horizon-dark"
+        | "classic-dark" => "dark",
+        "clean-titanium" | "nordic-frost" | "horizon-light" | "classic-light" => "light",
+        other => other,
+    };
+    THEMES.into_iter().find(|known| *known == migrated)
 }
 
 /// Returns the user's saved theme preference from `{app_data_dir}/theme.txt`.
 /// Returns `"system"` if the file doesn't exist or can't be read.
-fn is_valid_theme(t: &str) -> bool {
-    matches!(
-        t,
-        "midnight-cobalt"
-            | "slate-charcoal"
-            | "cyber-emerald"
-            | "clean-titanium"
-            | "nordic-frost"
-            | "horizon-dark"
-            | "horizon-light"
-            | "classic-dark"
-            | "classic-light"
-            | "system"
-    )
-}
-
 #[tauri::command]
 fn get_theme(app: tauri::AppHandle) -> String {
     let path = app.path().app_data_dir().map(|d| d.join("theme.txt")).ok();
     if let Some(p) = path {
         if let Ok(s) = std::fs::read_to_string(&p) {
-            let s = s.trim().to_string();
-            if is_valid_theme(&s) {
-                return s;
+            if let Some(theme) = normalize_theme(s.trim()) {
+                return theme.to_string();
             }
         }
     }
@@ -529,24 +495,12 @@ fn get_theme(app: tauri::AppHandle) -> String {
 /// `theme_changed` across all windows (main and overlay).
 #[tauri::command]
 fn set_theme(app: tauri::AppHandle, theme: String) -> CmdResult<()> {
-    if !matches!(
-        theme.as_str(),
-        "midnight-cobalt"
-            | "slate-charcoal"
-            | "cyber-emerald"
-            | "clean-titanium"
-            | "nordic-frost"
-            | "horizon-dark"
-            | "horizon-light"
-            | "classic-dark"
-            | "classic-light"
-            | "system"
-    ) {
+    let Some(theme) = normalize_theme(&theme) else {
         return Err(CommandError {
             code: "invalid_theme".into(),
             message: format!("unknown theme: {theme}"),
         });
-    }
+    };
     let path = app
         .path()
         .app_data_dir()
@@ -585,47 +539,11 @@ fn set_theme(app: tauri::AppHandle, theme: String) -> CmdResult<()> {
 fn preview_alert_sound(volume: Option<u32>) -> CmdResult<()> {
     #[cfg(windows)]
     {
-        let volume_pct = volume.unwrap_or(80);
-        if volume_pct == 0 {
-            return Ok(());
-        }
         const CHIME_WAV: &[u8] = include_bytes!("../../../crates/session/src/assets/chime.wav");
-        #[link(name = "winmm")]
-        extern "system" {
-            fn PlaySoundW(pszsound: *const u16, hmod: isize, fdwsound: u32) -> i32;
-        }
-        const SND_ASYNC: u32 = 0x0001;
-        const SND_NODEFAULT: u32 = 0x0002;
-        const SND_MEMORY: u32 = 0x0004;
-
-        if volume_pct >= 100 {
-            unsafe {
-                let _ = PlaySoundW(
-                    CHIME_WAV.as_ptr() as *const u16,
-                    0,
-                    SND_ASYNC | SND_NODEFAULT | SND_MEMORY,
-                );
-            }
-        } else {
-            let mut scaled = CHIME_WAV.to_vec();
-            if scaled.len() > 44 {
-                for chunk in scaled[44..].chunks_exact_mut(2) {
-                    let sample = i16::from_le_bytes([chunk[0], chunk[1]]);
-                    let new_sample = ((sample as i32 * volume_pct as i32) / 100)
-                        .clamp(i16::MIN as i32, i16::MAX as i32)
-                        as i16;
-                    chunk.copy_from_slice(&new_sample.to_le_bytes());
-                }
-            }
-            unsafe {
-                let _ = PlaySoundW(
-                    scaled.as_ptr() as *const u16,
-                    0,
-                    SND_ASYNC | SND_NODEFAULT | SND_MEMORY,
-                );
-            }
-        }
+        st_win32::audio::play_wav_scaled(CHIME_WAV, volume.unwrap_or(80));
     }
+    #[cfg(not(windows))]
+    let _ = volume;
     Ok(())
 }
 
@@ -640,7 +558,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(
             tauri_plugin_window_state::Builder::default()
-                .with_denylist(&["overlay"])
+                .with_denylist(&["overlay", "tray"])
                 .build(),
         )
         .plugin(tauri_plugin_shell::init())
@@ -659,6 +577,7 @@ pub fn run() {
             set_pin,
             recover_pin,
             remove_pin,
+            verify_pin,
             set_setting,
             set_limit,
             cancel_pending_limit,
@@ -675,18 +594,18 @@ pub fn run() {
             delete_schedule,
             list_allowlist,
             set_allowlist,
-            get_focus_session,
-            start_focus_session,
-            end_focus_session,
-            emergency_reset_network,
-            stop_all_services,
             preview_alert_sound,
             get_theme,
             set_theme,
             overlay_bridge::get_overlay_state,
             overlay_bridge::overlay_extend,
             overlay_bridge::overlay_quit,
-            overlay_bridge::hide_overlay_window
+            overlay_bridge::hide_overlay_window,
+            run_tray_action,
+            record_block_reason,
+            block_reasons,
+            tray_panel::open_dashboard,
+            tray_panel::fit_tray_panel
         ])
         .setup(|app| {
             if let Some(overlay_win) = app.get_webview_window("overlay") {
@@ -726,6 +645,7 @@ pub fn run() {
             }
 
             // Initialize system tray icon with menu and emergency actions
+            tray_panel::setup(app);
             if let Err(e) = tray::setup_tray(app) {
                 tracing::warn!("Failed to initialize system tray icon: {e}");
             }
@@ -741,4 +661,22 @@ pub fn run() {
         })
         .run(tauri::generate_context!())
         .expect("failed to launch Tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_theme;
+
+    #[test]
+    fn current_themes_pass_through_and_retired_ones_migrate() {
+        assert_eq!(normalize_theme("light"), Some("light"));
+        assert_eq!(normalize_theme("dark"), Some("dark"));
+        assert_eq!(normalize_theme("system"), Some("system"));
+        // Retired names keep their light/dark side.
+        assert_eq!(normalize_theme("midnight-cobalt"), Some("dark"));
+        assert_eq!(normalize_theme("slate-charcoal"), Some("dark"));
+        assert_eq!(normalize_theme("nordic-frost"), Some("light"));
+        assert_eq!(normalize_theme("classic-light"), Some("light"));
+        assert_eq!(normalize_theme("neon-pink"), None);
+    }
 }

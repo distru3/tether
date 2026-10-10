@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance and mandatory operational rules for AI agents working in this repository. Updated and verified on **2026-09-12**.
+Guidance and mandatory operational rules for AI agents working in this repository. Updated and verified on **2026-10-03**.
 
 ---
 
@@ -9,8 +9,8 @@ Guidance and mandatory operational rules for AI agents working in this repositor
 A high-performance screen-time tracker, limit enforcer, and web filter for Windows (Linux crates are stubs). **Three distinct processes run concurrently at runtime**:
 
 1. `screentime-agent` (`crates/agent`) — privileged daemon (SYSTEM/elevated): SQLite database, limits engine, day rollover, native Windows hosts file enforcer, Cloudflare Family DNS adapter configurator, IPC server on named pipe `\\.\pipe\screentime`.
-2. `screentime-session` (`crates/session`) — per-user unprivileged sampling front: tracks foreground window and idle state, reports 1 Hz samples via `ReportUsage` over a persistent pipe connection, and renders the Win32 GDI topmost click-pad block overlay window.
-3. `screentime-ui` (`ui/`) — Tauri 2 desktop shell and React 18 dashboard: one-shot pipe commands only, styled as a smoked-glass analytics workspace.
+2. `screentime-session` (`crates/session`) — per-user unprivileged sampling front: tracks foreground window and idle state, reports 1 Hz samples via `ReportUsage` over a persistent pipe connection, draws the native timer HUD (`hud.rs`/`mpo.rs`), and drives the block overlay by sending `Show`/`Hide` to the UI over `\\.\pipe\screentime_overlay_bridge`.
+3. `screentime-ui` (`ui/`) — Tauri 2 desktop shell and React 18 dashboard (Today · Limits · Activity · Settings, a first-run setup flow, the block screen and a tray panel): one-shot pipe commands only, plum/orange light and dark themes per `docs/DESIGN_SYSTEM.md`.
 
 The agent alone does NOT track usage (Session-0 isolation). Dev fallback: `SCREENTIME_SELF_SAMPLE=1` re-enables in-agent sampling.
 
@@ -40,7 +40,7 @@ Violating these rules causes irreversible loss of user work and is strictly proh
      - Localization bundles (`ui/src/locales/en/translation.json`, `ui/src/locales/ar/translation.json`, etc.)
      - Component fallbacks and labels (`ui/src/App.tsx`, pages, controls)
      - Native platform renderers and fallback palettes (`crates/session/src/hud.rs`, `crates/session/src/mpo.rs`)
-     - Styles and CSS tokens (`ui/src/styles/tokens.css`, `redesign.css`)
+     - Styles and CSS tokens (`ui/src/styles/tokens.css`, `redesign.css`, `tether.css`)
      - Documentation (`docs/UI_SPECIFICATION.md`, release notes, user guides)
    - Never leave downstream files stale when introducing or renaming functionality.
 
@@ -48,14 +48,15 @@ Violating these rules causes irreversible loss of user work and is strictly proh
 
 ## 3. Anti-Hallucination Protocol
 
-1. **Inspect Before Asserting**: Always read the target file with `view_file` or check with `grep_search` before claiming a function, component, or IPC route exists or does not exist.
+1. **Inspect Before Asserting**: Always read the target file or search the code before claiming a function, component, or IPC route exists or does not exist. Docs have drifted before (a GDI overlay, an `EnableWindow` input block and a DNS proxy were all documented long after the code was gone), so trust code over prose.
 2. **Single Source of Truth**:
    - IPC DTOs: Always verify against `ui/src/types/generated/*.ts` (or `crates/ipc/src/lib.rs`).
    - Tauri Commands: Always check `ui/src-tauri/src/lib.rs` and verify registration in `tauri::generate_handler![]`.
-   - UI Design & Classes: Always reference `docs/UI_SPECIFICATION.md` and `ui/src/styles/redesign.css`.
+   - UI Design & Classes: Always reference `docs/DESIGN_SYSTEM.md` (the v2 design contract: palette, type, components, voice), `docs/UI_SPECIFICATION.md`, `ui/src/styles/redesign.css` (theme tokens) and `ui/src/styles/tether.css` (`tt-` components of the v2 screens).
 3. **Reference On-Demand Documentation**:
    - Full Architecture & Data Flows: [`docs/SYSTEM_MAP.md`](docs/SYSTEM_MAP.md)
    - UI Redesign & Component Trees: [`docs/UI_SPECIFICATION.md`](docs/UI_SPECIFICATION.md)
+   - Design System (v2): [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md)
    - IPC Contracts & Tauri Bridge: [`docs/IPC_CATALOG.md`](docs/IPC_CATALOG.md)
 
 ---
@@ -77,6 +78,18 @@ cd ui && npm run tauri dev
 ```
 
 # Verification gate (CI runs exactly this order)
+# On a Linux/cloud machine without Windows, the same gate runs by cross-compiling:
+#   clippy:  cargo clippy --workspace --all-targets --target x86_64-pc-windows-msvc -- -D warnings
+#            (needs clang-cl/llvm-lib on PATH as CC/AR for that target, and
+#             LIBSQLITE3_SYS_USE_PKG_CONFIG=1 + SQLITE3_LIB_DIR=<empty dir> so the
+#             bundled SQLite C build is skipped for a check-only pass; the Tauri
+#             crate also needs empty ui/src-tauri/bin/screentime-{agent,session}.exe)
+#   tests:   cargo test --workspace --target x86_64-pc-windows-gnu
+#            with CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUNNER=wine (apt: wine64 mingw-w64)
+# The Linux-native build of the agent/session is not maintained (out of scope).
+# Everywhere (CI included), the Tauri crate's build script needs
+# ui/src-tauri/bin/screentime-{agent,session}.exe to exist (git-ignored);
+# CI creates empty placeholders, real builds copy them in (packaging/build-installer.ps1).
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings   # zero-warning policy enforced
 cargo test --workspace                                   # ~190 tests
@@ -103,10 +116,13 @@ CLI extras: `screentime-agent --service|--install|--uninstall` (SCM mode; instal
 ## 6. Critical Architectural Invariants
 
 - **`st-core` is pure domain logic**: **No OS APIs, no wall-clock reads, no SQL**. Time comes from an injected `Clock` (`TestClock` in tests); OS surface = four traits in `core::platform`.
-- **Enforcement is fail-closed across restarts**: Blocks persist end-of-local-day expiries (`DayKey::end_utc`); startup never wipes blocks; expiry thaw happens per tick. The enforcer evaluates only the currently-focused app (fresh ≤30s session reports).
+- **Enforcement is fail-closed across restarts**: Blocks persist end-of-local-day expiries (`DayKey::end_utc`); startup never wipes blocks; expiry thaw happens per tick. The enforcer evaluates only the currently-focused app (fresh ≤30s session reports). The service relaunches a session helper that stops reporting (`agent/src/supervisor.rs`, ADR 0003); keep the helper panic-free, since release builds abort on panic.
 - **Anti-impulse cooldown asymmetry**: Loosening *minutes* queues into `pending_limits` (+24h default); **removing or disabling a limit applies instantly** by owner decision.
 - **`ui/src-tauri` is a pure IPC adapter**: It serializes `st-ipc` DTOs verbatim (**snake_case wire format**) and returns structured `{code, message}` errors — no business logic there.
-- **The block overlay is hand-painted GDI in the session crate**: Topmost, borderless window (`WS_EX_TOPMOST | WS_EX_NOACTIVATE`) with a low-level keyboard hook (`WH_KEYBOARD_LL`).
+- **One authorization gate**: every IPC request passes `crates/agent/src/ipc_server/auth.rs` before dispatch. Anything that loosens enforcement needs the PIN there (not in individual handlers); `SetSetting` accepts only `st_core::settings::SettingKey` keys. New loosening requests MUST add a rule in `authorize` plus a test.
+- **Pipe peers are verified**: `ReportUsage`/`RegisterDiscoveredApps` are only accepted from Tether's own session helper, and the overlay bridge checks both ends (`st_win32::peer_is_trusted`).
+- **"Today" is the agent's day**: the UI mirrors `day_start_minutes` (`format.ts` `setDayStartMinutes`) so its day keys match how the agent buckets usage.
+- **The block overlay is a Tauri webview window driven by the session helper**: `BlockOverlay.tsx` in an always-on-top `overlay` window, positioned by `ui/src-tauri/src/overlay_bridge.rs`. The session re-sends `Show` every 2 s while a block holds (`crates/session/src/overlay.rs`), so a closed or hidden overlay, or a restarted UI, self-heals; it relaunches the UI if it is not running. Both ends verify the other is a genuine Tether binary (`st_win32::peer_is_trusted`). Quit hides the overlay only once the app actually closed. There is no keyboard hook.
 - **Session 1 Hz log quietness**: The session sampling front runs on a 1 Hz cycle. It must **never emit `INFO`-level logs for steady-state periodic flushes** (such as routine usage reports, keepalive ticks, or regular window focus changes). Routine per-second operations belong in `DEBUG`/`TRACE`, reserving `INFO` exclusively for process startup, link disconnects/reconnects, and explicit errors.
 - **Web filtering & DNS architecture**: Domain blocking operates via native Windows hosts file enforcement (`st-enforce-win`), mapping blocked domains to `0.0.0.0` without requiring an active proxy listening on port 53. Network-wide adult and security protection is configured via Cloudflare Family DNS (`1.1.1.3` / `1.0.0.3`) at the adapter level with automatic previous DNS restoration on disable/uninstall.
 
