@@ -86,14 +86,6 @@ impl ProcessController for FakeProcesses {
         Ok(self.pids.clone())
     }
 
-    fn freeze(&mut self, _pid: u32) -> st_core::platform::PlatformResult<()> {
-        Ok(())
-    }
-
-    fn thaw(&mut self, _pid: u32) -> st_core::platform::PlatformResult<()> {
-        Ok(())
-    }
-
     fn terminate(&mut self, pid: u32) -> st_core::platform::PlatformResult<()> {
         self.terminated.lock().expect("log").push(pid);
         Ok(())

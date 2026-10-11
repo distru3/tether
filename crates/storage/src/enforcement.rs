@@ -1,10 +1,10 @@
 //! Enforcement state: blocks and PIN-approved overrides.
 //!
 //! Everything here is *state the enforcement loop acts on right now*: which
-//! subjects are frozen, and how much bonus time a parent has granted for a
+//! subjects are blocked, and how much bonus time a parent has granted for a
 //! given day. Overrides are additive per `day_key` so they expire with
 //! everything else at the day boundary; blocks are replaced on re-block so a
-//! re-freeze always moves the deadline forward.
+//! new block always moves the deadline forward.
 
 use chrono::{DateTime, Utc};
 use rusqlite::params;
@@ -43,7 +43,7 @@ impl Db {
         self.audit(now, "override_granted", reason)
     }
 
-    /// Freeze an app until `expires_utc` (typically the day boundary). Replaces
+    /// Block a subject until `expires_utc` (typically the day boundary). Replaces
     /// any existing block so a re-block updates the deadline.
     pub fn set_block(
         &self,
@@ -81,11 +81,11 @@ impl Db {
     }
 
     /// Which apps are currently blocked, for the dashboard's blocked flag and
-    /// for day-rollover thawing.
+    /// for lifting blocks at the day rollover.
     ///
     /// A row whose `subject_type` no code in this workspace writes cannot be
     /// interpreted; it is skipped with a warning instead of failing the whole
-    /// listing (which would strand every other block until thawing breaks).
+    /// listing (which would strand every other block).
     pub fn blocked_subjects(&self) -> Result<Vec<(SubjectRef, String)>> {
         let mut stmt = self
             .conn

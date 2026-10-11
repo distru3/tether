@@ -24,8 +24,7 @@ pub fn detect(capture_titles: bool, idle_threshold_secs: u64) -> Backends {
         tracker: Box::new(Win32WindowTracker::new(capture_titles)),
         idle: Box::new(Win32IdleMonitor::new(idle_threshold_secs)),
         processes: Some(Box::new(Win32ProcessController::new())),
-        // Domain blocking is the hosts file. (A DNS-proxy filter used to sit
-        // beside it here, but it had become a no-op.)
+        // Domain blocking is the hosts file.
         filter: Box::new(HostsFileFilter::new()),
     }
 }

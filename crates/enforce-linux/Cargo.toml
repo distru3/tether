@@ -9,4 +9,4 @@ license.workspace = true
 st-core.workspace = true
 tracing.workspace = true
 
-# `nix` is added in the M0 spike alongside the cgroup-v2 freezer implementation.
+# Real dependencies arrive with the implementation (docs/adr/0004-linux-port.md).

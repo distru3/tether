@@ -1,34 +1,10 @@
-//! X11 active-window and idle tracking for Linux.
+//! Linux active-window and idle tracking: a stub.
 //!
-//! # Status: stub, pending the M0 spike
-//!
-//! Every method returns [`PlatformError::Unsupported`], which the agent handles
-//! by reporting degraded tracking rather than crashing. This is intentional:
-//! Linux is a secondary target and may be cancelled outright, so no effort is
-//! spent here until the spike proves it is worth it.
-//!
-//! # Implementation notes for the spike
-//!
-//! **Active window (X11).** Add `x11rb`, connect via `x11rb::connect(None)`,
-//! then read `_NET_ACTIVE_WINDOW` from the root window and `_NET_WM_PID` from
-//! the resulting window. Resolve the PID through `/proc/<pid>/exe`. Note that
-//! `_NET_WM_PID` is advisory and some clients omit it, in which case fall back
-//! to matching `WM_CLASS` against installed `.desktop` entries.
-//!
-//! **Idle (X11).** The XScreenSaver extension's `XScreenSaverQueryInfo` gives
-//! idle milliseconds directly. Prefer it over polling input devices.
-//!
-//! **Sandboxed apps.** Flatpak and Snap processes all look like `bwrap` at the
-//! process level, so `/proc/<pid>/cgroup` must be parsed to recover the real
-//! application id. Without this, every Flatpak app collapses into one entry and
-//! per-app limits are meaningless.
-//!
-//! **Wayland is explicitly out of scope for v1.** There is no portable
-//! active-window protocol: wlroots compositors expose
-//! `wlr-foreign-toplevel-management`, KDE exposes KWin's D-Bus scripting
-//! interface, and GNOME exposes nothing usable without shipping a shell
-//! extension. Under Wayland the agent must say so plainly in the UI instead of
-//! silently reporting zeroes.
+//! Every method returns [`PlatformError::Unsupported`], which the agent
+//! reports as "tracking unavailable" instead of crashing. The design for the
+//! real implementation (X11 directly; GNOME and KDE on Wayland through a Shell
+//! extension and a KWin script) is `docs/adr/0004-linux-port.md`, phases L1
+//! and L2. Follow that ADR, not older notes.
 
 use st_core::platform::{
     ActiveWindow, IdleMonitor, IdleState, PlatformError, PlatformResult, WindowTracker,
@@ -58,7 +34,7 @@ impl X11WindowTracker {
 impl WindowTracker for X11WindowTracker {
     fn active_window(&mut self) -> PlatformResult<Option<ActiveWindow>> {
         Err(PlatformError::Unsupported(
-            "X11 active-window tracking is not implemented yet (M0 spike)",
+            "X11 active-window tracking is not implemented yet (docs/adr/0004-linux-port.md)",
         ))
     }
 
@@ -79,7 +55,7 @@ impl X11IdleMonitor {
 impl IdleMonitor for X11IdleMonitor {
     fn idle_state(&mut self) -> PlatformResult<IdleState> {
         Err(PlatformError::Unsupported(
-            "XScreenSaver idle detection is not implemented yet (M0 spike)",
+            "XScreenSaver idle detection is not implemented yet (docs/adr/0004-linux-port.md)",
         ))
     }
 

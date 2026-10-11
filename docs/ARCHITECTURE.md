@@ -1,113 +1,180 @@
 # Architecture
 
-Cross-platform screen-time tracker and limiter for Windows and Linux.
+How Tether works today. This file describes the current code only; history
+lives in git and in the decision records (`docs/adr/`). When code and this file
+disagree, fix one of them in the same change.
 
-## Processes
+Related: `docs/IPC_CATALOG.md` (every request), `docs/THREAT_MODEL.md` (what
+is and isn't enforced), `docs/UI_SPECIFICATION.md` (screens),
+`docs/DESIGN_SYSTEM.md` (look and voice), `packaging/README.md` (installer).
 
-Three binaries because the OS forces three privilege levels.
+## 1. Three processes
 
-| Binary                | Runs as             | Owns                                                                                  |
-| --------------------- | ------------------- | ------------------------------------------------------------------------------------- |
-| `screentime-agent`    | Windows Service / systemd (SYSTEM/root) | Database, `ReportUsage` ingestion and classification, limits engine, day rollover, process freeze, DNS/hosts, PIN vault, audit log |
-| `screentime-session`  | Per user login session, unprivileged     | The sampling front: foreground-window + idle sampling, persistent pipe connection to the agent, toast notifications, block overlay |
-| `screentime-ui`       | Interactive user process                 | Tauri dashboard: reports, category editor, limit editor                                |
+Windows forces three privilege levels, so Tether is three binaries.
 
-The agent cannot see the interactive desktop (Session 0 isolation on Windows;
-Wayland/X11 socket ownership on Linux), and only the agent has the privileges
-required to change the hosts file, run WFP/nftables rules, freeze a process
-tree or hold the database. Splitting them is not a stylistic choice. It also
-means the session helper samples the desktop itself — foreground window and
-idle — and ships observations over the pipe; the agent-side sampler survives
-only as a dev fallback (`SCREENTIME_SELF_SAMPLE=1`).
+| Binary | Runs as | Owns |
+|---|---|---|
+| `screentime-agent` (`crates/agent`) | Windows service, SYSTEM | SQLite database, limits engine, day rollover, block state, PIN vault, hosts file, Family DNS, IPC server on `\\.\pipe\screentime` |
+| `screentime-session` (`crates/session`) | One per signed-in user, unprivileged | Foreground-window and idle sampling, usage reports, the timer HUD, telling the UI when to show the block screen |
+| `screentime-ui` (`ui/`, shown as Tether) | The signed-in user | Tauri 2 shell and React dashboard, the block screen window, the tray panel |
 
-## Rust workspace
+The agent runs in Session 0 and cannot see the desktop, so it cannot tell
+which app is in front; only the session helper can. The UI never touches the
+database: every action is a one-shot request to the agent. A dev fallback,
+`SCREENTIME_SELF_SAMPLE=1`, lets the agent sample by itself.
 
-    crates/
-      core/            portable domain: types, limits engine, day rollover, clock guard
-      storage/         SQLite schema and queries, module per concern
-      ipc/             wire protocol between UI, session helper and agent;
-                       owns PIPE_NAME and the ts-rs TypeScript bindings
-      st-win32/        shared Win32 helpers (process handles, image paths, wide strings)
-      tracker-win/     Win32 foreground + idle (dev fallback sampler)
-      tracker-linux/   X11 stub
-      enforce-win/     process freeze/terminate + hosts writer
-      enforce-linux/   cgroup freezer + hosts writer (stub)
-      agent/           the SYSTEM/root binary: IPC server, ingestion, enforcement
-      session/         the unprivileged sampling front
-    ui/
-      src/             React + TypeScript frontend
-      src/types/generated/   IPC DTOs, generated from Rust via ts-rs
-      src-tauri/       Tauri 2 host process
+```
+ screentime-session ── ReportUsage (1 Hz, persistent pipe) ──▶ screentime-agent ──▶ SQLite
+   │  ▲                                                          │
+   │  └── Status, BlockedApps, HUD state ◀────────────────────────┤
+   │                                                              ├── hosts file
+   └── Show / Hide ──▶ screentime-ui (overlay window)             └── Family DNS
+                         ▲
+                         └── one-shot requests (Tauri commands) ──▶ agent
+```
 
-The four traits in `core::platform` (`WindowTracker`, `IdleMonitor`,
-`ProcessController`, `NetworkFilter`) are the entire operating-system surface
-that the rest of the code sees. Adding macOS or dropping Linux is confined to
-those four implementations.
+## 2. Workspace
 
-## Data flow
+```
+crates/
+  core/           Pure domain logic: models, day keys, limits engine, schedules,
+                  categories, settings keys, PIN throttle, game heuristics.
+                  No OS calls, no wall clock, no SQL (time comes from `Clock`).
+  storage/        SQLite migrations and queries, one module per concern.
+  ipc/            Wire protocol (Request/Response), pipe transport, ts-rs
+                  export of the DTOs to ui/src/types/generated.
+  st-win32/       Shared Win32 helpers: process paths, peer trust, long/short
+                  paths, single-instance mutex, audio, launching in a user session.
+  tracker-win/    Foreground window, idle (with audio-playback detection), app discovery.
+  enforce-win/    Hosts-file writer; closing an app's processes on request.
+  family-dns/     Family DNS adapter configuration, backup/restore, DoH/DoT lockdown.
+  tracker-linux/, enforce-linux/   Stubs; see docs/adr/0004-linux-port.md.
+  agent/          The service: IPC server, report ingestion, enforcer, policy,
+                  Family DNS orchestration, session-helper supervision.
+  session/        The per-user helper: sampling loop, HUD, block-screen driver.
+ui/
+  src/            React 18 + TypeScript dashboard.
+  src-tauri/      Tauri 2 host: thin IPC adapter, overlay bridge, tray, tray panel.
+```
 
-    session ── active window + idle, batched ──▶ agent ──▶ ingest/classify ──▶ storage
-      ▲          (~1s ReportUsage cycles)         │
-      ├── Status each cycle: liveness, PIN ◀──────┤
-      └── BlockedApps on focus change ◀───────────┤
-                                                  ├── limits engine ──▶ freeze/thaw
-                                                  └── DNS / hosts filter
-    UI ◀── DTOs over IPC ────────────────────────── agent
+`core::platform` defines the OS boundary: `WindowTracker`, `IdleMonitor`,
+`ProcessController` (find and close an app's processes) and `NetworkFilter`.
+Every SQL statement lives in `st-storage`; every enforcement decision in
+`st-core::limits` and the agent's `enforcer.rs`.
 
-The session holds one persistent pipe connection, batching observations
-through `ReportUsage` (~1 s cycles) with capped-exponential-backoff reconnects.
-The same link carries `Status` every cycle — liveness for the agent, the PIN
-gate for the overlay — and `BlockedApps` on focus change. One-shot clients,
-including every Tauri command today, share the same thread-per-connection
-server (cap 32).
+## 3. Tracking
 
-Every OS-touching call goes through the four traits above; every SQL statement
-lives in `st-storage`; every enforcement decision lives in `st-core::limits`.
+1. The session helper polls the foreground window about 10 times a second and
+   idle state from `GetLastInputInfo`. Input-idle time does not count while an
+   audio session is playing (films are not idle).
+2. It resolves the window to an `AppKey` (executable path today; Store apps
+   all report as `ApplicationFrameHost.exe`, a known gap) and batches
+   observations.
+3. About once a second it sends `ReportUsage` over its persistent pipe
+   connection, with the currently focused app (`focused_key`).
+4. The agent accepts reports only from Tether's own helper
+   (`st_win32::peer_is_trusted`, comparing long-form paths), checks the clock
+   (a backward jump is logged, audited and not credited), deduplicates,
+   writes `usage_intervals` and the `usage_daily` rollup, and answers with the
+   HUD state for the focused app.
+5. Days are local `YYYYMMDD` keys shifted by `day_start_minutes`
+   (`DayKey`). The UI mirrors the same setting so "today" matches.
 
-## Time
+App discovery runs once per helper start: Start menu shortcuts, the uninstall
+registry and Windows' GameConfigStore. The agent classifies new apps
+(`classify.rs`: exact names, paths, publishers, name keywords) only while the
+person hasn't categorised them.
 
-Two clocks, deliberately. Wall time bucketises usage into local days; monotonic
-time measures elapsed durations. Comparing the two catches clock rollback and
-suspend gaps in the same place. Days are keyed as `YYYYMMDD` local integers,
-computed with a configurable day-start offset (default midnight, 04:00 is the
-recommended alternative for night owls). Every time-related invariant is
-covered by unit tests using a `TestClock`; that is how DST, timezone changes
-and clock tampering are tested without a VM.
+Each app has one primary category (reports add up to 100 %) plus optional tag
+categories that only matter for matching limits. Categories marked
+`never_block` (development tools, system utilities, Tether itself) are never
+blocked.
 
-## Categories
+## 4. Limits and blocking
 
-Each application has exactly one **primary category**, used for reports and
-budget attribution — this is what keeps a "time by category" chart summing to
-100%. It also carries zero or more **tags**, additional categories used *only*
-for matching limits. That is how TikTok can count against both a "Social Media"
-budget and a "Short-Form Video" budget without being double-counted in the
-report. Overlapping limits resolve as *most-restrictive-wins*.
+- **Limits** target an app, a category or total screen time, with a daily
+  minute value and optional per-weekday values.
+- **The enforcer** (`crates/agent/src/enforcer.rs`) runs every second on the
+  focused app only (focus reports older than 30 s are ignored): it lifts
+  expired blocks, clears all blocks on a day change it observed itself, then
+  asks the limits engine. Order of checks: a downtime schedule in force
+  (unless the app is always allowed), the app's budget, its categories, total
+  screen time. Overlapping limits: the most restrictive wins.
+- **A block** is a `block_state` row with an expiry (end of the local day, or
+  the schedule's end). Restarting the agent never lifts it.
+- **The block screen** is what enforces it. The session polls `BlockedApps`;
+  when the focused app is blocked it sends `Show` over
+  `\\.\pipe\screentime_overlay_bridge` and the UI covers the app with its
+  always-on-top `overlay` window (`BlockOverlay.tsx`). The app keeps running
+  behind it. The session re-sends `Show` every 2 s while the block holds and
+  relaunches the UI if its pipe is gone, so closing the window or the UI
+  heals within seconds. Both ends of the bridge verify the other is a genuine
+  Tether binary. There is no keyboard hook and nothing is frozen.
+- **Close** on the block screen ends the app (locally, then through the
+  agent's `CloseApps`). **Extra time** (+15 minutes) is a PIN-approved
+  override; never offered during a schedule or in strict mode.
+- **Cooldown**: raising a limit (or any weekday's value) queues in
+  `pending_limits` for `limit_cooldown_hours` (24 by default). Lowering,
+  adding, switching off and deleting apply at once.
+- **The timer HUD** (`crates/session/src/mpo.rs`, DirectComposition, with a
+  GDI fallback in `hud.rs`) shows time left over apps with a budget. It hides
+  over full-screen games unless `show_hud_in_fullscreen` is on; the peek
+  shortcut and the 15/10/5/1-minute chimes show it for 4 s.
 
-`Development & Tools` and `Utilities & System` are marked `NeverBlock` in the
-built-in taxonomy: locking someone out of their terminal, editor or file
-manager is worse than any limit is good.
+## 5. Authorization
 
-## Enforcement tiers
+The pipe admits every local user, so it proves nothing about who is asking.
+Every request passes one gate, `crates/agent/src/ipc_server/auth.rs`, before
+dispatch. Anything that loosens enforcement needs the PIN when one is set;
+`SetSetting` accepts only `st_core::settings::SettingKey` keys with checked
+values. Wrong PINs and recovery codes are throttled (5 free, then 30 s
+doubling to 15 min). Details per request: `docs/IPC_CATALOG.md`.
 
-Documented in `docs/THREAT_MODEL.md`. The short version: this is a self-control
-aid, not a bypass-proof lock. Freeze-instead-of-kill preserves the user's work;
-the hosts writer is honest about being defeated by DNS-over-HTTPS; Cloudflare
-Family DNS and browser policies are what provide robust adult/malware filtering; a signed
-kernel driver is explicitly out of scope.
+## 6. Websites
 
-Expiry is fail-closed. A block carries its end-of-local-day deadline (`DayKey`,
-honouring timezone and `day_start_minutes`), so restarting the agent lifts
-nothing; expired blocks thaw on tick and overrides land on the reporting user's
-local day. The hosts writer aborts on read failure rather than wipe unmanaged
-lines, and writes atomically via temp file + rename.
+- Blocked sites are written to the Windows hosts file between Tether's own
+  markers (both IPv4 and IPv6 loopback), atomically; unmanaged lines are kept.
+  Sites on the built-in adult list are hidden in the UI until the PIN is
+  entered.
+- **Family DNS** points every active adapter at Cloudflare's family resolvers
+  (`1.1.1.3`, `1.0.0.3` and IPv6), after saving the previous DNS to the
+  database and `{data_dir}/original_dns_backup.json`. It also sets browser
+  policies that switch off their own encrypted DNS and blocks outbound DoT
+  (port 853). Turning it off restores the saved DNS. One implementation,
+  `crates/agent/src/family_dns.rs`, serves the app, the CLI and the
+  uninstaller. `--reset-network` is the emergency undo.
 
-The anti-impulse cooldown guards exactly one action: loosening *minutes* while
-a limit stays enabled. Removing or disabling an order is instant — the
-cooldown exists to stop future-you from granting itself more time, not from
-standing an order down. Enforcement runs on the agent's 1 Hz tick and the
-session reports at 1 Hz, so a crossed limit surfaces within about a second of
-the credit landing.
+## 7. Keeping the helper alive
 
-## Milestones
+Only the helper reports focus, so while it is gone nothing is enforced. The
+service relaunches it in the console user's session after 15 s without
+reports (`supervisor.rs`, with a startup grace period and backoff; ADR 0003).
+The helper uses a per-session single-instance mutex. Release builds abort on
+panic, so the helper must not panic.
 
-See `README.md`.
+## 8. Storage
+
+SQLite in `C:\ProgramData\screentime` (or `SCREENTIME_DATA_DIR`), migrations
+in `crates/storage/migrations/` tracked by `PRAGMA user_version`; never edit a
+shipped migration, add a new one.
+
+| Migration | Adds |
+|---|---|
+| 0001 | Base schema: categories, apps, tags, usage, limits, schedules, allowlist, block state, overrides, audit log, settings (and unused blocklist tables) |
+| 0002 | `pending_limits` (cooldown queue) |
+| 0003 | One total-screen-time limit at most |
+| 0004 | Wall-clock expiry on overrides |
+| 0005 | `block_reasons` (answers on the block screen) |
+
+The audit log records PIN set/removed, rejected credentials, overrides and
+backward clock jumps.
+
+Logs: agent in `{data_dir}\logs`, helper in `%LOCALAPPDATA%\screentime\logs`.
+The helper never logs routine per-second work at INFO.
+
+## 9. Packaging
+
+A styled NSIS installer built by Tauri (`packaging/README.md`): installs to
+`Program Files\Tether`, registers the service (re-pointing an existing
+registration), adds one HKLM Run entry for the helper, starts tracking as the
+signed-in user, and on uninstall offers to delete data and restore DNS.

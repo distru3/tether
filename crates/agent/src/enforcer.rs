@@ -2,7 +2,7 @@
 //!
 //! On every evaluation tick the enforcer:
 //!
-//! 1. Thaws blocks whose `expires_utc` has passed.
+//! 1. Lifts blocks whose `expires_utc` has passed.
 //! 2. On a *genuine* day change observed across two ticks, clears whatever
 //!    survived (every budget resets at the boundary).
 //! 3. Looks up the focused app's record (category + tags).
@@ -21,12 +21,11 @@
 //! leaves unexpired blocks alone. Rollover clearing fires only when *this
 //! process* observed the previous day itself -- startup never wipes.
 //!
-//! The agent never touches the app's processes. M2.5 moved blocking from a
-//! process freeze to a non-invasive overlay: the session helper draws a
-//! topmost window over the blocked app and blocks its input, which works even
-//! for anti-cheat-protected or elevated processes that `NtSuspendProcess`
-//! could never touch. `block_state` is the sole source of truth the overlay
-//! polls.
+//! The agent never touches a blocked app's processes. Blocking is the block
+//! screen: the session helper has the UI cover the app with an always-on-top
+//! window (re-shown every 2 s while the block holds), which works for
+//! anti-cheat-protected and elevated apps too. The app keeps running behind
+//! it. `block_state` is the sole source of truth the session polls.
 
 use chrono::{DateTime, Duration, Utc};
 use st_core::category::CategoryKind;
@@ -55,7 +54,7 @@ impl Enforcer {
     /// Evaluate and act on the focused app. Returns the verdict for logging.
     ///
     /// `window_key` is the focused app (from local sampling or from session-
-    /// helper reports). If it is `None` nothing is evaluated but expiry thawing
+    /// helper reports). If it is `None` nothing is evaluated but expired blocks are still lifted
     /// and day rollover still happen.
     ///
     /// `now`, `tz_offset_secs` and `day_start_minutes` come from the caller's
@@ -73,7 +72,7 @@ impl Enforcer {
     ) -> anyhow::Result<()> {
         let today = DayKey::from_utc(now, tz_offset_secs, day_start_minutes);
 
-        self.thaw_expired_blocks(db, now)?;
+        self.lift_expired_blocks(db, now)?;
 
         match self.last_day {
             // Freshly started: blocks loaded from the database stay. Wiping
@@ -162,12 +161,12 @@ impl Enforcer {
 
     /// Clear blocks whose stored deadline has passed.
     ///
-    /// This replaces the old "wipe everything on rollover" as the primary thaw
-    /// path: because every block now records when it dies, thawing needs no
+    /// This replaces the old "wipe everything on rollover" as the primary way
+    /// blocks end: because every block records when it dies, lifting needs no
     /// memory at all and works across restarts. Rows with no parsable expiry
     /// are treated as expired on purpose -- they can only come from a pre-expiry
     /// writer or tampering, and both should lift, not haunt the user forever.
-    fn thaw_expired_blocks(&self, db: &mut Db, now: DateTime<Utc>) -> anyhow::Result<()> {
+    fn lift_expired_blocks(&self, db: &mut Db, now: DateTime<Utc>) -> anyhow::Result<()> {
         let mut stmt = db
             .conn()
             .prepare("SELECT subject_type, subject_id, expires_utc FROM block_state")?;
@@ -201,7 +200,7 @@ impl Enforcer {
 
         for subject in expired {
             db.clear_block(subject)?;
-            tracing::info!(subject = ?subject, "block expired; thawing");
+            tracing::info!(subject = ?subject, "block expired; lifting it");
         }
         Ok(())
     }
@@ -508,10 +507,10 @@ mod tests {
         );
     }
 
-    /// A block whose persisted deadline passed is thawed by the next tick even
+    /// A block whose persisted deadline passed is lifted by the next tick even
     /// with no day change and no prior state -- pure expiry semantics.
     #[test]
-    fn an_expired_block_thaws_without_a_day_rollover() {
+    fn an_expired_block_lifts_without_a_day_rollover() {
         let mut db = Db::open_in_memory().expect("db");
         let games = db.category_id("games").expect("games");
         let app = seed_app(&mut db, "C:\\games\\steam\\steam.exe", "games");
@@ -536,7 +535,7 @@ mod tests {
                 0,
             )
             .expect("tick");
-        assert!(!db.is_blocked(SubjectRef::App(app)).expect("thawed"));
+        assert!(!db.is_blocked(SubjectRef::App(app)).expect("lifted"));
     }
 
     /// Rows written before blocks carried expiries (or with a corrupt stamp)

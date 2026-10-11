@@ -9,5 +9,4 @@ license.workspace = true
 st-core.workspace = true
 tracing.workspace = true
 
-# x11rb is added in the M0 spike (see src/lib.rs). Deliberately absent for now
-# so the workspace has no unused dependency and no build cost on Windows.
+# x11rb and D-Bus dependencies arrive with phase L1 (docs/adr/0004-linux-port.md).

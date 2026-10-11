@@ -1,20 +1,9 @@
-//! Freezing, thawing and (reluctantly) terminating Windows processes.
+//! Finding and closing a blocked app's processes on Windows.
 //!
-//! # Why freeze instead of kill
-//!
-//! Killing an app to enforce a time limit destroys unsaved work, and a tool
-//! that loses your document once will be uninstalled the same day. Suspending
-//! every thread instead leaves the process intact: it can be resumed at the day
-//! boundary or when an override is granted, with the user's state untouched.
-//!
-//! `NtSuspendProcess` is undocumented but has been present and stable since
-//! Windows XP. It is resolved dynamically so that its absence degrades to
-//! "cannot freeze" rather than preventing the agent from starting at all.
-//!
-//! # Verification status
-//!
-//! M0 spike target. Validate on Windows 10 and 11 against: a plain Win32 app, a
-//! browser (multi-process), an Electron app, and an elevated process.
+//! Blocking itself is not done here: the session helper covers a blocked app
+//! with the block screen (an always-on-top window), so the app keeps running
+//! and nothing is lost. This controller is used only when the person chooses
+//! Close on the block screen, as the agent-side fallback for `CloseApps`.
 
 use std::mem::size_of;
 
@@ -22,68 +11,18 @@ use st_core::model::AppKey;
 use st_core::platform::{PlatformError, PlatformResult, ProcessController};
 use st_win32::{image_path_from_handle, open_process_query, wide_to_string};
 
-use windows::core::{s, PCSTR};
-use windows::Win32::Foundation::{CloseHandle, HANDLE, INVALID_HANDLE_VALUE};
+use windows::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
 use windows::Win32::System::Diagnostics::ToolHelp::{
     CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
 };
-use windows::Win32::System::LibraryLoader::{GetModuleHandleA, GetProcAddress};
-use windows::Win32::System::Threading::{
-    OpenProcess, TerminateProcess, PROCESS_SUSPEND_RESUME, PROCESS_TERMINATE,
-};
-
-/// `NTSTATUS`-returning single-argument ntdll function.
-type NtProcessFn = unsafe extern "system" fn(HANDLE) -> i32;
+use windows::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
 
 #[derive(Default)]
-pub struct Win32ProcessController {
-    suspend: Option<NtProcessFn>,
-    resume: Option<NtProcessFn>,
-}
+pub struct Win32ProcessController;
 
 impl Win32ProcessController {
     pub fn new() -> Self {
-        // SAFETY: ntdll is loaded into every Win32 process, so GetModuleHandleA
-        // cannot race a load/unload here. Both symbols have the documented
-        // `NTSTATUS(HANDLE)` shape.
-        unsafe {
-            let suspend = resolve_ntdll(s!("NtSuspendProcess"));
-            let resume = resolve_ntdll(s!("NtResumeProcess"));
-            if suspend.is_none() || resume.is_none() {
-                tracing::warn!(
-                    "ntdll suspend/resume unavailable; blocking will fall back to terminate"
-                );
-            }
-            Self { suspend, resume }
-        }
-    }
-
-    fn call(&self, f: Option<NtProcessFn>, pid: u32, access_terminate: bool) -> PlatformResult<()> {
-        let Some(f) = f else {
-            return Err(PlatformError::Unsupported(
-                "NtSuspendProcess/NtResumeProcess",
-            ));
-        };
-        let access = if access_terminate {
-            PROCESS_TERMINATE
-        } else {
-            PROCESS_SUSPEND_RESUME
-        };
-
-        // SAFETY: handle is opened here and closed on every path.
-        unsafe {
-            let handle =
-                OpenProcess(access, false, pid).map_err(|_| PlatformError::ProcessGone(pid))?;
-            let status = f(handle);
-            let _ = CloseHandle(handle);
-
-            if status < 0 {
-                return Err(PlatformError::Other(format!(
-                    "ntdll call for pid {pid} returned NTSTATUS 0x{status:08x}"
-                )));
-            }
-        }
-        Ok(())
+        Self
     }
 }
 
@@ -91,11 +30,11 @@ impl ProcessController for Win32ProcessController {
     /// Every live PID whose image path matches `key`.
     ///
     /// Returns the whole set rather than one PID because browsers and Electron
-    /// apps are process trees; suspending only the parent leaves the renderers
+    /// apps are process trees; closing only the parent leaves the renderers
     /// running and the window responsive.
     fn find_processes(&mut self, key: &AppKey) -> PlatformResult<Vec<u32>> {
         let AppKey::WindowsExe(target_path) = key else {
-            // Packaged apps need AUMID-based lookup, which is M1 work.
+            // Packaged apps need AUMID-based lookup, not implemented yet.
             return Err(PlatformError::Unsupported(
                 "process lookup for non-exe app keys",
             ));
@@ -150,15 +89,7 @@ impl ProcessController for Win32ProcessController {
         }
     }
 
-    fn freeze(&mut self, pid: u32) -> PlatformResult<()> {
-        self.call(self.suspend, pid, false)
-    }
-
-    fn thaw(&mut self, pid: u32) -> PlatformResult<()> {
-        self.call(self.resume, pid, false)
-    }
-
-    /// Last resort, and only after the grace countdown has elapsed.
+    /// Ends one process. Called only for an app the person chose to close.
     fn terminate(&mut self, pid: u32) -> PlatformResult<()> {
         // SAFETY: handle opened and closed locally.
         unsafe {
@@ -171,17 +102,8 @@ impl ProcessController for Win32ProcessController {
     }
 
     fn backend(&self) -> &'static str {
-        "win32-ntsuspend"
+        "win32-overlay"
     }
-}
-
-unsafe fn resolve_ntdll(name: PCSTR) -> Option<NtProcessFn> {
-    let ntdll = GetModuleHandleA(s!("ntdll.dll")).ok()?;
-    let addr = GetProcAddress(ntdll, name)?;
-    Some(std::mem::transmute::<
-        unsafe extern "system" fn() -> isize,
-        NtProcessFn,
-    >(addr))
 }
 
 #[cfg(test)]

@@ -2,9 +2,8 @@
 
 use super::*;
 
-/// "Quit" from the block overlay: terminate the app's process tree. This is a
-/// deliberate user action (not the removed auto-freeze), so `auth` PIN-gates
-/// it like every other mutating request.
+/// "Close" on the block screen: end the app's process tree. Only ever a
+/// deliberate choice by the person; `auth` decides whether it needs the PIN.
 pub(super) fn close_apps(ctx: &Ctx, app_id: i64) -> Response {
     let db = lock_db(&ctx.db);
     let Some(record) = db.app_record(app_id).ok().flatten() else {

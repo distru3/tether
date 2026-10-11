@@ -88,8 +88,8 @@ pub(super) fn delete_limit(ctx: &Ctx, target: LimitTargetDto, now: DateTime<Utc>
     };
     // Deleting lifts enforcement instantly (owner decision, 2026-08): the
     // cooldown protects against loosening minutes on impulse, not against
-    // standing an order down. The enforcer's next evaluation tick thaws
-    // whatever the deleted order had frozen.
+    // switching a limit off. The enforcer's next evaluation tick lifts any
+    // block the deleted limit caused.
     match db.delete_limit_by_target(&target) {
         Ok(()) => Response::Accepted {
             hud: None,

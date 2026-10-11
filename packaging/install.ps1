@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-    Manual/elevated install of Screentime's two daemons (Story A in README.md):
+    Manual/elevated install of Tether's two background programs (Story A in
+    packaging/README.md):
     builds release binaries, copies them to the install directory, registers
     screentime-agent as a Windows service, and turns on logon autostart for
     screentime-session.
@@ -12,13 +13,13 @@
 
 .EXAMPLE
     .\install.ps1
-    .\install.ps1 -InstallDir "D:\Tools\Screentime"
+    .\install.ps1 -InstallDir "D:\Tools\Tether"
 #>
 [CmdletBinding()]
 param(
     # Target directory for the daemon executables. sc.exe and the autostart
     # entry both reference this exact path, so quote-safety matters.
-    [string]$InstallDir = "C:\Program Files\Screentime",
+    [string]$InstallDir = "C:\Program Files\Tether\bin",
     [switch]$SkipBuild = $false
 )
 
@@ -59,7 +60,7 @@ if (-not $SkipBuild) {
     }
 }
 
-Write-Host "== Screentime install =="
+Write-Host "== Tether install (service and helper) =="
 Write-Host "Repo root : $RepoRoot"
 Write-Host "Install to: $InstallDir"
 

@@ -1,94 +1,88 @@
 # Threat model
 
-Written up front because a screen-time app that overstates what it enforces is
-worse than one that says nothing: users will trust it and then be surprised.
+What Tether enforces and what it doesn't, stated plainly. A screen-time app
+that overstates its protection is worse than one that says nothing: people
+trust it and are then surprised. Only describe protections that exist in the
+code; plans belong in an ADR.
 
-## Users and adversaries
+## Who uses it
 
-* **Self-controller.** The user *is* the adversary and knows it. Wants friction,
-  not a wall.
-* **Guardian mode.** The user runs an admin account, the person being managed
-  runs a standard account. This is the only configuration in which "cannot be
-  bypassed" is close to true.
-* **Casual bypass on a shared machine.** Admin credentials not available, so
-  service tampering and hosts edits are out of reach.
+- **Me** (`profile = self`): someone limiting their own use. They are their
+  own adversary and want friction, not a wall.
+- **Someone I look after** (`profile = guardian`): a parent sets limits for a
+  child. Enforcement is only close to "can't be bypassed" when the child uses
+  a standard (non-administrator) Windows account.
 
-## Assets
+## What is protected
 
-* The SQLite database (usage history and configured limits).
-* Active limits and current day-key state.
-* The PIN hash (Argon2id).
-* The hosts file and network DNS configuration.
-* The audit log.
+- The database (usage, limits, settings), block state, the PIN hash
+  (Argon2id) and recovery-code hash, the hosts file, network DNS settings and
+  the audit log. All live in a SYSTEM-owned directory or OS locations a
+  standard user cannot write.
 
-## In scope
+## What Tether does
 
-* Reversible enforcement: freeze rather than kill. Grace countdown before any
-  destructive action.
-* Anti-impulse **cooldown** on loosening limits (24 h by default). Tightening
-  takes effect immediately; removing or disabling an order is also instant —
-  the cooldown guards "give myself more minutes", not "stand the order down".
-* Clock-tamper detection: wall time cross-checked against monotonic time; a
-  detected rollback is logged and does not credit the interval.
-* Sleep-gap detection: same mechanism, opposite direction. Time under
-  `Suspend`/`Hibernate` is not screen time.
-* Marker-delimited hosts writes so user entries survive.
-* DB and config in a SYSTEM/root-owned directory with restrictive ACLs.
-* One central PIN gate in the agent (`ipc_server/auth.rs`) in front of every
-  request that loosens enforcement: limits, overrides, quitting a blocked app,
-  removing web blocks, recategorising apps, editing/disabling/deleting
-  downtime schedules, allowlisting, and loosening settings. `SetSetting`
-  accepts only a fixed key list, so the PIN hash can no longer be overwritten
-  through it. PIN change requires the old PIN or the recovery code.
-* Brute-force throttle on PIN and recovery-code checks (escalating lockout
-  after 5 consecutive failures, `rate_limited`), with failures audited.
-* Pipe peer verification: usage reports are accepted only from Tether's own
-  session helper, and the overlay bridge checks both ends are genuine Tether
-  binaries from the same install. This stops a local script from faking usage
-  or focus, or squatting the bridge pipe to swallow the block screen.
-* The block screen self-heals: the session re-sends it every 2 s while a
-  block holds and relaunches the UI if needed, so closing the overlay or
-  killing the UI uncovers a blocked app for at most a few seconds.
-* Audit log for overrides, limit edits, service stops, hosts/DNS tampering,
+- **One authorization gate** (`crates/agent/src/ipc_server/auth.rs`) in front
+  of every request. With a PIN set, anything that loosens enforcement needs
+  it: raising or removing limits, extra time, closing an unblocked app,
+  unblocking sites, recategorising apps, editing, disabling or deleting
+  schedules, allowlisting, and loosening settings. `SetSetting` accepts only
+  known keys, so the PIN hash cannot be overwritten through it. Changing the
+  PIN needs the old PIN or the recovery code.
+- **Brute-force throttle**: after 5 wrong PINs or recovery codes in a row,
+  checks lock for 30 s, doubling up to 15 min. Rejections are audited.
+- **Cooldown**: raising a limit waits `limit_cooldown_hours` (24 by default).
+  Lowering, adding, switching off and deleting apply at once.
+- **Fail-closed blocks**: a block stores its own expiry, so restarting the
+  agent or the PC lifts nothing.
+- **The block screen heals itself**: the session helper re-shows it every 2 s
+  while a block holds and relaunches the UI if needed, so closing the window
+  or killing the UI uncovers the app for a few seconds at most.
+- **The helper is restarted**: the service relaunches a session helper that
+  stops reporting for 15 s (ADR 0003).
+- **Pipe peers are checked**: usage reports are accepted only from Tether's
+  own helper, and the block-screen bridge checks both ends are Tether binaries
+  from the same install, so a local script can't fake usage or swallow the
+  block screen.
+- **Clock checks**: wall time is compared with monotonic time; a backward
+  jump is logged, audited and not credited.
+- **Hosts writes** stay between Tether's markers, so the person's own entries
+  survive, and are written atomically.
+- **Audit log**: PIN set and removed, rejected credentials, overrides, backward
   clock jumps.
+
+## Known bypasses
+
+Listed so the UI stays honest and regressions are visible.
+
+- **An administrator** can stop the service, edit the hosts file, delete the
+  database or uninstall Tether. Nothing restarts a stopped service. This is
+  expected: for a child, use a standard account.
+- **Usage is per PC, not per person**: every Windows account on the machine
+  feeds the same budgets (to be fixed; see the current plan).
+- **Ending the session helper** stops tracking and blocking until the service
+  relaunches it (about 15 s).
+- **Store apps** all report as one host process, so per-app limits on them
+  don't work yet.
+- **Hosts-file blocking** is defeated by a browser using its own encrypted DNS.
+  Family DNS turns that off through browser policies and blocks DoT on port
+  853, but a browser that ignores policies, a VPN or a portable browser with
+  its own resolver gets around it.
+- **Browser time**: a site cannot have a time budget; time in a browser counts
+  as that browser.
+- **Moving the clock forward** is not detected (it can bring the day reset
+  closer). Sleep is never counted as use: gaps of more than 30 s between
+  reports are not bridged.
 
 ## Out of scope
 
-* Kernel driver or Protected Process Light (would need EV signing, WHQL and a
-  much larger threat model).
-* Making enforcement bulletproof against a determined administrator on their
-  own machine. This is a self-control aid; the docs say so, the onboarding says
-  so, and the UI says so when running in a configuration where blocking is
-  advisory.
-* Wayland support in v1.
-* Cloud sync, remote guardian dashboards.
-
-## Known bypasses (v1)
-
-Documented here so the UI can be honest about them and so that regressions can
-be spotted:
-
-* **Hosts-only mode** is defeated by any browser with DNS-over-HTTPS enabled
-  (Chrome, Edge, Firefox default in many regions). This is why the app can
-  optionally configure Cloudflare Family DNS at the adapter level, disable browser DoH
-  via enterprise policy keys (`HKLM\SOFTWARE\Policies\...`), and block known DoH endpoints.
-* **VPNs and portable browsers** bypass everything short of a kernel filter.
-  Detect a new tunnel interface and surface a warning; do not claim the site
-  is blocked when it isn't.
-* **Deleting the database.** Prevented by ACLs *only* when the user is not an
-  admin. On a self-controller's own machine, this is possible. The audit log
-  records it, and reinstalling starts from a clean slate — no silent recovery
-  that would make it look like the database survived.
-* **Killing the agent process.** Watchdog pair restarts each other; a stop is
-  logged. A determined admin can still stop both. On non-admin accounts,
-  service permissions prevent it.
-* **Uninstalling the app.** The correct answer, and always available. Not
-  something we try to prevent.
+- A kernel driver or protected process.
+- Cloud sync or a remote parent dashboard.
 
 ## What the UI must not do
 
-* Claim adult content is blocked when only the hosts backend is active and DoH
-  is on in the browser.
-* Claim a limit is enforced when the tracker backend has reported "unsupported"
-  for the current session (e.g. Wayland).
-* Silently swallow a `Backward`/`Forward` clock verdict — log and surface.
+- Claim a site is blocked while only the hosts file is active and the browser
+  uses its own encrypted DNS.
+- Claim limits are enforced while tracking is unavailable (the dashboard says
+  "Tracking unavailable" when no reports arrive).
+- Hide a failure: errors from the agent are shown, not swallowed.

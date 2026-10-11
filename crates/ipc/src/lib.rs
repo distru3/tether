@@ -100,9 +100,8 @@ pub enum Request {
     /// helper). Polled, so the session helper knows when to show/hide its
     /// overlay.
     BlockedApps,
-    /// Deliberate user action from the block overlay's "Quit" button:
-    /// terminate the app's process tree. Distinct from the removed auto-freeze;
-    /// this only happens when the user chooses to quit.
+    /// The block screen's "Close" button: end the app's process tree. Only
+    /// ever a deliberate choice by the person.
     CloseApps {
         #[ts(as = "i32")]
         app_id: i64,
@@ -561,8 +560,8 @@ pub struct StatusDto {
     pub day_start_minutes: i64,
     #[ts(as = "i32")]
     pub idle_threshold_secs: i64,
-    /// The active filter can enforce wildcard (subdomain) rules. True only when
-    /// the DNS-proxy backend is genuinely applied, not just present.
+    /// The active filter can enforce wildcard (subdomain) rules. Always false
+    /// today: the hosts file blocks exactly the names it is given.
     pub wildcard_domains: bool,
     /// The active filter can block individual URL paths. Always false, since
     /// neither `hosts` nor DNS can see a path; only a browser extension can.

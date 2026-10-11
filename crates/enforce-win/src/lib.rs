@@ -1,4 +1,6 @@
-//! Windows enforcement: freezing applications and filtering domains.
+//! Windows enforcement: closing a blocked app on request and filtering
+//! domains through the hosts file. Blocking itself is the block screen, drawn
+//! by the session helper and the UI.
 //!
 //! On non-Windows targets this crate compiles to nothing.
 

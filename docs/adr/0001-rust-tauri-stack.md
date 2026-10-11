@@ -1,7 +1,9 @@
 # ADR 0001: Rust + Tauri as the primary stack
 
 Date: 2026-08-20
-Status: Accepted
+Status: Accepted. Note (2026-10-11): the context below mentions
+`NtSuspendProcess`; Tether never freezes apps now. Blocking is the block
+screen (ADR 0002, `docs/ARCHITECTURE.md` §4).
 
 ## Context
 

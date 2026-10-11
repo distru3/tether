@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guidance and mandatory operational rules for AI agents working in this repository. Updated and verified on **2026-10-03**.
+Guidance and mandatory operational rules for AI agents working in this repository. Updated and verified on **2026-10-11**.
 
 ---
 
@@ -54,7 +54,8 @@ Violating these rules causes irreversible loss of user work and is strictly proh
    - Tauri Commands: Always check `ui/src-tauri/src/lib.rs` and verify registration in `tauri::generate_handler![]`.
    - UI Design & Classes: Always reference `docs/DESIGN_SYSTEM.md` (the v2 design contract: palette, type, components, voice), `docs/UI_SPECIFICATION.md`, `ui/src/styles/redesign.css` (theme tokens) and `ui/src/styles/tether.css` (`tt-` components of the v2 screens).
 3. **Reference On-Demand Documentation**:
-   - Full Architecture & Data Flows: [`docs/SYSTEM_MAP.md`](docs/SYSTEM_MAP.md)
+   - Architecture & Data Flows: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+   - What is and isn't enforced: [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md)
    - UI Redesign & Component Trees: [`docs/UI_SPECIFICATION.md`](docs/UI_SPECIFICATION.md)
    - Design System (v2): [`docs/DESIGN_SYSTEM.md`](docs/DESIGN_SYSTEM.md)
    - IPC Contracts & Tauri Bridge: [`docs/IPC_CATALOG.md`](docs/IPC_CATALOG.md)
@@ -92,7 +93,7 @@ cd ui && npm run tauri dev
 # CI creates empty placeholders, real builds copy them in (packaging/build-installer.ps1).
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings   # zero-warning policy enforced
-cargo test --workspace                                   # ~190 tests
+cargo test --workspace                                   # ~320 tests
 
 # Single crate / single test
 cargo test -p st-agent
@@ -130,6 +131,7 @@ CLI extras: `screentime-agent --service|--install|--uninstall` (SCM mode; instal
 
 ## 7. Mandatory Documentation Updates (Context Preservation)
 
-- **Continuous Documentation**: Each new feature, architectural adjustment, styling overhaul, or bugfix **must be recorded in the relevant document in `docs/`** (e.g. `docs/UI_SPECIFICATION.md`, `docs/SYSTEM_MAP.md`, `docs/ARCHITECTURE.md`, or dedicated architecture decision records in `docs/adr/`).
+- **Continuous Documentation**: Each new feature, architectural adjustment, styling overhaul, or bugfix **must be recorded in the relevant document in `docs/`** (`docs/ARCHITECTURE.md`, `docs/UI_SPECIFICATION.md`, `docs/IPC_CATALOG.md`, `docs/THREAT_MODEL.md`, `docs/DESIGN_SYSTEM.md`, or a decision record in `docs/adr/`).
+- **Docs describe the current state only.** Update or delete what a change makes untrue, in the same change; do not append dated changelog sections ("Phase 2", "polish pass") — history belongs in commit messages and ADRs. Plans and designs that aren't built yet go in an ADR, never in the present tense in ARCHITECTURE or UI_SPECIFICATION. The same goes for code comments: no notes about removed designs or old milestones.
 - **Context Preservation**: Agents must never leave the repository's documentation stale after modifying code or UI structures. Every session must leave behind an updated, truthful record of changes made, ensuring zero loss of operational context across agent turns.
 

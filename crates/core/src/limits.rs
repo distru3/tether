@@ -119,8 +119,8 @@ pub enum Decision {
         binding: LimitTarget,
         threshold_secs: i64,
     },
-    /// Budget spent. Freeze the process tree and show the block overlay until
-    /// the day boundary.
+    /// Budget spent. Show the block screen over the app until the day
+    /// boundary; the app itself keeps running.
     Block { binding: LimitTarget },
 }
 

@@ -200,7 +200,7 @@ const SIGNATURES: &[(&str, &str, &[&str])] = &[
     ("vmware.exe", "utilities-system", &[]),
     ("virtualbox.exe", "utilities-system", &[]),
     ("ccleaner.exe", "utilities-system", &[]),
-    // This app's own binaries. Freezing the dashboard or the agent is how a
+    // This app's own binaries. Blocking the dashboard or the agent is how a
     // self-control tool turns into an unusable machine, so both are NeverBlock.
     ("screentime-ui.exe", "utilities-system", &[]),
     ("screentime-agent.exe", "utilities-system", &[]),

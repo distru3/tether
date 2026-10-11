@@ -4,11 +4,9 @@
 //! to touch the OS. Implementations live in `st-tracker-win`,
 //! `st-tracker-linux`, `st-enforce-win` and `st-enforce-linux`.
 //!
-//! Two payoffs:
-//!
-//! * Linux is disposable. If the X11 port turns out not to be worth the effort,
-//!   deleting the Linux crates and one CI job is the whole job.
-//! * The limits engine and sampler can be tested with fakes, no VM required.
+//! It keeps each platform's code in its own crates (see
+//! `docs/adr/0004-linux-port.md` for Linux) and lets the limits engine and
+//! sampler be tested with fakes, no VM required.
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -100,22 +98,18 @@ pub trait IdleMonitor: Send {
     fn backend(&self) -> &'static str;
 }
 
-/// Suspends and resumes applications that have hit a limit.
+/// Finds and closes an app's processes.
 ///
-/// Freezing is strongly preferred over killing: a frozen process keeps its
-/// unsaved work and can be thawed when the next day starts or an override is
-/// granted. Terminating is the last resort, and only after the user has had a
-/// grace countdown to save.
+/// Limits are not enforced through this trait: a blocked app is covered by
+/// the block screen and keeps running, so nothing is lost. The agent uses it
+/// only when the person chooses Close on the block screen (`CloseApps`).
 pub trait ProcessController: Send {
     /// All live PIDs belonging to an app, including child processes. Browsers
     /// and Electron apps are process trees, so returning only the "main" PID
     /// would leave the app running.
     fn find_processes(&mut self, key: &AppKey) -> PlatformResult<Vec<u32>>;
 
-    fn freeze(&mut self, pid: u32) -> PlatformResult<()>;
-    fn thaw(&mut self, pid: u32) -> PlatformResult<()>;
-
-    /// Last resort. Callers must have shown a grace countdown first.
+    /// Ends one process.
     fn terminate(&mut self, pid: u32) -> PlatformResult<()>;
 
     fn backend(&self) -> &'static str;
@@ -125,9 +119,8 @@ pub trait ProcessController: Send {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BlockRule {
     pub domain: String,
-    /// Also match subdomains. The `hosts`-file backend cannot honour this and
-    /// must expand a known-subdomain list instead; the DNS-proxy backend
-    /// supports it natively.
+    /// Also match subdomains. The `hosts`-file backend cannot honour this; it
+    /// blocks exactly the names it is given.
     pub include_subdomains: bool,
 }
 

@@ -268,9 +268,9 @@ fn run_daemon(mode_label: &'static str) -> Result<()> {
         blocks_encrypted_dns: false,
     };
 
-    // The process controller is no longer used by the sampler (M2.5 removed
-    // the freeze); only the IPC server needs it, for the overlay's "Quit"
-    // action. Move it out of the backends and share it behind a lock.
+    // Only the IPC server uses the process controller, for the block
+    // screen's "Close" action. Move it out of the backends and share it
+    // behind a lock.
     let processes = Arc::new(Mutex::new(
         backends
             .processes

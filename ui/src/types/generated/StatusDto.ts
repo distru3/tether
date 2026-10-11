@@ -7,8 +7,8 @@ export type StatusDto = { agent_version: string, tracker_backend: string, enforc
  */
 tracking_available: boolean, blocks_encrypted_dns: boolean, strict_mode: boolean, pin_configured: boolean, show_hud_overlay: boolean, show_hud_in_fullscreen: boolean, hud_peek_hotkey: string, alert_volume: number, limit_cooldown_hours: number, day_start_minutes: number, idle_threshold_secs: number, 
 /**
- * The active filter can enforce wildcard (subdomain) rules. True only when
- * the DNS-proxy backend is genuinely applied, not just present.
+ * The active filter can enforce wildcard (subdomain) rules. Always false
+ * today: the hosts file blocks exactly the names it is given.
  */
 wildcard_domains: boolean, 
 /**

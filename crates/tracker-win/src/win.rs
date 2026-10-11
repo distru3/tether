@@ -1,12 +1,10 @@
 //! Win32 foreground-window and idle detection.
 //!
-//! # Verification status
+//! Media playback counts as presence: input-idle time is ignored while an
+//! audio session is active (see `Win32IdleMonitor`), so watching a film is not
+//! scored as idle.
 //!
-//! This is the M0 spike target. The API choices below are deliberate, but the
-//! exact `windows` crate signatures shift between minor versions, so treat the
-//! first `cargo build` as part of the spike rather than a formality.
-//!
-//! # Known gaps, tracked for M0/M1
+//! # Known gaps
 //!
 //! * **Packaged (UWP/Store) apps.** Their foreground window belongs to
 //!   `ApplicationFrameHost.exe`, so every Store app currently reports as that
@@ -17,8 +15,6 @@
 //!   becomes `LogonUI.exe` or nothing). The real fix is subscribing to
 //!   `WTSRegisterSessionNotification` in the session helper and pushing an
 //!   explicit lock event.
-//! * **Media playback.** A user watching a two-hour film generates no input and
-//!   will be scored as idle. Needs an audio-session check before shipping.
 
 use std::mem::size_of;
 
