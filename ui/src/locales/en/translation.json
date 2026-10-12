@@ -603,5 +603,10 @@
     "websites": "Blocked sites don’t open in any browser on this PC. Family DNS also blocks adult and harmful sites.",
     "timerTitle": "Timer",
     "timer": "A small timer shows the time left over an app that has a budget. Press {{hotkey}} to peek at it."
+  },
+  "hue": {
+    "games": "Games",
+    "social": "Social media",
+    "video": "Video and streaming"
   }
 }

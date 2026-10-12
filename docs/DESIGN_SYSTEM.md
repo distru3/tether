@@ -90,7 +90,8 @@ Both fonts are bundled (fontsource); the Tauri CSP blocks remote fonts.
 - **Ring**: time left of the total budget, orange arc on a tinted track, value
   in Unbounded inside.
 - **Day strip**: 4 am–4 am (follows `day_start_minutes`), usage blocks coloured
-  by budget, grey for apps outside any budget, hatched bedtime, orange "now"
+  by budget, or by the app's category hue when no budget covers it (grey for
+  everything else), hatched bedtime, orange "now"
   line. Every mark sits at its real time; labels are positioned, not spaced.
 - **Budget tile**: tinted card whose lower part fills to the fraction of time
   left. Status pill: "Running low" (orange), "Done for today" (plum), "Plenty

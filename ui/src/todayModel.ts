@@ -3,7 +3,7 @@
  * the day strip and the budget tiles. No React, no clock reads: callers pass
  * `now`, so the numbers are testable and the screen re-renders each minute.
  */
-import { hueFor, type BudgetHue } from "./budgetHue";
+import { hueFor, hueForCategory, type BudgetHue } from "./budgetHue";
 import { dayKeyToDate, shiftDay } from "./format";
 import type { CatalogDto } from "./types/generated/CatalogDto";
 import type { DaySummaryDto } from "./types/generated/DaySummaryDto";
@@ -134,14 +134,17 @@ export function totalState(catalog: CatalogDto | null, summary: DaySummaryDto | 
 
 // -------------------------------------------------------------- day strip
 
-/** Which budget's colour an app's use takes on the strip. */
+/**
+ * The colour an app's use takes in charts: the budget it counts toward, else
+ * its own category's colour, so Games look like games with or without a budget.
+ */
 export function hueForApp(appId: number, catalog: CatalogDto | null): { hue: BudgetHue; limit: LimitDto | null } {
     const limits = (catalog?.limits ?? []).filter((l) => l.enabled);
     const own = limits.find((l) => l.target.kind === "app" && l.target.id === appId);
     if (own) return { hue: hueFor(own.target, catalog), limit: own };
     const cat = limits.find((l) => l.target.kind === "category" && inCategory(catalog, appId, l.target.id));
     if (cat) return { hue: hueFor(cat.target, catalog), limit: cat };
-    return { hue: "other", limit: null };
+    return { hue: hueForCategory(catalog?.apps.find((a) => a.id === appId)?.primary_category, catalog), limit: null };
 }
 
 export interface StripSegment {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import { Lightbulb, Moon, Pencil, ShieldCheck, ShieldOff } from "lucide-react";
 import { listManualBlocks } from "../api";
-import type { BudgetHue } from "../budgetHue";
+import { hueLabel, type BudgetHue } from "../budgetHue";
 import { isHiddenDomain } from "../domains";
 import { formatDayLabel, formatDuration, shiftDay, targetLabel } from "../format";
 import { suggestBudget, type BudgetSuggestion } from "../activityModel";
@@ -114,8 +114,6 @@ export function TodayPage({ summary, catalog, statusInfo, viewDay, isViewingToda
                         viewDay={viewDay}
                         dayStart={dayStart}
                         now={isViewingToday ? nowPosition(viewDay, dayStart, now) : null}
-                        catalog={catalog}
-                        budgets={budgets}
                         used={used}
                     />
                 </div>
@@ -221,8 +219,6 @@ function DayStrip({
     viewDay,
     dayStart,
     now,
-    catalog,
-    budgets,
     used,
 }: {
     segments: StripSegment[];
@@ -230,8 +226,6 @@ function DayStrip({
     viewDay: number;
     dayStart: number;
     now: number | null;
-    catalog: CatalogDto | null;
-    budgets: BudgetState[];
     used: number;
 }) {
     const { t } = useTranslation();
@@ -241,11 +235,6 @@ function DayStrip({
         label: timeLabel(new Date(start.getTime() + f * 86_400_000)),
     }));
     const hues = HUE_ORDER.filter((h) => segments.some((s) => s.hue === h));
-    const legendName = (hue: BudgetHue) => {
-        if (hue === "other") return t("today.everythingElse");
-        const names = budgets.filter((b) => b.hue === hue).map((b) => targetLabel(b.limit.target, catalog));
-        return names.length > 0 ? names.join(", ") : t("today.everythingElse");
-    };
     const scheduleNames = [...new Set(bands.map((b) => b.schedule.name))];
     const description = t("today.stripAria", {
         from: timeLabel(start),
@@ -294,7 +283,7 @@ function DayStrip({
                     {hues.map((h) => (
                         <li key={h} className={`tt-hue-${h}`}>
                             <span className="tt-strip-key" aria-hidden="true" />
-                            {legendName(h)}
+                            {hueLabel(h)}
                         </li>
                     ))}
                     {scheduleNames.map((name) => (

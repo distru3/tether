@@ -1,5 +1,5 @@
 /**
- * Pure derivations for the Activity page: a week of days split by budget,
+ * Pure derivations for the Activity page: a week of days split by hue,
  * how each budget did over the week, and the week's most used apps.
  * Callers pass `now` and the day summaries; nothing here reads the clock.
  */
@@ -10,7 +10,7 @@ import type { CatalogDto } from "./types/generated/CatalogDto";
 import type { DaySummaryDto } from "./types/generated/DaySummaryDto";
 import type { LimitDto } from "./types/generated/LimitDto";
 
-/** The order budget colours stack in, bottom to top. */
+/** The order hues stack in, bottom to top. */
 export const STACK_ORDER: BudgetHue[] = ["other", "video", "social", "games"];
 
 /** The seven day keys ending at `endDay`, oldest first. */
@@ -18,7 +18,7 @@ export function weekDays(endDay: number): number[] {
     return Array.from({ length: 7 }, (_, i) => shiftDay(endDay, i - 6));
 }
 
-/** Seconds of use per budget colour on one day. */
+/** Seconds of use per hue on one day (see `hueForApp`). */
 export function dayByHue(summary: DaySummaryDto | null | undefined, catalog: CatalogDto | null): Record<BudgetHue, number> {
     const out: Record<BudgetHue, number> = { games: 0, social: 0, video: 0, total: 0, other: 0 };
     for (const row of summary?.apps ?? []) {

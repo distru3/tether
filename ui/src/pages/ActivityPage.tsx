@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import i18n from "../i18n";
-import type { BudgetHue } from "../budgetHue";
+import { hueLabel } from "../budgetHue";
 import { dayKeyToDate, formatDuration, shiftDay, targetLabel, weekdayShortNames } from "../format";
 import {
     budgetWeek,
@@ -72,11 +72,6 @@ export function ActivityPage({ catalog, today, now, onOpenDay }: ActivityPagePro
         summaryText += " " + t("activity.stayedUnder", { budget: formatDuration(lineBudget), count: underDays, days: pastDays.length });
     }
 
-    const hueName = (hue: BudgetHue) => {
-        if (hue === "other") return t("today.everythingElse");
-        const named = budgets.filter((b) => b.hue === hue).map((b) => targetLabel(b.limit.target, catalog));
-        return named.length > 0 ? named.join(", ") : t("today.everythingElse");
-    };
     const huesUsed = STACK_ORDER.filter((h) => days.some((d) => dayByHue(summaries.get(d), catalog)[h] > 0));
     const ticks = Array.from({ length: max / 3600 + 1 }, (_, i) => i * 3600).filter(
         (s, i, all) => all.length <= 7 || i % 2 === 0 || s === max,
@@ -173,7 +168,7 @@ export function ActivityPage({ catalog, today, now, onOpenDay }: ActivityPagePro
                             {huesUsed.map((h) => (
                                 <li key={h} className={`tt-hue-${h}`}>
                                     <span className="tt-strip-key" aria-hidden="true" />
-                                    {hueName(h)}
+                                    {hueLabel(h)}
                                 </li>
                             ))}
                             {lineBudget !== null && (

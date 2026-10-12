@@ -1,3 +1,4 @@
+import i18n from "./i18n";
 import type { CatalogDto } from "./types/generated/CatalogDto";
 import type { LimitTargetDto } from "./types/generated/LimitTargetDto";
 
@@ -11,7 +12,7 @@ const BY_SLUG: Record<string, BudgetHue> = {
     "video-streaming": "video",
 };
 
-function hueForCategory(categoryId: number | null | undefined, catalog: CatalogDto | null): BudgetHue {
+export function hueForCategory(categoryId: number | null | undefined, catalog: CatalogDto | null): BudgetHue {
     const slug = catalog?.categories.find((c) => c.id === categoryId)?.slug;
     return (slug && BY_SLUG[slug]) || "other";
 }
@@ -25,5 +26,17 @@ export function hueFor(target: LimitTargetDto, catalog: CatalogDto | null): Budg
             return hueForCategory(target.id, catalog);
         case "app":
             return hueForCategory(catalog?.apps.find((a) => a.id === target.id)?.primary_category, catalog);
+    }
+}
+
+/** What a hue stands for in chart legends: its kind of app, not a budget. */
+export function hueLabel(hue: BudgetHue): string {
+    switch (hue) {
+        case "total":
+            return i18n.t("limitEditor.totalScreenTime");
+        case "other":
+            return i18n.t("today.everythingElse");
+        default:
+            return i18n.t(`hue.${hue}`);
     }
 }

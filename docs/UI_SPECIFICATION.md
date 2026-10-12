@@ -75,8 +75,10 @@ suggestion, schedule and website cards, most used apps, this week.
 - **Headline** priority: total used up, a budget done, total low, a budget
   low, else "You're on track today". Past days show the date.
 - **Day strip**: the agent's day (day start to +24 h), usage coloured by the
-  budget each app counts toward, schedules hatched, an orange "now" line;
-  labels at their real positions.
+  budget each app counts toward, else by the app's own category hue
+  (`todayModel.ts hueForApp`), schedules hatched, an orange "now" line;
+  labels at their real positions. The legend names the hue ("Games",
+  "Social media", "Video and streaming", "Everything else"; `hueLabel`).
 - **Blocked apps** (`BlockedBanner`): each blocked app with "Allow 15 more
   minutes" (PIN).
 - **Tiles**: one per enabled app or category budget; the tint fills to the
@@ -124,7 +126,7 @@ cooldown; lowering, adding and switching off apply now), Cancel / Save.
 ## 5. Activity (`pages/ActivityPage.tsx`, `activityModel.ts`)
 
 A week (stepper, never past today): summary sentence; "Screen time by day"
-(bars split by budget colour, a dashed total-budget line, days over budget in
+(bars split by hue as on the day strip, a dashed total-budget line, days over budget in
 danger text, bars open the day); "Most used this week" under the chart; side
 column with "Budgets this week" (average and days run out, total included)
 and "When time ran out" (block-screen answers).
