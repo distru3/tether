@@ -635,6 +635,9 @@
 .tt-hue-games { --hue: var(--budget-games); --hue-tile: var(--budget-games-tile); --hue-fill: var(--budget-games-fill); --hue-ink: var(--budget-games-ink); }
 .tt-hue-social { --hue: var(--budget-social); --hue-tile: var(--budget-social-tile); --hue-fill: var(--budget-social-fill); --hue-ink: var(--budget-social-ink); }
 .tt-hue-video { --hue: var(--budget-video); --hue-tile: var(--budget-video-tile); --hue-fill: var(--budget-video-fill); --hue-ink: var(--budget-video-ink); }
+.tt-hue-chat { --hue: var(--budget-chat); --hue-tile: var(--budget-chat-tile); --hue-fill: var(--budget-chat-fill); --hue-ink: var(--budget-chat-ink); }
+.tt-hue-music { --hue: var(--budget-music); --hue-tile: var(--budget-music-tile); --hue-fill: var(--budget-music-fill); --hue-ink: var(--budget-music-ink); }
+.tt-hue-work { --hue: var(--budget-work); --hue-tile: var(--budget-work-tile); --hue-fill: var(--budget-work-fill); --hue-ink: var(--budget-work-ink); }
 .tt-hue-total { --hue: var(--color-accent); --hue-tile: var(--color-accent-subtle); --hue-fill: var(--color-accent-subtle); --hue-ink: var(--text-secondary); }
 .tt-hue-other { --hue: var(--budget-other); --hue-tile: var(--budget-other-tile); --hue-fill: var(--budget-other-fill); --hue-ink: var(--budget-other-ink); }
 
@@ -1611,7 +1614,13 @@ body {
 .tt-act-bar > span {
   display: block;
   flex: none;
+  box-sizing: border-box;
   background: var(--hue);
+}
+
+/* A 2px card-coloured gap between stacked hues, so neighbours never touch. */
+.tt-act-bar > span + span {
+  border-bottom: 2px solid var(--bg-card);
 }
 
 .tt-act-bar > span:last-child {

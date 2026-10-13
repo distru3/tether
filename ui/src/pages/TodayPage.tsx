@@ -46,7 +46,7 @@ interface TodayPageProps {
     more?: ReactNode;
 }
 
-const HUE_ORDER: BudgetHue[] = ["games", "social", "video", "other"];
+const HUE_ORDER: BudgetHue[] = ["games", "social", "video", "music", "chat", "work", "other"];
 
 /** A clock time in the UI language: "4 AM", "10:30 PM". */
 function timeLabel(d: Date): string {

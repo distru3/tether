@@ -110,6 +110,18 @@
   --budget-social-ink: #E5C3C9;
   --budget-video-ink: #B5DDD1;
   --budget-other-ink: #D9CCF2;
+  --budget-chat: #3A72D8;
+  --budget-chat-tile: #1B2448;
+  --budget-chat-fill: #26386E;
+  --budget-chat-ink: #C3D3F2;
+  --budget-music: #E0559F;
+  --budget-music-tile: #3A1B36;
+  --budget-music-fill: #58264F;
+  --budget-music-ink: #F0C3DC;
+  --budget-work: #D9B92A;
+  --budget-work-tile: #332B1C;
+  --budget-work-fill: #4E4220;
+  --budget-work-ink: #EBDDA6;
   --ring-track: #3A2752;
   /* Weekly bars: visible on the card (3:1), unlike the ring track. */
   --week-bar: #6B5A8C;
@@ -223,6 +235,18 @@
   --budget-social-ink: #7A2A1C;
   --budget-video-ink: #1D4A3D;
   --budget-other-ink: #4E4363;
+  --budget-chat: #1F5FBF;
+  --budget-chat-tile: #E3ECFA;
+  --budget-chat-fill: #C2D5F3;
+  --budget-chat-ink: #173E78;
+  --budget-music: #BF3A8E;
+  --budget-music-tile: #FBE4F1;
+  --budget-music-fill: #F3C3DF;
+  --budget-music-ink: #6E1F51;
+  --budget-work: #BB9F00;
+  --budget-work-tile: #FBF3D3;
+  --budget-work-fill: #F1E2A0;
+  --budget-work-ink: #5C4D00;
   --ring-track: #ECE5F6;
   --week-bar: #DDD3EC;
   --week-bar-hover: #C9BBE0;

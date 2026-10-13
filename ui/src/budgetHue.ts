@@ -2,14 +2,22 @@ import i18n from "./i18n";
 import type { CatalogDto } from "./types/generated/CatalogDto";
 import type { LimitTargetDto } from "./types/generated/LimitTargetDto";
 
-/** The four budget hues of the design system (docs/DESIGN_SYSTEM.md §3). */
-export type BudgetHue = "games" | "social" | "video" | "total" | "other";
+/** The category hues of the design system (docs/DESIGN_SYSTEM.md §3). */
+export type BudgetHue = "games" | "social" | "video" | "music" | "chat" | "work" | "total" | "other";
 
 const BY_SLUG: Record<string, BudgetHue> = {
     games: "games",
     "social-media": "social",
     "short-form-video": "social",
     "video-streaming": "video",
+    "music-audio": "music",
+    communication: "chat",
+    productivity: "work",
+    creativity: "work",
+    education: "work",
+    finance: "work",
+    "ai-chatbots": "work",
+    development: "work",
 };
 
 export function hueForCategory(categoryId: number | null | undefined, catalog: CatalogDto | null): BudgetHue {

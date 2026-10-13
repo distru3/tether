@@ -56,14 +56,24 @@ stored: `light`, `dark`, `system`. Older names migrate (`midnight-cobalt`,
 | Danger text | `#B42318` | `#FFA3B0` |
 | Success text | `#176A52` | `#7FD6BE` |
 
-Budget hues (tile background / fill level / swatch):
+Category hues (tile background / fill level / swatch). They colour budgets
+and every chart of use; an app without a budget takes its category's hue.
 
-| Budget | Light tile | Light fill | Swatch | Dark tile | Dark fill |
-|---|---|---|---|---|---|
-| Games | `#EEE7FF` | `#D6C9FA` | `#8F6CE6` | `#2D2150` | `#46337A` |
-| Social | `#FFE6E0` | — | `#E8705C` | `#3A1F2E` | — |
-| Video | `#DDF4EC` | `#B4E6D7` | `#2FA383` | `#18332E` | `#23504A` |
-| Everything else | — | — | `#B9AFC8` | — | `#8A7CA6` |
+| Hue | Light tile | Light fill | Light swatch | Dark tile | Dark fill | Dark swatch |
+|---|---|---|---|---|---|---|
+| Games | `#EEE7FF` | `#D6C9FA` | `#8F6CE6` | `#2D2150` | `#46337A` | `#A88BEA` |
+| Social | `#FFE6E0` | `#FFCFC4` | `#E8705C` | `#3A1F2E` | `#57283C` | `#F58A78` |
+| Video | `#DDF4EC` | `#B4E6D7` | `#2FA383` | `#18332E` | `#23504A` | `#5CC2A6` |
+| Music | `#FBE4F1` | `#F3C3DF` | `#BF3A8E` | `#3A1B36` | `#58264F` | `#E0559F` |
+| Chat | `#E3ECFA` | `#C2D5F3` | `#1F5FBF` | `#1B2448` | `#26386E` | `#3A72D8` |
+| Work and school | `#FBF3D3` | `#F1E2A0` | `#BB9F00` | `#332B1C` | `#4E4220` | `#D9B92A` |
+| Everything else | `#EEEAF3` | `#DDD6E7` | `#B9AFC8` | `#2A2238` | `#3A3150` | `#8A7CA6` |
+
+The six colours were checked with a colour-blindness simulation: neighbours in
+a stack (video, chat, social, games, work, music) stay clearly apart; a few
+non-neighbour pairs are close for colour-blind readers, so every chart keeps
+its legend and 2px gaps between blocks. Gold is under 3:1 on white, so it
+never carries text.
 
 Orange marks "now" and "attention" (running low, the primary action on the
 block screen). Do not use it for decoration.

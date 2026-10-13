@@ -10,8 +10,11 @@ import type { CatalogDto } from "./types/generated/CatalogDto";
 import type { DaySummaryDto } from "./types/generated/DaySummaryDto";
 import type { LimitDto } from "./types/generated/LimitDto";
 
-/** The order hues stack in, bottom to top. */
-export const STACK_ORDER: BudgetHue[] = ["other", "video", "social", "games"];
+/**
+ * The order hues stack in, bottom to top. Neighbours were checked to stay
+ * apart under colour blindness (video/chat/social/games/work/music).
+ */
+export const STACK_ORDER: BudgetHue[] = ["other", "video", "chat", "social", "games", "work", "music"];
 
 /** The seven day keys ending at `endDay`, oldest first. */
 export function weekDays(endDay: number): number[] {
@@ -20,7 +23,7 @@ export function weekDays(endDay: number): number[] {
 
 /** Seconds of use per hue on one day (see `hueForApp`). */
 export function dayByHue(summary: DaySummaryDto | null | undefined, catalog: CatalogDto | null): Record<BudgetHue, number> {
-    const out: Record<BudgetHue, number> = { games: 0, social: 0, video: 0, total: 0, other: 0 };
+    const out: Record<BudgetHue, number> = { games: 0, social: 0, video: 0, music: 0, chat: 0, work: 0, total: 0, other: 0 };
     for (const row of summary?.apps ?? []) {
         out[hueForApp(row.id, catalog).hue] += row.seconds;
     }

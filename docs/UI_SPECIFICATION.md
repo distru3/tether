@@ -24,10 +24,14 @@ same change.
   Today, Activity, tray panel, block-screen reasons. Dialog styles (`.dialog`,
   `.btn`, `.field`, `.pin-input`) are in `app.css`; the budget editor and the
   switch (`.toggle-switch`) in `redesign.css`.
-- **Budget hues**: `tt-hue-{games,social,video,total,other}` sets `--hue`,
-  `--hue-tile`, `--hue-fill`, `--hue-ink` (`ui/src/budgetHue.ts`: Games →
-  games; Social Media and Short-Form Video → social; Video & Streaming → video;
-  total → total; everything else → other).
+- **Category hues**: `tt-hue-{games,social,video,music,chat,work,total,other}`
+  sets `--hue`, `--hue-tile`, `--hue-fill`, `--hue-ink` (`ui/src/budgetHue.ts`:
+  Games → games; Social Media and Short-Form Video → social; Video & Streaming
+  → video; Music & Audio → music; Communication → chat; Productivity,
+  Creativity, Education, Finance, AI Assistants and Development → work; total
+  → total; everything else (browsers and other uncategorised apps, News,
+  Shopping, Utilities) → other). Stacks follow `STACK_ORDER`
+  (`activityModel.ts`), whose neighbours stay apart under colour blindness.
 - **Fonts** are bundled (Rubik, Unbounded, JetBrains Mono via fontsource); the
   Tauri CSP blocks remote fonts.
 - **Text**: every visible string, `aria-label`, `title` and placeholder goes
@@ -78,7 +82,8 @@ suggestion, schedule and website cards, most used apps, this week.
   budget each app counts toward, else by the app's own category hue
   (`todayModel.ts hueForApp`), schedules hatched, an orange "now" line;
   labels at their real positions. The legend names the hue ("Games",
-  "Social media", "Video and streaming", "Everything else"; `hueLabel`).
+  "Social media", "Video and streaming", "Music", "Chat", "Work and school",
+  "Everything else"; `hueLabel`).
 - **Blocked apps** (`BlockedBanner`): each blocked app with "Allow 15 more
   minutes" (PIN).
 - **Tiles**: one per enabled app or category budget; the tint fills to the

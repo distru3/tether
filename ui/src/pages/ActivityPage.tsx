@@ -72,7 +72,14 @@ export function ActivityPage({ catalog, today, now, onOpenDay }: ActivityPagePro
         summaryText += " " + t("activity.stayedUnder", { budget: formatDuration(lineBudget), count: underDays, days: pastDays.length });
     }
 
-    const huesUsed = STACK_ORDER.filter((h) => days.some((d) => dayByHue(summaries.get(d), catalog)[h] > 0));
+    // Each day's use per hue; time outside any app row (rare) goes to "other".
+    const dayParts = days.map((d, i) => {
+        const parts = dayByHue(summaries.get(d), catalog);
+        const counted = STACK_ORDER.reduce((a, h) => a + parts[h], 0);
+        if ((totals[i] ?? 0) > counted) parts.other += (totals[i] ?? 0) - counted;
+        return parts;
+    });
+    const huesUsed = STACK_ORDER.filter((h) => dayParts.some((parts) => parts[h] > 0));
     const ticks = Array.from({ length: max / 3600 + 1 }, (_, i) => i * 3600).filter(
         (s, i, all) => all.length <= 7 || i % 2 === 0 || s === max,
     );
@@ -126,11 +133,8 @@ export function ActivityPage({ catalog, today, now, onOpenDay }: ActivityPagePro
                                     <span className="tt-act-limit" style={{ bottom: `${(lineBudget / max) * 100}%` }} aria-hidden="true" />
                                 )}
                                 {days.map((d, i) => {
-                                    const parts = dayByHue(summaries.get(d), catalog);
+                                    const parts = dayParts[i] ?? dayByHue(null, catalog);
                                     const total = totals[i] ?? 0;
-                                    // Usage outside any app row (rare) goes to "other".
-                                    const counted = STACK_ORDER.reduce((a, h) => a + parts[h], 0);
-                                    if (total > counted) parts.other += total - counted;
                                     return (
                                         <button
                                             type="button"

@@ -607,6 +607,9 @@
   "hue": {
     "games": "Games",
     "social": "Social media",
-    "video": "Video and streaming"
+    "video": "Video and streaming",
+    "music": "Music",
+    "chat": "Chat",
+    "work": "Work and school"
   }
 }
