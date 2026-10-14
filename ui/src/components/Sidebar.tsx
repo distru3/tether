@@ -1,3 +1,4 @@
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import type { StatusDto } from "../types/generated/StatusDto";
 import {
@@ -46,8 +47,32 @@ export function Sidebar({
     statusInfo,
     showDayPicker = true,
 }: SidebarProps) {
-    const { t } = useTranslation();
+    const { t, i18n } = useTranslation();
     const isLive = phase === "live";
+
+    // One plum pill that glides to the active tab instead of each tab
+    // switching its own background.
+    const navRef = useRef<HTMLElement>(null);
+    const [pill, setPill] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+    const [pillReady, setPillReady] = useState(false);
+    useLayoutEffect(() => {
+        const nav = navRef.current;
+        if (!nav) return;
+        const measure = () => {
+            const active = nav.querySelector<HTMLElement>(".nav-item--active");
+            if (active) setPill({ x: active.offsetLeft, y: active.offsetTop, w: active.offsetWidth, h: active.offsetHeight });
+        };
+        measure();
+        const observer = new ResizeObserver(measure);
+        observer.observe(nav);
+        return () => observer.disconnect();
+    }, [activeTab, blockedCount, i18n.language]);
+    // Place the pill without animating on first paint; glide afterwards.
+    useEffect(() => {
+        if (pill === null || pillReady) return;
+        const id = requestAnimationFrame(() => setPillReady(true));
+        return () => cancelAnimationFrame(id);
+    }, [pill, pillReady]);
 
     return (
         <aside className="app-sidebar" aria-label={t("nav.main")}>
@@ -60,7 +85,14 @@ export function Sidebar({
                 </div>
             </div>
 
-            <nav className="sidebar-nav" aria-label={t("nav.sections")}>
+            <nav className="sidebar-nav" aria-label={t("nav.sections")} ref={navRef}>
+                {pill !== null && (
+                    <span
+                        className={`nav-indicator${pillReady ? " nav-indicator--glide" : ""}`}
+                        style={{ width: pill.w, height: pill.h, transform: `translate(${pill.x}px, ${pill.y}px)` }}
+                        aria-hidden="true"
+                    />
+                )}
                 <button
                     type="button"
                     className={`nav-item ${activeTab === "overview" ? "nav-item--active" : ""}`}

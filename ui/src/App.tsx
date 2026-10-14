@@ -13,6 +13,7 @@ import { PinSetupDialog } from "./components/PinSetupDialog";
 import { Toasts } from "./components/Toasts";
 import { WeeklyChart } from "./components/WeeklyChart";
 import { Sidebar, type TabKey } from "./components/Sidebar";
+import { navigate } from "./motion";
 import { TitleBar } from "./components/TitleBar";
 import { scrollMainToTop } from "./scrollTop";
 import { BlockOverlay } from "./components/BlockOverlay";
@@ -28,6 +29,8 @@ import { useNowMinute } from "./hooks/useNowMinute";
 import { useTheme } from "./hooks/useTheme";
 import { useToasts } from "./hooks/useToasts";
 
+/** Nav order, for the direction of page transitions. */
+const TAB_ORDER: TabKey[] = ["overview", "limits", "activity", "settings"];
 const FIRST_RUN_KEY = "screentime_first_run_completed";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -125,15 +128,12 @@ function MainDashboard() {
   }
 
   const selectTab = (tab: TabKey) => {
-    const show = () => {
+    if (tab === activeTab) return;
+    const direction = TAB_ORDER.indexOf(tab) > TAB_ORDER.indexOf(activeTab) ? "forward" : "back";
+    navigate(direction, () => {
       setActiveTab(tab);
       scrollMainToTop();
-    };
-    if (!document.startViewTransition) {
-      show();
-    } else {
-      document.startViewTransition(show);
-    }
+    });
   };
 
   // Tray actions that loosen protection arrive here so they go through the
@@ -256,7 +256,7 @@ function MainDashboard() {
             )}
 
             {activeTab === "overview" && (
-              <div style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
+              <div className="tab-page">
                 <TodayPage
                   summary={summary}
                   catalog={catalog}
@@ -303,7 +303,7 @@ function MainDashboard() {
             )}
 
             {activeTab === "limits" && (
-              <div className="tab-page" style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
+              <div className="tab-page">
                 <LimitsPage
                   catalog={catalog}
                   summary={summary}
@@ -317,7 +317,7 @@ function MainDashboard() {
             )}
 
             {activeTab === "activity" && (
-              <div className="tab-page" style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
+              <div className="tab-page">
                 <ActivityPage
                   catalog={catalog}
                   today={todayKey(now)}
@@ -331,7 +331,7 @@ function MainDashboard() {
             )}
 
             {activeTab === "settings" && (
-              <div className="tab-page" style={{ animation: "fade-in-scale 0.3s cubic-bezier(0.2, 0, 0, 1)" }}>
+              <div className="tab-page">
                 <SettingsPage
                   statusInfo={statusInfo}
                   catalog={catalog}

@@ -95,6 +95,17 @@ Both fonts are bundled (fontsource); the Tauri CSP blocks remote fonts.
 - Page gutter 40px, card padding 18–24px, gaps 16–22px.
 - Cards are flat on light (1px shadow), bordered on dark. No glass or blur.
 
+## 5a. Motion
+
+Motion shows where things come from and how much there is; it never
+decorates. Pages slide in the direction of travel (forward to the right
+of the nav, back to the left, mirrored in Arabic); content rises into
+place in reading order; amounts (ring, meters, bars, the day strip) grow
+from zero; the nav pill glides between tabs. Easing is `--ease-out` for
+arrivals and `--ease-spring` only for dialogs and the pill. Durations stay
+under half a second. With reduced motion everything is instant.
+Implementation: `docs/UI_SPECIFICATION.md` §2a.
+
 ## 6. Components
 
 - **Ring**: time left of the total budget, orange arc on a tinted track, value

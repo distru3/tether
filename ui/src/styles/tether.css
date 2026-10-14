@@ -1578,7 +1578,7 @@ body {
   flex: 1;
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 14px;
+  gap: 6px;
   align-items: end;
   padding-inline: 6px;
   border-bottom: 1px solid var(--border-card);
@@ -1598,57 +1598,142 @@ body {
   pointer-events: none;
 }
 
+/* Each day is a full-height column: the whole column is the hit target, and
+   the selected day gets a soft plum wash behind its bar. */
 .tt-act-bar {
   position: relative;
   height: 100%;
   display: flex;
-  flex-direction: column-reverse;
-  padding: 0;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 0 4px;
   border: 0;
-  background: none;
+  border-radius: 12px 12px 0 0;
+  background: transparent;
   cursor: pointer;
-  border-radius: 8px 8px 0 0;
-  overflow: hidden;
+  transition: background-color var(--duration-normal) var(--ease-out);
 }
 
-.tt-act-bar > span {
-  display: block;
-  flex: none;
-  box-sizing: border-box;
-  background: var(--hue);
+.tt-act-bar:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
 }
 
-/* A 2px card-coloured gap between stacked hues, so neighbours never touch. */
-.tt-act-bar > span + span {
-  border-bottom: 2px solid var(--bg-card);
-}
-
-.tt-act-bar > span:last-child {
-  border-radius: 8px 8px 0 0;
-}
-
-.tt-act-bar:hover:not(:disabled) > span {
-  filter: brightness(1.08);
+.tt-act-bar--selected,
+.tt-act-bar--selected:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
 }
 
 .tt-act-bar:focus-visible {
   outline: 2px solid var(--color-accent);
-  outline-offset: 3px;
-}
-
-.tt-act-bar--today {
-  outline: 2px solid var(--text-primary);
-  outline-offset: 3px;
+  outline-offset: 2px;
 }
 
 .tt-act-bar:disabled {
   cursor: default;
 }
 
+/* Buttons shrink on press app-wide; a chart column should not. */
+.tt-act-bar:not([disabled]):active {
+  transform: none;
+}
+
+.tt-act-stack {
+  width: 100%;
+  max-width: 64px;
+  height: 100%;
+  display: flex;
+  flex-direction: column-reverse;
+  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+  transform-origin: bottom;
+  animation: tt-grow-y 620ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 45ms);
+}
+
+.tt-act-stack > span {
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  background: var(--hue);
+  transition: opacity var(--duration-normal) var(--ease-out), filter var(--duration-normal) var(--ease-out);
+}
+
+/* A 2px card-coloured gap between stacked hues, so neighbours never touch. */
+.tt-act-stack > span + span {
+  border-bottom: 2px solid var(--bg-card);
+}
+
+.tt-act-stack > span:last-child {
+  border-radius: 8px 8px 0 0;
+}
+
+.tt-act-bar:hover:not(:disabled) .tt-act-stack > span {
+  filter: brightness(1.06) saturate(1.05);
+}
+
+.tt-act-seg--muted {
+  opacity: 0.16;
+}
+
+.tt-act-avg {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Hover card beside a bar, placed by column so it needs no measuring. */
+.tt-act-tip {
+  position: absolute;
+  z-index: 3;
+  min-width: 176px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--bg-card-elevated);
+  border: 1px solid var(--border-card);
+  box-shadow: var(--shadow-lg, 0 12px 32px rgba(20, 10, 40, 0.18));
+  font-size: 12.5px;
+  color: var(--text-secondary);
+  pointer-events: none;
+  animation: tt-pop-in 160ms var(--ease-out) both;
+}
+
+.tt-act-tip strong {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tt-act-tip-total {
+  display: block;
+  margin: 2px 0 6px;
+  font-family: var(--font-display);
+  font-size: 16px;
+  color: var(--text-primary);
+}
+
+.tt-act-tip ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.tt-act-tip li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 6px;
+}
+
+.tt-act-tip li > span:last-child {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
 .tt-act-days {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 14px;
+  gap: 6px;
   padding-inline: 60px 6px;
   text-align: center;
   font-size: 13px;
@@ -1667,6 +1752,51 @@ body {
 .tt-act-day--today {
   font-weight: 600;
   color: var(--text-primary);
+}
+
+.tt-act-days > span {
+  border-radius: 8px;
+  padding-block: 2px;
+  transition: color var(--duration-normal) var(--ease-out), background-color var(--duration-normal) var(--ease-out);
+}
+
+.tt-act-day--selected {
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+/* The legend doubles as a filter. */
+.tt-act-legend {
+  margin-top: 4px;
+}
+
+.tt-act-legend-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  margin-inline: -10px -4px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease-out), opacity var(--duration-normal) var(--ease-out), border-color var(--duration-fast) var(--ease-out);
+}
+
+.tt-act-legend-btn:hover {
+  background: color-mix(in srgb, var(--hue) 14%, transparent);
+}
+
+.tt-act-legend-btn--on {
+  border-color: var(--hue);
+  background: color-mix(in srgb, var(--hue) 16%, transparent);
+  color: var(--text-primary);
+}
+
+.tt-act-legend-btn--off {
+  opacity: 0.5;
 }
 
 .tt-act-limit-key {
@@ -1707,24 +1837,311 @@ body {
   white-space: nowrap;
 }
 
+/* Most used this week: rows open into the app's week. */
 .tt-act-apps {
   margin: 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 2px;
   font-size: 14px;
 }
 
-.tt-act-apps li {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
+.tt-act-apps > li {
+  border-radius: 12px;
+  transition: background-color var(--duration-normal) var(--ease-out);
 }
 
-.tt-act-apps li > span:last-child {
+.tt-act-app--open {
+  background: color-mix(in srgb, var(--hue) 9%, transparent);
+}
+
+.tt-act-app {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 12px;
+  background: none;
+  font: inherit;
+  color: var(--text-primary);
+  text-align: start;
+  cursor: pointer;
+}
+
+.tt-act-app:hover {
+  background: color-mix(in srgb, var(--text-primary) 5%, transparent);
+}
+
+.tt-act-app:not([disabled]):active {
+  transform: none;
+}
+
+.tt-act-app-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-act-app-time {
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-act-app-chevron {
+  color: var(--text-muted);
+  transition: transform var(--duration-normal) var(--ease-out);
+}
+
+.tt-act-app--open .tt-act-app-chevron {
+  transform: rotate(180deg);
+}
+
+.tt-act-app-more {
+  padding: 2px 10px 12px;
+  animation: tt-rise 260ms var(--ease-out) both;
+}
+
+.tt-act-spark {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.tt-act-spark-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+}
+
+.tt-act-spark-col:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--hue) 14%, transparent);
+}
+
+.tt-act-spark-col:disabled {
+  cursor: default;
+}
+
+.tt-act-spark-bar {
+  width: 14px;
+  height: 44px;
+  display: flex;
+  align-items: flex-end;
+  border-radius: 5px;
+  background: color-mix(in srgb, var(--hue) 14%, transparent);
+  overflow: hidden;
+}
+
+.tt-act-spark-bar > span {
+  width: 100%;
+  min-height: 0;
+  border-radius: 5px;
+  background: var(--hue);
+  transform-origin: bottom;
+  animation: tt-grow-y 480ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 35ms);
+}
+
+.tt-act-spark-day {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.tt-act-spark-col--selected .tt-act-spark-day {
+  color: var(--color-accent-text);
+  font-weight: 600;
+}
+
+.tt-act-app-note {
+  margin: 6px 0 0;
+  font-size: 12.5px;
+  color: var(--text-secondary);
+}
+
+/* The selected day. */
+.tt-eyebrow {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-accent-text);
+}
+
+[dir="rtl"] .tt-eyebrow {
+  letter-spacing: 0;
+}
+
+.tt-act-day-swap {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: tt-swap-in 320ms var(--ease-out) both;
+}
+
+.tt-act-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+[dir="rtl"] .tt-act-open svg {
+  transform: scaleX(-1);
+}
+
+.tt-act-day-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 14px;
+}
+
+.tt-act-day-amount {
+  font-family: var(--font-display);
+  font-size: 34px;
+  line-height: 1;
+  color: var(--text-primary);
+}
+
+.tt-act-compare {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+  background: var(--bg-recessed);
+  color: var(--text-secondary);
+}
+
+.tt-act-compare--up {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent-text);
+}
+
+.tt-act-compare--down {
+  background: color-mix(in srgb, var(--budget-video) 16%, transparent);
+  color: var(--color-success-text, var(--text-primary));
+}
+
+.tt-act-mix {
+  display: flex;
+  gap: 2px;
+  height: 14px;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.tt-act-mix > span {
+  flex-basis: 0;
+  min-width: 4px;
+  background: var(--hue);
+  transform-origin: left;
+  animation: tt-grow-x 560ms var(--ease-out) both;
+  transition: opacity var(--duration-normal) var(--ease-out);
+}
+
+[dir="rtl"] .tt-act-mix > span {
+  transform-origin: right;
+}
+
+.tt-act-mix-legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 22px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.tt-act-mix-legend li {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  white-space: nowrap;
+}
+
+.tt-act-mix-time {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.tt-act-day-apps-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.tt-act-subtitle {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tt-act-day-apps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.tt-act-day-apps li {
+  display: grid;
+  grid-template-columns: minmax(110px, 1.2fr) 2fr auto;
+  align-items: center;
+  gap: 12px;
+  animation: tt-rise 360ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 40ms);
+}
+
+.tt-act-day-app-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tt-act-day-app-meter {
+  height: 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--hue) 14%, transparent);
+  overflow: hidden;
+}
+
+.tt-act-day-app-meter > span {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--hue);
+  transform-origin: left;
+  animation: tt-grow-x 600ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 40ms + 80ms);
+}
+
+[dir="rtl"] .tt-act-day-app-meter > span {
+  transform-origin: right;
+}
+
+.tt-act-day-app-time {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .tt-head > .tt-week-stepper {
@@ -2071,4 +2488,268 @@ ul.tt-chips {
 
 [dir="rtl"] .tt-flip-rtl {
   transform: scaleX(-1);
+}
+
+/* ==========================================================================
+   Motion. One vocabulary for the whole app: pages slide in the direction
+   of travel, content rises into place in reading order, and amounts grow
+   from zero. Everything here is off with reduced motion (app.css).
+   ========================================================================== */
+
+:root {
+  --ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+  --nav-dx: 40px;
+}
+
+:root[data-nav-dir="back"] {
+  --nav-dx: -40px;
+}
+
+:root[dir="rtl"] {
+  --nav-dx: -40px;
+}
+
+:root[dir="rtl"][data-nav-dir="back"] {
+  --nav-dx: 40px;
+}
+
+/* Page transitions (motion.ts navigate): only the content area moves; the
+   header stays put while its pill glides to the new tab. */
+.app-main-content {
+  view-transition-name: page;
+}
+
+/* The frame (title bar, header) never animates; its pill glides live. */
+::view-transition-old(root),
+::view-transition-new(root),
+::view-transition-old(sidebar),
+::view-transition-new(sidebar),
+::view-transition-old(titlebar),
+::view-transition-new(titlebar) {
+  animation: none;
+}
+
+::view-transition-group(page) {
+  animation-duration: 420ms;
+  animation-timing-function: var(--ease-out);
+}
+
+::view-transition-old(page) {
+  animation: tt-page-out 200ms cubic-bezier(0.4, 0, 1, 1) both;
+}
+
+::view-transition-new(page) {
+  animation: tt-page-in 420ms var(--ease-out) both;
+}
+
+@keyframes tt-page-out {
+  to {
+    opacity: 0;
+    transform: translateX(calc(var(--nav-dx) * -0.5));
+  }
+}
+
+@keyframes tt-page-in {
+  from {
+    opacity: 0;
+    transform: translateX(var(--nav-dx));
+  }
+}
+
+/* Content rises into place in reading order when a page appears. */
+.tab-page .tt-page > :not(.tt-columns),
+.tab-page .tt-columns > * > *,
+.tab-page .tt-today > *,
+.tab-page .tt-today-more > *,
+.tt-tiles > *,
+.tt-today-cards > * {
+  animation: tt-rise 480ms var(--ease-out) both;
+}
+
+.tab-page .tt-page > :nth-child(2),
+.tab-page .tt-columns > * > :nth-child(2),
+.tab-page .tt-today > :nth-child(2),
+.tab-page .tt-today-more > :nth-child(2),
+.tt-tiles > :nth-child(2),
+.tt-today-cards > :nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.tab-page .tt-page > :nth-child(3),
+.tab-page .tt-columns > * > :nth-child(3),
+.tab-page .tt-today > :nth-child(3),
+.tab-page .tt-today-more > :nth-child(3),
+.tt-tiles > :nth-child(3) {
+  animation-delay: 120ms;
+}
+
+.tab-page .tt-page > :nth-child(4),
+.tab-page .tt-columns > * > :nth-child(4),
+.tab-page .tt-today > :nth-child(4),
+.tt-tiles > :nth-child(4) {
+  animation-delay: 170ms;
+}
+
+.tab-page .tt-page > :nth-child(n + 5),
+.tab-page .tt-columns > * > :nth-child(n + 5),
+.tab-page .tt-today > :nth-child(n + 5),
+.tt-tiles > :nth-child(n + 5) {
+  animation-delay: 210ms;
+}
+
+/* Side column a beat after the main one. */
+.tab-page .tt-col-side > * {
+  animation-delay: 90ms;
+}
+
+.tab-page .tt-col-side > :nth-child(2) {
+  animation-delay: 150ms;
+}
+
+.tab-page .tt-col-side > :nth-child(n + 3) {
+  animation-delay: 200ms;
+}
+
+/* Setup: each step's content rises in as the step changes. */
+.tt-setup-main > :not(.tt-steps) {
+  animation: tt-rise 460ms var(--ease-out) both;
+}
+
+.tt-setup-main > :nth-child(3) {
+  animation-delay: 70ms;
+}
+
+.tt-setup-main > :nth-child(n + 4) {
+  animation-delay: 130ms;
+}
+
+.tt-steps li {
+  transition: color var(--duration-normal) var(--ease-out), background-color var(--duration-normal) var(--ease-out);
+}
+
+/* Amounts grow from zero. */
+.tt-ring-arc {
+  animation: tt-ring-draw 1100ms var(--ease-out) 120ms both;
+}
+
+.tt-meter > span {
+  transform-origin: left;
+  animation: tt-grow-x 800ms var(--ease-out) 150ms both;
+}
+
+[dir="rtl"] .tt-meter > span {
+  transform-origin: right;
+}
+
+.tt-tile-fill {
+  transform-origin: bottom;
+  animation: tt-grow-y 900ms var(--ease-out) 180ms both;
+  transition: height 600ms var(--ease-out);
+}
+
+.tt-week-track > span {
+  transform-origin: bottom;
+  animation: tt-grow-y 700ms var(--ease-out) both;
+  transition: height 500ms var(--ease-out), background-color var(--duration-fast) var(--ease-out);
+}
+
+.tt-week-col:nth-child(2) .tt-week-track > span { animation-delay: 40ms; }
+.tt-week-col:nth-child(3) .tt-week-track > span { animation-delay: 80ms; }
+.tt-week-col:nth-child(4) .tt-week-track > span { animation-delay: 120ms; }
+.tt-week-col:nth-child(5) .tt-week-track > span { animation-delay: 160ms; }
+.tt-week-col:nth-child(6) .tt-week-track > span { animation-delay: 200ms; }
+.tt-week-col:nth-child(7) .tt-week-track > span { animation-delay: 240ms; }
+
+.tt-strip-seg {
+  transform-origin: left;
+  animation: tt-grow-x 520ms var(--ease-out) 160ms both;
+}
+
+[dir="rtl"] .tt-strip-seg {
+  transform-origin: right;
+}
+
+.tt-strip-now {
+  animation: tt-fade 400ms var(--ease-out) 600ms both;
+}
+
+/* Dialogs: the card springs up, the backdrop fades. */
+.backdrop {
+  animation: tt-fade 220ms var(--ease-out) both;
+}
+
+.backdrop > .dialog {
+  animation: tt-dialog-in 380ms var(--ease-spring) both;
+}
+
+/* Cards that act as a whole respond to the pointer. */
+.tt-tile,
+.tt-today-cards > * {
+  transition: transform 260ms var(--ease-out), box-shadow 260ms var(--ease-out);
+}
+
+.tt-tile:hover,
+.tt-today-cards > :hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md, 0 10px 28px rgba(30, 15, 60, 0.12));
+}
+
+@keyframes tt-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+
+@keyframes tt-swap-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes tt-pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px) scale(0.96);
+  }
+}
+
+@keyframes tt-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes tt-grow-x {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+@keyframes tt-grow-y {
+  from {
+    transform: scaleY(0);
+  }
+}
+
+@keyframes tt-ring-draw {
+  from {
+    stroke-dasharray: 0 1000;
+  }
+}
+
+@keyframes tt-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation: none !important;
+  }
 }

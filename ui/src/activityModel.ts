@@ -114,6 +114,32 @@ export function weekTopApps(
     return [...totals.values()].filter((t) => t.seconds > 0).sort((a, b) => b.seconds - a.seconds).slice(0, limit);
 }
 
+/** One app's use on each of `days` (0 where it wasn't used or didn't load). */
+export function appWeekSeries(summaries: ReadonlyMap<number, DaySummaryDto>, days: number[], appId: number): number[] {
+    return days.map((d) => summaries.get(d)?.apps.find((a) => a.id === appId)?.seconds ?? 0);
+}
+
+export interface DayApp {
+    id: number;
+    label: string;
+    seconds: number;
+    hue: BudgetHue;
+}
+
+/** A day's apps, most used first, each with the hue it is drawn in. */
+export function dayApps(summary: DaySummaryDto | null | undefined, catalog: CatalogDto | null): DayApp[] {
+    return (summary?.apps ?? [])
+        .filter((a) => a.seconds > 0)
+        .map((a) => ({ id: a.id, label: a.label, seconds: a.seconds, hue: hueForApp(a.id, catalog).hue }))
+        .sort((a, b) => b.seconds - a.seconds);
+}
+
+/** Average of the given day totals, or null with nothing to average. */
+export function dailyAverage(totals: number[]): number | null {
+    const used = totals.filter((s) => s > 0);
+    return used.length > 0 ? Math.round(used.reduce((a, b) => a + b, 0) / used.length) : null;
+}
+
 /** A tidy top for the chart's scale: the next whole hour above the data. */
 export function chartMaxSeconds(values: number[]): number {
     const max = Math.max(3600, ...values);

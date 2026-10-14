@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { scrollMainToTop } from "../scrollTop";
 import { useTranslation } from "react-i18next";
+import { navigate } from "../motion";
 import { Clock3 } from "lucide-react";
 import { addManualBlock, describeError, listManualBlocks } from "../api";
 import { hueFor } from "../budgetHue";
@@ -57,7 +58,7 @@ export function LimitsPage({ catalog, summary, statusInfo, actions, notify, onSe
     if (view === "schedules" || view === "websites") {
         return (
             <div className="tt-page">
-                <button type="button" className="tt-btn tt-btn--outline tt-btn--sm tt-back" onClick={() => setView("main")}>
+                <button type="button" className="tt-btn tt-btn--outline tt-btn--sm tt-back" onClick={() => navigate("back", () => setView("main"))}>
                     {t("limitsPage.backToLimits")}
                 </button>
                 {view === "schedules" ? (
@@ -148,12 +149,12 @@ export function LimitsPage({ catalog, summary, statusInfo, actions, notify, onSe
                 </section>
 
                 <div className="tt-col-side">
-                    <SchedulesCard schedules={downtime.schedules} loading={downtime.loading} onToggle={downtime.toggleSchedule} onManage={() => setView("schedules")} />
+                    <SchedulesCard schedules={downtime.schedules} loading={downtime.loading} onToggle={downtime.toggleSchedule} onManage={() => navigate("forward", () => setView("schedules"))} />
                     <WebsitesCard
                         familyDns={statusInfo?.family_dns_enabled ?? false}
                         familyDnsPending={settingPending("family_dns")}
                         onFamilyDns={(on) => onSetSetting("family_dns", String(on))}
-                        onManage={() => setView("websites")}
+                        onManage={() => navigate("forward", () => setView("websites"))}
                     />
                 </div>
             </div>

@@ -102,13 +102,15 @@ export function TodayPage({ summary, catalog, statusInfo, viewDay, isViewingToda
     return (
         <div className="tt-today">
             <section className="tt-card tt-today-hero" aria-labelledby="today-title">
-                <Ring total={total} used={used} isToday={isViewingToday} loading={loading} />
+                {/* Keyed by day so stepping days redraws the ring and strip. */}
+                <Ring key={`ring-${viewDay}`} total={total} used={used} isToday={isViewingToday} loading={loading} />
                 <div className="tt-today-hero-body">
                     <div className="tt-today-head">
                         <h1 id="today-title" className="tt-today-title">{title}</h1>
                         <p className="tt-sub">{subtitle}</p>
                     </div>
                     <DayStrip
+                        key={`strip-${viewDay}`}
                         segments={segments}
                         bands={bands}
                         viewDay={viewDay}

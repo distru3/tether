@@ -670,21 +670,6 @@ body {
   }
 }
 
-/* ---- View Transitions ---- */
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation-duration: 0.3s;
-  animation-timing-function: cubic-bezier(0.2, 0, 0, 1);
-}
-
-::view-transition-new(root) {
-  animation-name: fade-in-scale;
-}
-
-::view-transition-old(root) {
-  animation-name: fade-out-scale;
-}
-
 @keyframes fade-in-scale {
   from {
     opacity: 0;
@@ -711,11 +696,11 @@ body {
 
 /* ---- Micro-interactions ---- */
 button:not([disabled]) {
-  transition: transform var(--transition-fast), background-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition: transform 120ms var(--ease-out), background-color var(--transition-fast), box-shadow var(--transition-fast);
 }
 
 button:not([disabled]):active {
-  transform: scale(0.96);
+  transform: scale(0.97);
 }
 
 .app-sidebar {

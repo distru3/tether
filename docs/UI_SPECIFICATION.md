@@ -66,6 +66,25 @@ same change.
 - The day stepper shows only on Today (hidden, keeping its space, elsewhere).
   Arrow keys also step days.
 - Switching tabs or subviews scrolls to the top (`scrollTop.ts`).
+- The active tab's pill is one element (`.nav-indicator`) that glides to the
+  new tab (measured in `Sidebar.tsx`).
+
+## 2a. Motion (`ui/src/motion.ts`, the Motion section of `tether.css`)
+
+- **Page transitions**: tabs and the Limits subviews change through
+  `navigate(direction, update)`, a View Transition on the content area
+  (`view-transition-name: page`): the old page fades out drifting back, the
+  new one slides in from the side it lies on (`--nav-dx`, mirrored in
+  Arabic). The frame (title bar, header) does not animate. Without the API,
+  or with reduced motion, the change is instant.
+- **Entrances**: cards and rows rise into place in reading order (main
+  column first, side column a beat later); setup steps do the same.
+- **Amounts grow from zero**: the ring draws, meters and the day strip fill
+  from the start edge, bars grow from the baseline in day order, tile fills
+  rise. Stepping days on Today redraws the ring and strip.
+- **Dialogs** spring up over a fading backdrop; tiles and Today's cards lift
+  2px on hover; buttons press to 97 %.
+- Everything is off with `prefers-reduced-motion` (app.css, tokens.css).
 - While the agent is unreachable: a `role="alert"` banner. While tracking is
   unavailable (no reports for a minute): a notice under the nav.
 
@@ -130,11 +149,26 @@ cooldown; lowering, adding and switching off apply now), Cancel / Save.
 
 ## 5. Activity (`pages/ActivityPage.tsx`, `activityModel.ts`)
 
-A week (stepper, never past today): summary sentence; "Screen time by day"
-(bars split by hue as on the day strip, a dashed total-budget line, days over budget in
-danger text, bars open the day); "Most used this week" under the chart; side
-column with "Budgets this week" (average and days run out, total included)
-and "When time ran out" (block-screen answers).
+A week (stepper, never past today), explored in place:
+
+- Summary sentence, and the daily average beside the chart title.
+- **Screen time by day**: bars split by hue as on the day strip, a dashed
+  total-budget line, days over budget in danger text. Each day is a
+  full-height column button (`aria-pressed`): clicking selects the day
+  (plum wash behind the column); arrow keys, Home and End move the
+  selection. Hovering or focusing a column shows a card beside it with the
+  date, total and the biggest four hues. The legend entries are toggle
+  buttons: one hue at a time stays bright and the rest fade, here and in
+  the day panel.
+- **Day panel** (`DayPanel`): the selected day (today by default): date,
+  total, how it compares with the week's daily average, a bar of its hues
+  with time and share, then its apps with meters (only the filtered hue's
+  apps while a filter is on, with Show all). "Open on Today" opens the day
+  on Today.
+- Side column: **Most used this week** (rows open into the app's week, a
+  bar per day that selects that day, and its busiest day), **Budgets this
+  week** (average and days run out, total included), **When time ran out**
+  (block-screen answers).
 
 ## 6. Settings (`pages/SettingsPage.tsx`)
 

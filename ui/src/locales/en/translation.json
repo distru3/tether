@@ -588,7 +588,22 @@
     "topApps": "Most used this week",
     "whyTitle": "When time ran out",
     "whyBody": "The answers given on the block screen this week.",
-    "whyEmpty": "No answers this week."
+    "whyEmpty": "No answers this week.",
+    "selectDay": "{{day}}: {{amount}}. Show this day.",
+    "dailyAvgValue": "{{amount}} a day on average",
+    "showOnly": "Show only {{name}}",
+    "showAll": "Show all",
+    "appWeek": "{{app}} by day",
+    "peakDay": "Most on {{day}}: {{amount}}",
+    "selectedDay": "Selected day",
+    "openOnToday": "Open on Today",
+    "dayEmpty": "Nothing was recorded on this day.",
+    "aboutAverage": "About your daily average",
+    "aboveAverage": "{{amount}} above your daily average",
+    "belowAverage": "{{amount}} below your daily average",
+    "dayApps": "Apps that day",
+    "appsOf": "{{name}} apps that day",
+    "noAppsInHue": "None of these apps were used that day."
   },
   "help": {
     "todayTitle": "Today",
