@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import * as api from "../api";
@@ -45,9 +45,47 @@ export interface EditorRequest {
     limit: LimitDto | null;
 }
 
+/** How long one PIN entry keeps the window unlocked (docs/adr/0006). */
+export const UNLOCK_MS = 10 * 60 * 1000;
+
 export function useLedgerActions(deps: Deps) {
     const { t } = useTranslation();
     const [busy, setBusy] = useState(false);
+
+    // One grown-up unlock: the PIN, in memory only, until it runs out, the
+    // window is hidden, or someone presses Lock. The agent still checks it
+    // on every request; this only saves typing it again.
+    const unlockRef = useRef<{ pin: string; until: number } | null>(null);
+    const [unlockedUntil, setUnlockedUntil] = useState<number | null>(null);
+    const lock = useCallback(() => {
+        unlockRef.current = null;
+        setUnlockedUntil(null);
+    }, []);
+    const unlockWith = useCallback((pin: string) => {
+        if (!pin || !depsRef.current.pinConfigured) return;
+        const until = Date.now() + UNLOCK_MS;
+        unlockRef.current = { pin, until };
+        setUnlockedUntil(until);
+    }, []);
+    /** The unlocked PIN, if the unlock still holds. */
+    const heldPin = useCallback((): string | null => {
+        const held = unlockRef.current;
+        if (held && held.until > Date.now()) return held.pin;
+        if (held) lock();
+        return null;
+    }, [lock]);
+    useEffect(() => {
+        if (unlockedUntil === null) return;
+        const timer = window.setTimeout(lock, Math.max(0, unlockedUntil - Date.now()));
+        return () => window.clearTimeout(timer);
+    }, [unlockedUntil, lock]);
+    useEffect(() => {
+        const onVisibility = () => {
+            if (document.visibilityState === "hidden") lock();
+        };
+        document.addEventListener("visibilitychange", onVisibility);
+        return () => document.removeEventListener("visibilitychange", onVisibility);
+    }, [lock]);
 
     const [editor, setEditor] = useState<EditorRequest | null>(null);
     const [gate, setGate] = useState<GateRequest | null>(null);
@@ -83,7 +121,10 @@ export function useLedgerActions(deps: Deps) {
 
     const attempt = useCallback(
         (label: string, makeOp: (pin: string) => Promise<void>) => {
-            if (depsRef.current.pinConfigured) {
+            const held = depsRef.current.pinConfigured ? heldPin() : null;
+            if (held !== null) {
+                runExclusive(() => makeOp(held));
+            } else if (depsRef.current.pinConfigured) {
                 setGateError(null);
                 const request = { label, run: makeOp };
                 gateRef.current = request;
@@ -92,7 +133,7 @@ export function useLedgerActions(deps: Deps) {
                 runExclusive(() => makeOp(""));
             }
         },
-        [runExclusive],
+        [runExclusive, heldPin],
     );
 
     /**
@@ -103,17 +144,21 @@ export function useLedgerActions(deps: Deps) {
      */
     const guarded = useCallback(
         async (label: string, op: (pin?: string) => Promise<void>): Promise<void> => {
+            const held = heldPin();
             try {
-                await op(undefined);
+                await op(held ?? undefined);
             } catch (error) {
                 if (api.errorCode(error) !== "bad_pin") throw error;
+                // A held PIN that stopped working (changed elsewhere) ends
+                // the unlock; ask again.
+                if (held !== null) lock();
                 setGateError(null);
                 const request: GateRequest = { label, run: (pin) => op(pin) };
                 gateRef.current = request;
                 setGate(request);
             }
         },
-        [],
+        [heldPin, lock],
     );
 
     const submitGate = useCallback(
@@ -122,13 +167,19 @@ export function useLedgerActions(deps: Deps) {
             if (!request || busyRef.current) return;
             runExclusive(async () => {
                 await request.run(pin);
+                unlockWith(pin);
                 gateRef.current = null;
                 setGate(null);
                 setGateError(null);
             });
         },
-        [runExclusive],
+        [runExclusive, unlockWith],
     );
+
+    /** Ask for the PIN only to unlock (the child view's Unlock button). */
+    const unlock = useCallback(() => {
+        attempt(t("pinGate.unlock"), (pin) => (pin ? api.verifyPin(pin) : Promise.resolve()));
+    }, [attempt, t]);
 
     const cancelGate = useCallback(() => {
         if (busyRef.current) return;
@@ -227,11 +278,13 @@ export function useLedgerActions(deps: Deps) {
 
     const submitPinSetup = useCallback(async (newPin: string, currentPin: string) => {
         const reply = await api.setPin(newPin, currentPin.length > 0 ? currentPin : null);
+        // A held PIN is the old one now.
+        lock();
         depsRef.current.notify("success", t("actions.pinSaved"));
         // The dialog stays open to display the one-time recovery code; it
         // closes when the user confirms they wrote the code down.
         return reply;
-    }, []);
+    }, [lock]);
 
     const [categorizeTarget, setCategorizeTarget] = useState<{
         appId: number;
@@ -300,6 +353,10 @@ export function useLedgerActions(deps: Deps) {
     return {
         attempt,
         guarded,
+        /** Epoch ms the unlock ends, or null while locked. */
+        unlockedUntil,
+        unlock,
+        lock,
         busy,
         setSetting,
         editor,

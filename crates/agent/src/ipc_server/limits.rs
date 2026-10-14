@@ -41,14 +41,12 @@ pub(super) fn set_limit(ctx: &Ctx, spec: LimitSpec, now: DateTime<Utc>) -> Respo
         {
             now
         }
-        // Only loosening *minutes* while staying enabled waits out the cooldown.
-        Some(_) => {
-            now + Duration::hours(
-                read_recover(&ctx.policy, "policy")
-                    .limit_cooldown_hours
-                    .max(0),
-            )
-        }
+        // Only loosening *minutes* while staying enabled waits out the
+        // cooldown, and only where it is the safeguard (docs/adr/0006).
+        Some(_) => match cooldown_hours(ctx, &db) {
+            Ok(hours) => now + Duration::hours(hours),
+            Err(e) => return error_internal(format!("read pin: {e}")),
+        },
         None => now,
     };
 
@@ -79,6 +77,17 @@ pub(super) fn set_limit(ctx: &Ctx, spec: LimitSpec, now: DateTime<Utc>) -> Respo
         },
         Err(e) => error_internal(format!("set limit: {e}")),
     }
+}
+
+/// How long a loosened limit waits. For a guardian with a PIN the PIN is the
+/// safeguard: `auth` already demanded it, so the change applies at once. For
+/// "Me" (or a guardian who has not set a PIN yet) the wait stops impulses.
+fn cooldown_hours(ctx: &Ctx, db: &Db) -> st_storage::Result<i64> {
+    let policy = read_recover(&ctx.policy, "policy");
+    if policy.profile == "guardian" && db.pin_hash()?.is_some() {
+        return Ok(0);
+    }
+    Ok(policy.limit_cooldown_hours.max(0))
 }
 
 pub(super) fn delete_limit(ctx: &Ctx, target: LimitTargetDto, now: DateTime<Utc>) -> Response {

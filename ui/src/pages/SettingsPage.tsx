@@ -190,7 +190,14 @@ export function SettingsPage({
                                 onChange={(v) => set("strict_mode", String(v))}
                             />
                         </Row>
-                        <Row title={t("settingsPage.cooldown")} hint={t("settingsPage.cooldownHint")}>
+                        <Row
+                            title={t("settingsPage.cooldown")}
+                            hint={
+                                statusInfo?.profile === "guardian" && statusInfo.pin_configured
+                                    ? t("settingsPage.cooldownGuardianHint")
+                                    : t("settingsPage.cooldownHint")
+                            }
+                        >
                             <NumberField
                                 label={t("settingsPage.cooldown")}
                                 value={statusInfo?.limit_cooldown_hours}

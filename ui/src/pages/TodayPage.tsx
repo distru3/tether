@@ -46,6 +46,8 @@ interface TodayPageProps {
     more?: ReactNode;
     /** The account on screen (null: this window's own). */
     viewedAccount?: number | null;
+    /** Child view (docs/adr/0006): no edit buttons and no suggestion. */
+    locked?: boolean;
 }
 
 const HUE_ORDER: BudgetHue[] = ["games", "social", "video", "music", "chat", "work", "other"];
@@ -68,6 +70,7 @@ export function TodayPage({
     banner,
     more,
     viewedAccount = null,
+    locked = false,
 }: TodayPageProps) {
     const { t } = useTranslation();
     const dayStart = statusInfo?.day_start_minutes ?? 0;
@@ -147,7 +150,7 @@ export function TodayPage({
                             name={nameOf(b)}
                             isToday={isViewingToday}
                             resetAt={resetAt}
-                            onEdit={() => actions.openEditor(b.limit.target, b.limit)}
+                            onEdit={locked ? undefined : () => actions.openEditor(b.limit.target, b.limit)}
                         />
                     ))}
                 </section>
@@ -158,14 +161,16 @@ export function TodayPage({
                             <h2 className="tt-card-title">{t("today.noBudgetsTitle")}</h2>
                             <p className="tt-sub">{t("today.noBudgetsBody")}</p>
                         </div>
-                        <button type="button" className="tt-btn tt-btn--primary" onClick={actions.startNewOrder}>
-                            {t("today.addBudget")}
-                        </button>
+                        {!locked && (
+                            <button type="button" className="tt-btn tt-btn--primary" onClick={actions.startNewOrder}>
+                                {t("today.addBudget")}
+                            </button>
+                        )}
                     </section>
                 )
             )}
 
-            {isViewingToday && budgets.length + (total ? 1 : 0) > 0 && (
+            {!locked && isViewingToday && budgets.length + (total ? 1 : 0) > 0 && (
                 <Suggestion
                     viewedAccount={viewedAccount}
                     viewDay={viewDay}
@@ -329,7 +334,8 @@ function BudgetTile({
     name: string;
     isToday: boolean;
     resetAt: Date;
-    onEdit: () => void;
+    /** Absent in the child view. */
+    onEdit?: () => void;
 }) {
     const { t } = useTranslation();
     const fill = state.budget > 0 ? Math.min(1, state.left / state.budget) : 0;
@@ -383,9 +389,11 @@ function BudgetTile({
                         </>
                     )}
                 </div>
-                <button type="button" className="tt-tile-edit" onClick={onEdit} aria-label={t("today.editBudget", { name })} title={t("today.editBudget", { name })}>
-                    <Pencil size={16} aria-hidden="true" />
-                </button>
+                {onEdit && (
+                    <button type="button" className="tt-tile-edit" onClick={onEdit} aria-label={t("today.editBudget", { name })} title={t("today.editBudget", { name })}>
+                        <Pencil size={16} aria-hidden="true" />
+                    </button>
+                )}
             </div>
         </article>
     );

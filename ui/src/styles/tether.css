@@ -2492,6 +2492,41 @@ ul.tt-chips {
   transform: scaleX(-1);
 }
 
+/* Child view (LockedPage.tsx, docs/adr/0006). */
+.tt-locked {
+  max-width: 560px;
+  margin: 48px auto 0;
+  padding: 40px 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  text-align: center;
+}
+
+.tt-locked-icon {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 20px;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+}
+
+[data-theme="dark"] .tt-locked-icon {
+  background: color-mix(in srgb, var(--budget-games) 18%, transparent);
+  color: var(--budget-games);
+}
+
+.tt-locked-title {
+  font-size: 30px;
+}
+
+.tt-locked .tt-btn {
+  margin-top: 8px;
+}
+
 /* A checkbox with a title and a hint (setup: "This is my own account"). */
 .tt-check {
   display: flex;

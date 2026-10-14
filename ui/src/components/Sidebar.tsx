@@ -9,6 +9,7 @@ import {
     ChevronLeft,
     ChevronRight,
     Calendar,
+    LockOpen,
 } from "lucide-react";
 import { formatDayLabel } from "../format";
 
@@ -30,6 +31,9 @@ interface SidebarProps {
     activeLimitsCount?: number;
     /** The day picker only means something on the dashboard. */
     showDayPicker?: boolean;
+    /** Whole minutes left on the grown-up unlock, or null while locked. */
+    unlockedMinutes?: number | null;
+    onLock?: () => void;
 }
 
 export function Sidebar({
@@ -46,6 +50,8 @@ export function Sidebar({
     activeLimitsCount = 0,
     statusInfo,
     showDayPicker = true,
+    unlockedMinutes = null,
+    onLock,
 }: SidebarProps) {
     const { t, i18n } = useTranslation();
     const isLive = phase === "live";
@@ -83,6 +89,18 @@ export function Sidebar({
                     <span className={`status-dot ${isLive ? "status-dot--live" : "status-dot--offline"}`} aria-hidden="true" />
                     <span className="status-label">{isLive ? t("sidebar.statusLive") : phase === "connecting" ? t("sidebar.statusConnecting") : t("sidebar.statusOffline")}</span>
                 </div>
+                {unlockedMinutes !== null && onLock && (
+                    <button
+                        type="button"
+                        className="unlock-pill"
+                        onClick={onLock}
+                        title={t("unlock.lockNow")}
+                        aria-label={t("unlock.aria", { count: unlockedMinutes })}
+                    >
+                        <LockOpen size={13} aria-hidden="true" />
+                        <span>{t("unlock.label", { count: unlockedMinutes })}</span>
+                    </button>
+                )}
             </div>
 
             <nav className="sidebar-nav" aria-label={t("nav.sections")} ref={navRef}>

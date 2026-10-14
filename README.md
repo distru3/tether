@@ -22,8 +22,9 @@ cloud.
   minute left, and a peek shortcut (Ctrl+Alt+T).
 - **Today and Activity**: time left, a strip of the day, the week against the
   limits.
-- **PIN**: loosening anything needs the PIN; raising a limit also waits 24
-  hours.
+- **PIN**: loosening anything needs the PIN, entered once for 10 minutes.
+  For yourself, raising a limit also waits 24 hours; for a child, the PIN
+  is enough. On a child's account, Limits and Settings stay locked.
 - **Per Windows account**: each account's time is counted on its own, and
   limits apply only to the accounts you choose (a parent's own account can
   be left out).

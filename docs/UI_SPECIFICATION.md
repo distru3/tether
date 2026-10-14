@@ -69,6 +69,21 @@ same change.
 - The active tab's pill is one element (`.nav-indicator`) that glides to the
   new tab (measured in `Sidebar.tsx`).
 
+## 2b. PIN, unlock and child view (ADR 0006)
+
+- **One unlock**: the first PIN entered in the main window (any prompt)
+  keeps it unlocked for 10 minutes (`useLedgerActions`: `unlockedUntil`,
+  `lock`, `unlock`). While unlocked, prompts are skipped and the held PIN is
+  sent; a rejected held PIN ends the unlock and asks again. The window locks
+  on the header pill ("Unlocked · 9 min", click to lock), after 10 minutes,
+  or when hidden. Setting a new PIN locks. Viewing another account's screen
+  time ends with the unlock.
+- **Child view**: profile "Someone I look after", a PIN set, a watched
+  account on screen, and locked. Today and Activity stay, without tile Edit
+  buttons, the Add a budget button, the suggestion, All apps or category
+  changes; Limits and Settings show `components/LockedPage.tsx` ("Limits
+  are set by a grown-up", Unlock).
+
 ## 2a. Motion (`ui/src/motion.ts`, the Motion section of `tether.css`)
 
 - **Page transitions**: tabs and the Limits subviews change through
@@ -126,7 +141,8 @@ suggestion, schedule and website cards, most used apps, this week.
 
 ## 4. Limits (`pages/LimitsPage.tsx`)
 
-- Header with the cooldown in words and **+ New budget**.
+- Header with the cooldown in words ("Changes made with the PIN apply right
+  away." for someone looked after, with a PIN) and **+ New budget**.
 - **Waiting** banner (neutral plum) per pending loosening, with Cancel.
 - **Budgets**: swatch, name, rule, a meter of time left today ("Used up
   today"), switch, Edit.
@@ -152,8 +168,9 @@ Total switcher and picker (new budgets), the app's category with Change
 category, daily amount (h/m fields, preset pills, slider ticks from 1h),
 "Different limit on some days" (quick picks, day buttons, per-day adjuster),
 "Budget is on" switch, then a note saying when the change applies
-(`limitRules.ts waitsForCooldown` mirrors the agent: raising waits for the
-cooldown; lowering, adding and switching off apply now), Cancel / Save.
+(`limitRules.ts waitsForCooldown` and `cooldownHoursFor` mirror the agent:
+raising waits for the cooldown in "Me" mode, applies now for a guardian with
+a PIN; lowering, adding and switching off apply now), Cancel / Save.
 
 ## 5. Activity (`pages/ActivityPage.tsx`, `activityModel.ts`)
 
@@ -180,7 +197,8 @@ A week (stepper, never past today), explored in place:
 
 ## 6. Settings (`pages/SettingsPage.tsx`)
 
-Groups: **Protection** (who it's for, PIN, strict mode, wait before raising),
+Groups: **Protection** (who it's for, PIN, strict mode, wait before raising;
+its hint says it only applies to "Me" when the PIN is the safeguard),
 **Windows accounts** (one switch per account: "Limits apply"; turning one
 off takes the PIN and lifts its blocks; "(you)" marks this account),
 **Timer on screen** (show timer, in full-screen games, peek shortcut, chime

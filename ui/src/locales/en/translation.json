@@ -202,7 +202,8 @@
     "allowApp": "Always allow {{app}} during downtime",
     "pinLabel": "PIN",
     "viewAccount": "See {{name}}’s screen time",
-    "unwatchAccount": "Stop limits on {{name}}"
+    "unwatchAccount": "Stop limits on {{name}}",
+    "unlock": "Unlock for 10 minutes"
   },
   "pinSetup": {
     "recoveryCodeTitle": "Recovery code",
@@ -389,7 +390,8 @@
     "familyDnsHint": "Blocks adult and harmful sites in every browser",
     "backToLimits": "‹ Back to Limits",
     "leftOf": "{{left}} left of {{budget}}",
-    "leftToday": "Time left today for {{name}}"
+    "leftToday": "Time left today for {{name}}",
+    "subtitleGuardian": "Changes made with the PIN apply right away."
   },
   "settingsPage": {
     "title": "Settings",
@@ -445,7 +447,8 @@
     "accountsHint": "Limits apply to the accounts switched on. A new account is included the first time it signs in.",
     "accountWatched": "Limits apply",
     "accountUnwatched": "Limits don’t apply. Time is still counted.",
-    "accountSwitch": "Limits apply to {{name}}"
+    "accountSwitch": "Limits apply to {{name}}",
+    "cooldownGuardianHint": "Only used for “Me”. For someone you look after, the PIN is the safeguard."
   },
   "setup": {
     "steps": "Setup steps",
@@ -644,5 +647,19 @@
     "unwatched": "Limits don’t apply to this account. Its time is still counted.",
     "pick": "Whose screen time",
     "backToMine": "Back to mine"
+  },
+  "locked": {
+    "limitsTitle": "Limits are set by a grown-up",
+    "limitsBody": "Your budgets and schedules are on Today. Ask a grown-up if something needs to change.",
+    "settingsTitle": "Settings are kept by a grown-up",
+    "settingsBody": "A grown-up can unlock this page with the PIN.",
+    "unlock": "Unlock"
+  },
+  "unlock": {
+    "label_one": "Unlocked · {{count}} min",
+    "label_other": "Unlocked · {{count}} min",
+    "aria_one": "Unlocked for {{count}} more minute. Lock now",
+    "aria_other": "Unlocked for {{count}} more minutes. Lock now",
+    "lockNow": "Lock now"
   }
 }

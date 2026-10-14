@@ -38,7 +38,7 @@ Every request on the local named pipe (`\\.\pipe\screentime`) and the Tauri comm
 
 | Request Variant | Parameters | Response Variant | Invariants & Cooldown |
 | :--- | :--- | :--- | :--- |
-| `SetLimit` | `target: LimitTargetDto`, `default_minutes: u32`, `weekday_minutes: [Option<u32>; 7]`, `enabled: bool`, `pin: String` | `Accepted { effective_utc, hud }` | Tightening applies immediately. Loosening queues into `pending_limits` (+24h). |
+| `SetLimit` | `target: LimitTargetDto`, `default_minutes: u32`, `weekday_minutes: [Option<u32>; 7]`, `enabled: bool`, `pin: String` | `Accepted { effective_utc, hud }` | Tightening applies immediately. Loosening queues into `pending_limits` for `limit_cooldown_hours`, except with `profile = guardian` and a PIN set, where it applies immediately (ADR 0006). |
 | `DeleteLimit` | `target: LimitTargetDto`, `pin: String` | `Accepted { effective_utc, hud }` | Deleting is instant by owner decision. |
 | `CancelPendingLimit` | `target: LimitTargetDto`, `pin: String` | `Accepted { effective_utc, hud }` | Aborts a queued loosening change before it becomes active. |
 | `GrantOverride` | `target: LimitTargetDto`, `seconds: i64`, `pin: String`, `account_id?: i64` | `Accepted { effective_utc, hud }` | Grants +15m override to an account (the caller's by default). Rejected outright in strict mode or with invalid PIN. |

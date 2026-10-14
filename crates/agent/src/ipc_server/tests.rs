@@ -462,6 +462,58 @@ fn set_limit_loosening_waits_out_the_cooldown_then_promotes() {
     );
 }
 
+/// For someone looked after, the PIN is the safeguard: a raise made with it
+/// applies at once. Without a PIN the cooldown still holds (docs/adr/0006).
+#[test]
+fn a_guardians_raise_with_the_pin_applies_at_once() {
+    let raise = |ctx: &Ctx, games: i64, pin: &str| {
+        handle(
+            ctx,
+            Request::SetLimit {
+                target: LimitTargetDto::Category { id: games },
+                default_minutes: 120,
+                weekday_minutes: [None; 7],
+                enabled: true,
+                pin: pin.into(),
+            },
+        )
+    };
+    let seeded = || {
+        let db = Db::open_in_memory().expect("db");
+        let games = db.category_id("games").expect("games");
+        db.upsert_limit(
+            &Limit::new(1, LimitTarget::Category(games), 30),
+            at("2026-08-20T09:00:00Z"),
+        )
+        .expect("seed limit");
+        (db, games)
+    };
+    let now = at("2026-08-20T12:00:00Z");
+
+    let (db, games) = seeded();
+    let ctx = test_ctx_with_policy(db, TestClock::new(now, 0), |p| {
+        p.profile = "guardian".into()
+    });
+    expect_vault(handle(
+        &ctx,
+        Request::SetPin {
+            new_pin: "1234".into(),
+            current_pin: None,
+        },
+    ));
+    expect_accepted(raise(&ctx, games, "1234"), now);
+    assert_eq!(
+        lock_db(&ctx.db).load_limits().expect("limits")[0].default_minutes,
+        120
+    );
+
+    let (db, games) = seeded();
+    let ctx = test_ctx_with_policy(db, TestClock::new(now, 0), |p| {
+        p.profile = "guardian".into()
+    });
+    expect_accepted(raise(&ctx, games, ""), at("2026-08-21T12:00:00Z"));
+}
+
 #[test]
 fn a_failed_limit_read_is_internal_rather_than_fail_open() {
     let db = Db::open_in_memory().expect("db");

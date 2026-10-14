@@ -37,6 +37,8 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { describeError, errorCode, runTrayAction, setAccountSupervised, setViewedAccount, verifyPin } from "./api";
 import { AccountBar } from "./components/AccountBar";
+import { cooldownHoursFor } from "./limitRules";
+import { LockedPage } from "./components/LockedPage";
 import { useAccounts } from "./hooks/useAccounts";
 import type { AccountDto } from "./types/generated/AccountDto";
 
@@ -116,6 +118,23 @@ function MainDashboard() {
       setViewing(accountId);
     });
   };
+
+  // One grown-up unlock (docs/adr/0006): minutes left, for the header pill.
+  const unlocked = actions.unlockedUntil !== null;
+  // Re-rendered every minute by `now`; measured against the real clock.
+  const unlockedMinutes = unlocked ? Math.max(1, Math.ceil(((actions.unlockedUntil ?? 0) - Date.now()) / 60_000)) : null;
+  // Someone else's screen time is part of the unlock: locking returns here.
+  useEffect(() => {
+    if (!unlocked && viewing !== null && statusInfo?.pin_configured) {
+      setViewedAccount(null);
+      setViewing(null);
+    }
+  }, [unlocked, viewing, statusInfo?.pin_configured]);
+  // Child view: set up for someone looked after, a PIN set, a watched
+  // account on screen, and no unlock.
+  const shownAccount = viewing === null ? ownAccount : (accounts.find((a) => a.id === viewing) ?? null);
+  const childView =
+    statusInfo?.profile === "guardian" && statusInfo.pin_configured && (shownAccount?.supervised ?? false) && !unlocked;
 
   /** Watch an account (free) or stop watching it (the agent wants the PIN). */
   const setSupervised = (account: AccountDto, supervised: boolean) => {
@@ -265,6 +284,8 @@ function MainDashboard() {
           focusActive={false}
           activeLimitsCount={activeLimitsCount}
           showDayPicker={activeTab === "overview"}
+          unlockedMinutes={unlockedMinutes}
+          onLock={actions.lock}
         />
 
         <Toasts toasts={toasts} dismiss={dismiss} />
@@ -296,6 +317,7 @@ function MainDashboard() {
               <div className="tab-page">
                 <TodayPage
                   viewedAccount={viewing}
+                  locked={childView}
                   summary={summary}
                   catalog={catalog}
                   statusInfo={statusInfo}
@@ -329,8 +351,8 @@ function MainDashboard() {
                           entries={apps}
                           total={total}
                           catalog={catalog}
-                          onCategorize={actions.openCategorize}
-                          onOpenAppDirectory={() => setAppDirectoryOpen(true)}
+                          onCategorize={childView ? undefined : actions.openCategorize}
+                          onOpenAppDirectory={childView ? undefined : () => setAppDirectoryOpen(true)}
                         />
                       )}
                       <WeeklyChart week={week} viewDay={viewDay} loading={weekLoading} onSelectDay={setViewDay} />
@@ -340,7 +362,13 @@ function MainDashboard() {
               </div>
             )}
 
-            {activeTab === "limits" && (
+            {activeTab === "limits" && childView && (
+              <div className="tab-page">
+                <LockedPage page="limits" onUnlock={actions.unlock} />
+              </div>
+            )}
+
+            {activeTab === "limits" && !childView && (
               <div className="tab-page">
                 <LimitsPage
                   catalog={catalog}
@@ -369,7 +397,13 @@ function MainDashboard() {
               </div>
             )}
 
-            {activeTab === "settings" && (
+            {activeTab === "settings" && childView && (
+              <div className="tab-page">
+                <LockedPage page="settings" onUnlock={actions.unlock} />
+              </div>
+            )}
+
+            {activeTab === "settings" && !childView && (
               <div className="tab-page">
                 <SettingsPage
                   statusInfo={statusInfo}
@@ -395,7 +429,7 @@ function MainDashboard() {
                 onClose={actions.closeEditor}
                 onSubmit={actions.submitEditor}
                 onCategorize={actions.openCategorize}
-                cooldownHours={statusInfo?.limit_cooldown_hours ?? 24}
+                cooldownHours={cooldownHoursFor(statusInfo)}
               />
             )}
             {actions.gate !== null && (

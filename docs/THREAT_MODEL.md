@@ -31,8 +31,14 @@ code; plans belong in an ADR.
   PIN needs the old PIN or the recovery code.
 - **Brute-force throttle**: after 5 wrong PINs or recovery codes in a row,
   checks lock for 30 s, doubling up to 15 min. Rejections are audited.
-- **Cooldown**: raising a limit waits `limit_cooldown_hours` (24 by default).
-  Lowering, adding, switching off and deleting apply at once.
+- **Cooldown**: in "Me" mode raising a limit waits `limit_cooldown_hours`
+  (24 by default), against giving in on impulse. For someone looked after,
+  with a PIN, the PIN is the safeguard and a raise applies at once (ADR
+  0006). Lowering, adding, switching off and deleting apply at once.
+- **Child view** (ADR 0006): on a watched account in guardian mode, Limits
+  and Settings are locked behind the PIN in the UI. The UI keeps an entered
+  PIN in memory for 10 minutes (until hidden or locked) to avoid asking
+  again; the agent still checks it on every request.
 - **Fail-closed blocks**: a block stores its own expiry, so restarting the
   agent or the PC lifts nothing.
 - **The block screen heals itself**: the session helper re-shows it every 2 s

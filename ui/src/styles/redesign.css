@@ -486,6 +486,26 @@ textarea {
   z-index: 1;
 }
 
+/* "Unlocked · 9 min", which locks again on click (docs/adr/0006). */
+.unlock-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid color-mix(in srgb, var(--color-accent) 45%, transparent);
+  border-radius: 99px;
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  color: var(--color-accent-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.unlock-pill:hover {
+  background: color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
 /* The active tab's pill, drawn once and moved (Sidebar.tsx). Physical
    left/translate: offsetLeft is physical in both directions. */
 .nav-indicator {

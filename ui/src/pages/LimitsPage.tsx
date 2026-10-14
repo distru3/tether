@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { scrollMainToTop } from "../scrollTop";
 import { useTranslation } from "react-i18next";
+import { cooldownHoursFor } from "../limitRules";
 import { navigate } from "../motion";
 import { Clock3 } from "lucide-react";
 import { addManualBlock, describeError, listManualBlocks } from "../api";
@@ -70,7 +71,8 @@ export function LimitsPage({ catalog, summary, statusInfo, actions, notify, onSe
         );
     }
 
-    const cooldown = statusInfo?.limit_cooldown_hours ?? 24;
+    const cooldown = cooldownHoursFor(statusInfo);
+    const pinIsTheSafeguard = statusInfo?.profile === "guardian" && statusInfo.pin_configured;
     const limits = catalog?.limits ?? [];
     const pending = catalog?.pending_limits ?? [];
 
@@ -80,7 +82,11 @@ export function LimitsPage({ catalog, summary, statusInfo, actions, notify, onSe
                 <div>
                     <h1 className="tt-title">{t("limitsPage.title")}</h1>
                     <p className="tt-sub">
-                        {cooldown > 0 ? t("limitsPage.subtitle", { count: cooldown }) : t("limitsPage.subtitleNoWait")}
+                        {pinIsTheSafeguard
+                            ? t("limitsPage.subtitleGuardian")
+                            : cooldown > 0
+                              ? t("limitsPage.subtitle", { count: cooldown })
+                              : t("limitsPage.subtitleNoWait")}
                     </p>
                 </div>
                 <button type="button" className="tt-btn tt-btn--primary" onClick={actions.startNewOrder} disabled={actions.busy}>

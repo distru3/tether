@@ -121,9 +121,11 @@ blocked.
 - **Close** on the block screen ends the app (locally, then through the
   agent's `CloseApps`). **Extra time** (+15 minutes) is a PIN-approved
   override; never offered during a schedule or in strict mode.
-- **Cooldown**: raising a limit (or any weekday's value) queues in
-  `pending_limits` for `limit_cooldown_hours` (24 by default). Lowering,
-  adding, switching off and deleting apply at once.
+- **Cooldown** (ADR 0006): in "Me" mode, raising a limit (or any weekday's
+  value) queues in `pending_limits` for `limit_cooldown_hours` (24 by
+  default). For someone looked after with a PIN set, the raise needed the
+  PIN and applies at once. Lowering, adding, switching off and deleting
+  always apply at once.
 - **The timer HUD** (`crates/session/src/mpo.rs`, DirectComposition, with a
   GDI fallback in `hud.rs`) shows time left over apps with a budget. It hides
   over full-screen games unless `show_hud_in_fullscreen` is on; the peek
