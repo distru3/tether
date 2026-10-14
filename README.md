@@ -24,6 +24,9 @@ cloud.
   limits.
 - **PIN**: loosening anything needs the PIN; raising a limit also waits 24
   hours.
+- **Per Windows account**: each account's time is counted on its own, and
+  limits apply only to the accounts you choose (a parent's own account can
+  be left out).
 - English and Arabic, light and dark.
 
 What it does **not** do is described honestly in

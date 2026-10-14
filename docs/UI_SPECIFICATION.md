@@ -87,6 +87,14 @@ same change.
 - Everything is off with `prefers-reduced-motion` (app.css, tokens.css).
 - While the agent is unreachable: a `role="alert"` banner. While tracking is
   unavailable (no reports for a minute): a notice under the nav.
+- **Account bar** (`components/AccountBar.tsx`, Today and Activity only,
+  docs/adr/0005-per-account-usage.md): shown when the PC has more than one
+  Windows account Tether knows, or when limits don't apply to the account
+  on screen. A picker chooses whose screen time to show ("Sam (you)",
+  "Maya"); another account's takes the PIN once (`api.setViewedAccount`
+  keeps it for this window's day, week, reasons and extra-time calls), turns
+  the bar orange ("Showing Maya's screen time") and offers "Back to mine".
+  The tray and the block screen always show their own account.
 
 ## 3. Today (`pages/TodayPage.tsx`, `todayModel.ts`)
 
@@ -173,6 +181,8 @@ A week (stepper, never past today), explored in place:
 ## 6. Settings (`pages/SettingsPage.tsx`)
 
 Groups: **Protection** (who it's for, PIN, strict mode, wait before raising),
+**Windows accounts** (one switch per account: "Limits apply"; turning one
+off takes the PIN and lifts its blocks; "(you)" marks this account),
 **Timer on screen** (show timer, in full-screen games, peek shortcut, chime
 volume with Play), **Day and tracking** (day start, idle after), **Language
 and look**, **Apps** (opens the app directory), **About and help** (version
@@ -189,6 +199,9 @@ First run (`localStorage screentime_first_run_completed`), with the title bar
 and a language switch: 1. who it's for (`profile`), 2. starting budgets
 (templates: Games, Social, Video, Bedtime schedule, all screen time),
 3. PIN and recovery code (skippable only for "Me"), 4. websites (Family DNS).
+Choosing "Someone I look after" adds "This is my own account (Sam). Don't
+limit it." (checked by default); "Me" keeps this account limited. Other
+accounts are limited from their first sign-in.
 
 ## 8. Block screen (`components/BlockOverlay.tsx`, `ui/src-tauri/src/overlay_bridge.rs`)
 

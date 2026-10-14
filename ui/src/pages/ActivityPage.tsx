@@ -26,6 +26,8 @@ interface ActivityPageProps {
     now: Date;
     /** Open a day on Today (the day panel's "Open on Today" link). */
     onOpenDay: (day: number) => void;
+    /** The account on screen (null: this window's own); refetches on change. */
+    viewedAccount?: number | null;
 }
 
 type HueParts = Record<BudgetHue, number>;
@@ -52,10 +54,10 @@ function huesOf(parts: HueParts): Array<[BudgetHue, number]> {
  * a bar selects its day for the day panel, the legend isolates a hue, and
  * an app row opens that app's week.
  */
-export function ActivityPage({ catalog, today, now, onOpenDay }: ActivityPageProps) {
+export function ActivityPage({ catalog, today, now, onOpenDay, viewedAccount = null }: ActivityPageProps) {
     const { t } = useTranslation();
     const [endDay, setEndDay] = useState(today);
-    const { days, week, summaries, reasons, loading } = useWeekDetail(endDay);
+    const { days, week, summaries, reasons, loading } = useWeekDetail(endDay, true, viewedAccount);
     const [selected, setSelected] = useState(today);
     const [hovered, setHovered] = useState<number | null>(null);
     const [hueFilter, setHueFilter] = useState<BudgetHue | null>(null);

@@ -1,3 +1,4 @@
+import type { AccountsDto } from "./types/generated/AccountsDto";
 import type { BlockReasonsDto } from "./types/generated/BlockReasonsDto";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -35,12 +36,39 @@ export function getStatus(): Promise<StatusDto> {
     return invoke("get_status");
 }
 
+/**
+ * Another Windows account whose history this window shows
+ * (docs/adr/0005-per-account-usage.md); `null` is the window's own account.
+ * Kept per window: the tray and the block screen always show their own.
+ * Day, week, reasons and extra-time calls carry it, with the PIN the agent
+ * wants for someone else's history.
+ */
+let viewed: { accountId: number; pin: string | null } | null = null;
+
+export function setViewedAccount(next: { accountId: number; pin: string | null } | null): void {
+    viewed = next;
+}
+
+function viewArgs(): { accountId?: number; pin?: string } {
+    if (!viewed) return {};
+    return viewed.pin ? { accountId: viewed.accountId, pin: viewed.pin } : { accountId: viewed.accountId };
+}
+
 export function getDaySummary(day: number): Promise<DaySummaryDto> {
-    return invoke("get_day_summary", { day });
+    return invoke("get_day_summary", { day, ...viewArgs() });
 }
 
 export function getWeeklySummary(endDay: number): Promise<WeeklySummaryDto> {
-    return invoke("get_weekly_summary", { endDay });
+    return invoke("get_weekly_summary", { endDay, ...viewArgs() });
+}
+
+export function listAccounts(): Promise<AccountsDto> {
+    return invoke("list_accounts");
+}
+
+/** Watch an account or stop watching it (stopping needs the PIN). */
+export function setAccountSupervised(accountId: number, supervised: boolean, pin?: string): Promise<void> {
+    return invoke("set_account_supervised", { accountId, supervised, pin });
 }
 
 export function getCatalog(): Promise<CatalogDto> {
@@ -81,7 +109,7 @@ export function recordBlockReason(appId: number, reason: string): Promise<void> 
 
 /** How often each block-screen reason was given between two day keys. */
 export function blockReasons(fromDay: number, toDay: number): Promise<BlockReasonsDto> {
-    return invoke("block_reasons", { fromDay, toDay });
+    return invoke("block_reasons", { fromDay, toDay, ...viewArgs() });
 }
 
 /** Dismantle the vault; the credential may be the PIN or the recovery code. */
@@ -124,7 +152,7 @@ export function cancelPendingLimit(target: LimitTargetDto, pin: string): Promise
 }
 
 export function grantOverride(target: LimitTargetDto, seconds: number, pin: string): Promise<void> {
-    return invoke("grant_override", { target, seconds, pin });
+    return invoke("grant_override", { target, seconds, pin, accountId: viewed?.accountId });
 }
 
 export function categorizeApp(

@@ -39,7 +39,11 @@ export interface Dashboard {
     goToday: () => void;
 }
 
-export function useDashboard(): Dashboard {
+/**
+ * `viewedAccount` is the account whose history is shown (null: this
+ * window's own); changing it refetches the day and the week.
+ */
+export function useDashboard(viewedAccount: number | null = null): Dashboard {
     const [phase, setPhase] = useState<Phase>("connecting");
     const [statusInfo, setStatusInfo] = useState<StatusDto | null>(null);
     const [summary, setSummary] = useState<DaySummaryDto | null>(null);
@@ -74,7 +78,7 @@ export function useDashboard(): Dashboard {
             setPhase("offline");
             setLastError(describeError(error));
         }
-    }, [viewDay]);
+    }, [viewDay, viewedAccount]);
 
     const refreshCatalog = useCallback(() => {
         const ticket = ++catalogSeq.current;
@@ -110,7 +114,7 @@ export function useDashboard(): Dashboard {
         } finally {
             if (ticket === weekSeq.current) setWeekLoading(false);
         }
-    }, [viewDay]);
+    }, [viewDay, viewedAccount]);
 
     const setViewDay = useCallback((day: number) => {
         const capped = Math.min(day, todayKey());

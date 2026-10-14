@@ -35,7 +35,10 @@ const FIRST_RUN_KEY = "screentime_first_run_completed";
 
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
-import { describeError, errorCode, runTrayAction } from "./api";
+import { describeError, errorCode, runTrayAction, setAccountSupervised, setViewedAccount, verifyPin } from "./api";
+import { AccountBar } from "./components/AccountBar";
+import { useAccounts } from "./hooks/useAccounts";
+import type { AccountDto } from "./types/generated/AccountDto";
 
 export function App() {
   // Ensure theme is active and synced across all windows (dashboard & overlay)
@@ -67,6 +70,8 @@ export function App() {
 
 function MainDashboard() {
   const { t } = useTranslation();
+  // Another Windows account on screen (docs/adr/0005); null is our own.
+  const [viewing, setViewing] = useState<number | null>(null);
   const {
     phase,
     statusInfo,
@@ -83,7 +88,7 @@ function MainDashboard() {
     goPrevDay,
     goNextDay,
     goToday,
-  } = useDashboard();
+  } = useDashboard(viewing);
   const now = useNowMinute();
   const { theme, setTheme } = useTheme();
   const { toasts, push, dismiss } = useToasts();
@@ -94,6 +99,34 @@ function MainDashboard() {
     invalidate: refreshCatalog,
     refreshStatus,
   });
+  const ownAccount = statusInfo?.account ?? null;
+  const { accounts, refresh: refreshAccounts } = useAccounts(ownAccount?.id ?? null);
+
+  /** Show another account's screen time; that takes the PIN once. */
+  const viewAccount = (accountId: number | null) => {
+    if (accountId === null || accountId === ownAccount?.id) {
+      setViewedAccount(null);
+      setViewing(null);
+      return;
+    }
+    const name = accounts.find((a) => a.id === accountId)?.name ?? "";
+    actions.attempt(t("pinGate.viewAccount", { name }), async (pin) => {
+      if (pin) await verifyPin(pin);
+      setViewedAccount({ accountId, pin: pin || null });
+      setViewing(accountId);
+    });
+  };
+
+  /** Watch an account (free) or stop watching it (the agent wants the PIN). */
+  const setSupervised = (account: AccountDto, supervised: boolean) => {
+    actions
+      .guarded(t("pinGate.unwatchAccount", { name: account.name }), async (pin) => {
+        await setAccountSupervised(account.id, supervised, pin);
+        refreshAccounts();
+        void refreshStatus();
+      })
+      .catch((e) => push("error", describeError(e)));
+  };
 
   const [activeTab, setActiveTab] = useState<TabKey>("overview");
   const [appDirectoryOpen, setAppDirectoryOpen] = useState(false);
@@ -255,9 +288,14 @@ function MainDashboard() {
               </div>
             )}
 
+            {(activeTab === "overview" || activeTab === "activity") && (
+              <AccountBar accounts={accounts} own={ownAccount} viewing={viewing} onView={viewAccount} />
+            )}
+
             {activeTab === "overview" && (
               <div className="tab-page">
                 <TodayPage
+                  viewedAccount={viewing}
                   summary={summary}
                   catalog={catalog}
                   statusInfo={statusInfo}
@@ -319,6 +357,7 @@ function MainDashboard() {
             {activeTab === "activity" && (
               <div className="tab-page">
                 <ActivityPage
+                  viewedAccount={viewing}
                   catalog={catalog}
                   today={todayKey(now)}
                   now={now}
@@ -341,6 +380,8 @@ function MainDashboard() {
                   onOpenAppDirectory={() => setAppDirectoryOpen(true)}
                   theme={theme}
                   setTheme={setTheme}
+                  accounts={accounts}
+                  onSetSupervised={setSupervised}
                 />
               </div>
             )}

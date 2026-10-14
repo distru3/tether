@@ -44,6 +44,8 @@ interface TodayPageProps {
     banner?: ReactNode;
     /** Shown last (most used apps, the week). */
     more?: ReactNode;
+    /** The account on screen (null: this window's own). */
+    viewedAccount?: number | null;
 }
 
 const HUE_ORDER: BudgetHue[] = ["games", "social", "video", "music", "chat", "work", "other"];
@@ -53,7 +55,20 @@ function timeLabel(d: Date): string {
     return clockLabel(d.getHours() * 60 + d.getMinutes());
 }
 
-export function TodayPage({ summary, catalog, statusInfo, viewDay, isViewingToday, loading, now, actions, onOpenLimits, banner, more }: TodayPageProps) {
+export function TodayPage({
+    summary,
+    catalog,
+    statusInfo,
+    viewDay,
+    isViewingToday,
+    loading,
+    now,
+    actions,
+    onOpenLimits,
+    banner,
+    more,
+    viewedAccount = null,
+}: TodayPageProps) {
     const { t } = useTranslation();
     const dayStart = statusInfo?.day_start_minutes ?? 0;
     const { schedules } = useDowntime();
@@ -152,6 +167,7 @@ export function TodayPage({ summary, catalog, statusInfo, viewDay, isViewingToda
 
             {isViewingToday && budgets.length + (total ? 1 : 0) > 0 && (
                 <Suggestion
+                    viewedAccount={viewedAccount}
                     viewDay={viewDay}
                     catalog={catalog}
                     onAdd={(appId) => actions.openEditor({ kind: "app", id: appId }, null)}
@@ -403,9 +419,19 @@ function writeDismissed(map: Record<string, number>) {
  * `suggestBudget`), offered as a new budget. "Not now" hides that app's
  * suggestion for a week.
  */
-function Suggestion({ viewDay, catalog, onAdd }: { viewDay: number; catalog: CatalogDto | null; onAdd: (appId: number) => void }) {
+function Suggestion({
+    viewDay,
+    catalog,
+    onAdd,
+    viewedAccount,
+}: {
+    viewDay: number;
+    catalog: CatalogDto | null;
+    onAdd: (appId: number) => void;
+    viewedAccount: number | null;
+}) {
     const { t } = useTranslation();
-    const { summaries, loading } = useWeekDetail(shiftDay(viewDay, -1));
+    const { summaries, loading } = useWeekDetail(shiftDay(viewDay, -1), true, viewedAccount);
     const [dismissed, setDismissed] = useState(readDismissed);
     const suggestion: BudgetSuggestion | null = useMemo(() => suggestBudget(catalog, summaries), [catalog, summaries]);
     if (loading || !suggestion) return null;

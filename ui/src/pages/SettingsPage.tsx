@@ -6,6 +6,7 @@ import { previewAlertSound } from "../api";
 import type { useLedgerActions } from "../hooks/useLedgerActions";
 import type { ThemePreference } from "../hooks/useTheme";
 import type { CatalogDto } from "../types/generated/CatalogDto";
+import type { AccountDto } from "../types/generated/AccountDto";
 import type { StatusDto } from "../types/generated/StatusDto";
 
 type Actions = ReturnType<typeof useLedgerActions>;
@@ -22,6 +23,10 @@ interface SettingsPageProps {
     onOpenAppDirectory: () => void;
     theme: ThemePreference;
     setTheme: (theme: ThemePreference) => void;
+    /** Windows accounts on this PC (docs/adr/0005-per-account-usage.md). */
+    accounts: AccountDto[];
+    /** Watch an account or stop watching it; the caller handles the PIN. */
+    onSetSupervised: (account: AccountDto, supervised: boolean) => void;
 }
 
 const DEFAULT_HOTKEY = "Ctrl+Alt+T";
@@ -105,6 +110,8 @@ export function SettingsPage({
     onOpenAppDirectory,
     theme,
     setTheme,
+    accounts,
+    onSetSupervised,
 }: SettingsPageProps) {
     const { t, i18n } = useTranslation();
     const [recordingHotkey, setRecordingHotkey] = useState(false);
@@ -196,6 +203,28 @@ export function SettingsPage({
                         </Row>
                     </div>
                 </section>
+
+                {accounts.length > 0 && (
+                    <section className="tt-card" aria-labelledby="set-accounts">
+                        <h2 id="set-accounts" className="tt-card-title">{t("settingsPage.accounts")}</h2>
+                        <p className="tt-sub">{t("settingsPage.accountsHint")}</p>
+                        <div>
+                            {accounts.map((a) => (
+                                <Row
+                                    key={a.id}
+                                    title={a.is_caller ? t("accounts.you", { name: a.name }) : a.name}
+                                    hint={a.supervised ? t("settingsPage.accountWatched") : t("settingsPage.accountUnwatched")}
+                                >
+                                    <Switch
+                                        checked={a.supervised}
+                                        label={t("settingsPage.accountSwitch", { name: a.name })}
+                                        onChange={(v) => onSetSupervised(a, v)}
+                                    />
+                                </Row>
+                            ))}
+                        </div>
+                    </section>
+                )}
 
                 <section className="tt-card" aria-labelledby="set-timer">
                     <h2 id="set-timer" className="tt-card-title">{t("settingsPage.timer")}</h2>

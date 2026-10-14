@@ -2316,7 +2316,9 @@ body {
 }
 
 /* A select styled like .tt-input, with its own arrow. */
-.tt-select {
+/* `select.` matches the light theme's `select` rule, which would otherwise
+   reset the arrow; tether.css loads last, so this wins. */
+select.tt-select {
   appearance: none;
   padding-inline-end: 36px;
   background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
@@ -2327,7 +2329,7 @@ body {
   cursor: pointer;
 }
 
-[dir="rtl"] .tt-select {
+[dir="rtl"] select.tt-select {
   background-position: 13px 50%, 18px 50%;
 }
 
@@ -2488,6 +2490,118 @@ ul.tt-chips {
 
 [dir="rtl"] .tt-flip-rtl {
   transform: scaleX(-1);
+}
+
+/* A checkbox with a title and a hint (setup: "This is my own account"). */
+.tt-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--border-card);
+  border-radius: 16px;
+  background: var(--bg-card);
+  cursor: pointer;
+}
+
+.tt-check input {
+  margin-top: 3px;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+  flex: none;
+}
+
+.tt-check > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tt-check-title {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.tt-check-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Whose screen time is on screen (AccountBar.tsx, docs/adr/0005). */
+.tt-account-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  margin: 0 auto 18px;
+  max-width: 1120px;
+  padding: 8px 10px 8px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-card);
+  background: var(--bg-card);
+  font-size: 14px;
+  color: var(--text-secondary);
+  animation: tt-rise 360ms var(--ease-out) both;
+}
+
+[dir="rtl"] .tt-account-bar {
+  padding: 8px 8px 8px 10px;
+}
+
+.tt-account-bar--other {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--bg-card));
+  color: var(--text-primary);
+}
+
+.tt-account-avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-primary);
+  color: var(--color-on-primary);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.tt-account-bar--other .tt-account-avatar {
+  background: var(--color-accent);
+}
+
+.tt-account-note {
+  margin-inline-start: auto;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* Its own complete look: the global select rules differ by theme. */
+.tt-account-bar .tt-account-select {
+  width: auto;
+  min-width: 150px;
+  height: 32px;
+  padding: 0 36px 0 14px;
+  border: 1px solid var(--border-card);
+  border-radius: 999px;
+  background-color: var(--bg-recessed);
+  color: var(--text-primary);
+  font: inherit;
+  font-weight: 500;
+}
+
+[dir="rtl"] .tt-account-bar .tt-account-select {
+  padding: 0 14px 0 36px;
+}
+
+.tt-account-bar .tt-btn {
+  margin-inline-start: auto;
+}
+
+.tt-account-note + .tt-btn {
+  margin-inline-start: 0;
 }
 
 /* ==========================================================================

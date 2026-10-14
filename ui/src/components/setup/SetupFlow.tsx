@@ -6,6 +6,7 @@ import * as api from "../../api";
 import { formatDuration } from "../../format";
 import { clockLabel } from "../../limitText";
 import type { BudgetHue } from "../../budgetHue";
+import type { AccountDto } from "../../types/generated/AccountDto";
 import type { LimitTargetDto } from "../../types/generated/LimitTargetDto";
 
 type Profile = "self" | "guardian";
@@ -51,12 +52,17 @@ export function SetupFlow({ onComplete }: SetupFlowProps) {
     const [notice, setNotice] = useState<string | null>(null);
     const [pinConfigured, setPinConfigured] = useState(false);
     const [familyDns, setFamilyDns] = useState(false);
+    // This Windows account, and whether a guardian setting up on their own
+    // account wants it left unlimited (docs/adr/0005-per-account-usage.md).
+    const [ownAccount, setOwnAccount] = useState<AccountDto | null>(null);
+    const [mine, setMine] = useState(true);
 
     useEffect(() => {
         api.getStatus()
             .then((s) => {
                 setPinConfigured(s.pin_configured);
                 setFamilyDns(s.family_dns_enabled);
+                setOwnAccount(s.account);
                 if (s.profile === "guardian") setProfile("guardian");
             })
             .catch(() => {});
@@ -75,9 +81,19 @@ export function SetupFlow({ onComplete }: SetupFlowProps) {
         } catch {
             // A PIN from an earlier install refuses this; the choice can be
             // made later in Settings with the PIN.
-        } finally {
-            setBusy(false);
         }
+        // "Me" limits this account; a guardian's own account is left alone
+        // when they say it is theirs. Other accounts are limited from their
+        // first sign-in either way.
+        const watch = profile === "self" || !mine;
+        if (ownAccount !== null && ownAccount.supervised !== watch) {
+            try {
+                await api.setAccountSupervised(ownAccount.id, watch);
+            } catch {
+                // Needs the PIN from an earlier install; Settings has it too.
+            }
+        }
+        setBusy(false);
         next();
     };
 
@@ -176,6 +192,15 @@ export function SetupFlow({ onComplete }: SetupFlowProps) {
                                 body={t("setup.whoGuardianBody")}
                             />
                         </div>
+                        {profile === "guardian" && ownAccount !== null && (
+                            <label className="tt-check">
+                                <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />
+                                <span>
+                                    <span className="tt-check-title">{t("setup.mineTitle", { name: ownAccount.name })}</span>
+                                    <span className="tt-check-hint">{t("setup.mineHint")}</span>
+                                </span>
+                            </label>
+                        )}
                     </Step>
                 )}
 

@@ -19,7 +19,7 @@ export interface WeekDetail {
  * the block-screen reasons. Shared by Activity and Today's suggestion.
  * Pass `enabled = false` to skip loading.
  */
-export function useWeekDetail(endDay: number, enabled = true): WeekDetail {
+export function useWeekDetail(endDay: number, enabled = true, viewedAccount: number | null = null): WeekDetail {
     const days = useMemo(() => weekDays(endDay), [endDay]);
     const [week, setWeek] = useState<WeeklySummaryDto | null>(null);
     const [summaries, setSummaries] = useState<Map<number, DaySummaryDto>>(new Map());
@@ -50,7 +50,7 @@ export function useWeekDetail(endDay: number, enabled = true): WeekDetail {
         return () => {
             live = false;
         };
-    }, [endDay, days, enabled]);
+    }, [endDay, days, enabled, viewedAccount]);
 
     return { days, week, summaries, reasons, loading };
 }
