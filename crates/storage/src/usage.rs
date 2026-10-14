@@ -20,17 +20,19 @@ impl Db {
 
         let tx = self.conn.transaction()?;
 
+        let account = interval.account.0;
+
         let updated = tx.execute(
-            "UPDATE usage_intervals 
+            "UPDATE usage_intervals
              SET end_utc = ?5, duration_secs = duration_secs + ?6
-             WHERE subject_type = ?1 
-               AND subject_id = ?2 
-               AND session_id = ?3 
+             WHERE subject_type = ?1
+               AND subject_id = ?2
+               AND account_id = ?3
                AND end_utc = ?4",
             params![
                 subject_type,
                 subject_id,
-                interval.session_id,
+                account,
                 interval.start.to_rfc3339(),
                 interval.end.to_rfc3339(),
                 secs,
@@ -38,15 +40,18 @@ impl Db {
         )?;
 
         if updated == 0 {
+            // `session_id` predates accounts and is kept only because shipped
+            // migrations never change; it carries the account id as text.
             tx.execute(
                 "INSERT INTO usage_intervals
-                     (subject_type, subject_id, session_id, start_utc, end_utc,
+                     (subject_type, subject_id, session_id, account_id, start_utc, end_utc,
                       duration_secs, day_key)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     subject_type,
                     subject_id,
-                    interval.session_id,
+                    account.to_string(),
+                    account,
                     interval.start.to_rfc3339(),
                     interval.end.to_rfc3339(),
                     secs,
@@ -55,11 +60,11 @@ impl Db {
             )?;
         }
         tx.execute(
-            "INSERT INTO usage_daily (day_key, subject_type, subject_id, seconds)
-             VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT(day_key, subject_type, subject_id)
+            "INSERT INTO usage_daily (account_id, day_key, subject_type, subject_id, seconds)
+             VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(account_id, day_key, subject_type, subject_id)
              DO UPDATE SET seconds = seconds + excluded.seconds",
-            params![interval.day_key.0, subject_type, subject_id, secs],
+            params![account, interval.day_key.0, subject_type, subject_id, secs],
         )?;
         tx.commit()?;
         Ok(())
@@ -73,11 +78,11 @@ impl Db {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM usage_daily WHERE day_key = ?1", params![day.0])?;
         tx.execute(
-            "INSERT INTO usage_daily (day_key, subject_type, subject_id, seconds)
-             SELECT day_key, subject_type, subject_id, SUM(duration_secs)
+            "INSERT INTO usage_daily (account_id, day_key, subject_type, subject_id, seconds)
+             SELECT account_id, day_key, subject_type, subject_id, SUM(duration_secs)
              FROM usage_intervals
              WHERE day_key = ?1
-             GROUP BY day_key, subject_type, subject_id",
+             GROUP BY account_id, day_key, subject_type, subject_id",
             params![day.0],
         )?;
         tx.commit()?;
@@ -93,12 +98,12 @@ mod tests {
     use st_core::model::{AppKey, SubjectRef, UsageInterval};
 
     use super::*;
-    use crate::testutil::now;
+    use crate::testutil::{now, ACCT};
 
     fn interval_at(app_id: i64, secs: i64, day: DayKey, start: DateTime<Utc>) -> UsageInterval {
         UsageInterval {
             subject: SubjectRef::App(app_id),
-            session_id: "s1".into(),
+            account: ACCT,
             start,
             end: start + chrono::Duration::seconds(secs),
             day_key: day,
@@ -130,7 +135,7 @@ mod tests {
         db.record_interval(&interval_at(tiktok, 300, day, now()))
             .expect("i2");
 
-        let snap = db.day_snapshot(day).expect("snapshot");
+        let snap = db.day_snapshot(ACCT, day).expect("snapshot");
         assert_eq!(snap.seconds_used(&LimitTarget::App(tiktok)), 900);
         // Counts against both categories it belongs to.
         assert_eq!(snap.seconds_used(&LimitTarget::Category(social)), 900);
@@ -159,7 +164,7 @@ mod tests {
         db.record_interval(&interval_at(term, 3600, day, now()))
             .expect("i1");
 
-        let snap = db.day_snapshot(day).expect("snapshot");
+        let snap = db.day_snapshot(ACCT, day).expect("snapshot");
         assert_eq!(snap.seconds_used(&LimitTarget::App(term)), 3600);
         assert_eq!(snap.seconds_used(&LimitTarget::Total), 0);
     }
@@ -183,13 +188,13 @@ mod tests {
         ))
         .expect("i2");
         let before = db
-            .day_snapshot(day)
+            .day_snapshot(ACCT, day)
             .expect("snap")
             .seconds_used(&LimitTarget::App(app));
 
         db.rollup_day(day).expect("rebuild");
         let after = db
-            .day_snapshot(day)
+            .day_snapshot(ACCT, day)
             .expect("snap")
             .seconds_used(&LimitTarget::App(app));
 
@@ -215,7 +220,7 @@ mod tests {
             .expect("i1");
         db.record_interval(&UsageInterval {
             subject: SubjectRef::App(app),
-            session_id: "s1".into(),
+            account: ACCT,
             start: t2,
             end: t3,
             day_key: day,
@@ -223,14 +228,14 @@ mod tests {
         .expect("i2");
         db.record_interval(&UsageInterval {
             subject: SubjectRef::App(app),
-            session_id: "s1".into(),
+            account: ACCT,
             start: t3,
             end: t4,
             day_key: day,
         })
         .expect("i3");
 
-        let summary = db.day_summary(day).expect("summary");
+        let summary = db.day_summary(ACCT, day).expect("summary");
         assert_eq!(
             summary.intervals.len(),
             1,

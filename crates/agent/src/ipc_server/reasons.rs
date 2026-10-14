@@ -14,6 +14,7 @@ const MAX_RANGE_DAYS: i64 = 366;
 
 pub(super) fn record_block_reason(
     ctx: &Ctx,
+    account: AccountId,
     app_id: i64,
     reason: &str,
     now: DateTime<Utc>,
@@ -27,7 +28,7 @@ pub(super) fn record_block_reason(
         read_recover(&ctx.policy, "policy").day_start_minutes,
     );
     let db = lock_db(&ctx.db);
-    match db.is_blocked(st_core::model::SubjectRef::App(app_id)) {
+    match db.is_blocked(account, st_core::model::SubjectRef::App(app_id)) {
         Ok(true) => {}
         Ok(false) => {
             return Response::Error {
@@ -37,13 +38,13 @@ pub(super) fn record_block_reason(
         }
         Err(e) => return error_internal(format!("read block state: {e}")),
     }
-    match db.record_block_reason(day, app_id, reason, now) {
+    match db.record_block_reason(account, day, app_id, reason, now) {
         Ok(()) => accepted(now),
         Err(e) => error_internal(format!("record block reason: {e}")),
     }
 }
 
-pub(super) fn block_reasons(ctx: &Ctx, from: DayKey, to: DayKey) -> Response {
+pub(super) fn block_reasons(ctx: &Ctx, account: AccountId, from: DayKey, to: DayKey) -> Response {
     let (Some(start), Some(end)) = (from.to_date(), to.to_date()) else {
         return bad_request("invalid day".into());
     };
@@ -54,7 +55,7 @@ pub(super) fn block_reasons(ctx: &Ctx, from: DayKey, to: DayKey) -> Response {
         ));
     }
     let db = lock_db(&ctx.db);
-    match db.block_reason_counts(from, to) {
+    match db.block_reason_counts(account, from, to) {
         Ok(rows) => Response::BlockReasons(st_ipc::BlockReasonsDto {
             counts: rows
                 .into_iter()

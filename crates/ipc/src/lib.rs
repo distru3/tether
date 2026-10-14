@@ -70,11 +70,27 @@ pub enum Request {
     /// Dashboard payload for one day.
     DaySummary {
         day: DayKey,
+        /// The account to show; `None` is the caller's own. Another account's
+        /// data needs the PIN (docs/adr/0005-per-account-usage.md).
+        #[serde(default)]
+        #[ts(as = "Option<i32>")]
+        account_id: Option<i64>,
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     /// Dashboard payload for the 7 days ending at `end_day` (inclusive),
     /// plus the previous week's total for the week-over-week comparison.
     WeeklySummary {
         end_day: DayKey,
+        /// The account to show; `None` is the caller's own. Another account's
+        /// data needs the PIN (docs/adr/0005-per-account-usage.md).
+        #[serde(default)]
+        #[ts(as = "Option<i32>")]
+        account_id: Option<i64>,
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
     /// Enforcement state and which capabilities are actually available, so the
     /// UI can be honest about degraded modes.
@@ -133,6 +149,10 @@ pub enum Request {
         #[ts(as = "i32")]
         seconds: i64,
         pin: String,
+        /// The account the extra time is for; `None` is the caller's own.
+        #[serde(default)]
+        #[ts(as = "Option<i32>")]
+        account_id: Option<i64>,
     },
     /// Set or change the PIN. `current_pin` must match the existing PIN once
     /// one is configured; the first set (no PIN yet) can pass `None`. The
@@ -253,6 +273,26 @@ pub enum Request {
     BlockReasons {
         from_day: DayKey,
         to_day: DayKey,
+        /// The account to show; `None` is the caller's own. Another account's
+        /// data needs the PIN (docs/adr/0005-per-account-usage.md).
+        #[serde(default)]
+        #[ts(as = "Option<i32>")]
+        account_id: Option<i64>,
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
+    },
+    /// Every Windows account Tether has met. Answers [`Response::Accounts`].
+    ListAccounts,
+    /// Watch an account (limits apply) or stop watching it. Stopping loosens
+    /// enforcement, so it needs the PIN.
+    SetAccountSupervised {
+        #[ts(as = "i32")]
+        account_id: i64,
+        supervised: bool,
+        #[serde(default)]
+        #[ts(optional)]
+        pin: Option<String>,
     },
 }
 
@@ -363,6 +403,28 @@ pub enum Response {
     },
     /// Counts for [`Request::BlockReasons`], most common first.
     BlockReasons(BlockReasonsDto),
+    /// Answer to [`Request::ListAccounts`].
+    Accounts(AccountsDto),
+}
+
+/// A Windows account Tether knows (docs/adr/0005-per-account-usage.md).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AccountDto {
+    #[ts(as = "i32")]
+    pub id: i64,
+    /// Full name when the account has one, else its user name.
+    pub name: String,
+    /// Limits apply to this account.
+    pub supervised: bool,
+    /// The account of the process that asked.
+    pub is_caller: bool,
+    pub last_seen_utc: String,
+}
+
+/// The payload of `Response::Accounts`, by name.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AccountsDto {
+    pub accounts: Vec<AccountDto>,
 }
 
 /// One block-screen reason and how often it was given.
@@ -570,6 +632,9 @@ pub struct StatusDto {
     /// Who Tether is set up for: "self" or "guardian" (first-run choice).
     #[serde(default = "default_profile")]
     pub profile: String,
+    /// The Windows account of the process that asked, when it could be told.
+    #[serde(default)]
+    pub account: Option<AccountDto>,
 }
 
 fn default_profile() -> String {
@@ -738,6 +803,8 @@ mod tests {
             &mut buf,
             &Request::DaySummary {
                 day: DayKey(20260820),
+                account_id: None,
+                pin: None,
             },
         )
         .expect("write");
@@ -746,7 +813,7 @@ mod tests {
         let decoded: Request = read_message(&mut cursor).expect("read");
         assert!(matches!(
             decoded,
-            Request::DaySummary { day } if day == DayKey(20260820)
+            Request::DaySummary { day, .. } if day == DayKey(20260820)
         ));
     }
 
@@ -863,13 +930,15 @@ mod tests {
             &mut buf,
             &Request::WeeklySummary {
                 end_day: DayKey(20260823),
+                account_id: None,
+                pin: None,
             },
         )
         .expect("write");
         let mut cursor = Cursor::new(buf);
         assert!(matches!(
             read_message::<_, Request>(&mut cursor),
-            Ok(Request::WeeklySummary { end_day }) if end_day == DayKey(20260823)
+            Ok(Request::WeeklySummary { end_day, .. }) if end_day == DayKey(20260823)
         ));
     }
 

@@ -27,6 +27,9 @@
 //! * Block-screen reasons (`RecordBlockReason`, `BlockReasons`) are free: they
 //!   never change enforcement, and the handler accepts a reason only for an
 //!   app that is blocked right now.
+//! * Accounts (docs/adr/0005): reading another account's day, week or
+//!   block-screen answers needs the PIN; one's own never does. Unwatching an
+//!   account needs the PIN; watching one is free.
 //!
 //! No PIN configured means every check passes: the product lets a household
 //! use the app before choosing a PIN.
@@ -47,8 +50,9 @@ use st_core::pin::{normalize_recovery_code, verify_pin};
 use st_core::settings::SettingKey;
 use st_ipc::{ErrorCode, Request, Response};
 
-use super::Ctx;
+use super::{Caller, Ctx};
 use crate::locks::{lock_db, lock_recover, read_recover};
+use st_core::model::AccountId;
 
 /// Why a request was refused. Deliberately small (clippy's
 /// `result_large_err`): it converts into the wire [`Response::Error`] only at
@@ -113,7 +117,11 @@ pub(super) enum Accept {
 }
 
 /// Decide whether `request` may run. `Err` carries the response to send back.
-pub(super) fn authorize(ctx: &Ctx, peer: Peer, request: &Request) -> Result<(), Denied> {
+pub(super) fn authorize(ctx: &Ctx, caller: Caller, request: &Request) -> Result<(), Denied> {
+    let peer = caller.peer;
+    // Asking about an account other than one's own (docs/adr/0005).
+    let other =
+        |requested: &Option<i64>| requested.is_some_and(|id| caller.account != Some(AccountId(id)));
     match request {
         // Only the session helper sees the focused window. Usage or focus
         // reported by anything else would let a local process credit the
@@ -135,7 +143,10 @@ pub(super) fn authorize(ctx: &Ctx, peer: Peer, request: &Request) -> Result<(), 
         // processes by app id.
         Request::CloseApps { app_id, pin } => {
             let blocked = lock_db(&ctx.db)
-                .is_blocked(st_core::model::SubjectRef::App(*app_id))
+                .is_blocked(
+                    caller.subject(None),
+                    st_core::model::SubjectRef::App(*app_id),
+                )
                 .map_err(|e| Denied::internal(format!("read block state: {e}")))?;
             if blocked {
                 Ok(())
@@ -171,6 +182,25 @@ pub(super) fn authorize(ctx: &Ctx, peer: Peer, request: &Request) -> Result<(), 
         }
         | Request::SetAllowlist {
             allowed: true, pin, ..
+        } => require_pin(ctx, supplied(pin)),
+
+        // Another account's history is private to it and to whoever holds
+        // the PIN; one's own is always readable.
+        Request::DaySummary {
+            account_id, pin, ..
+        }
+        | Request::WeeklySummary {
+            account_id, pin, ..
+        }
+        | Request::BlockReasons {
+            account_id, pin, ..
+        } if other(account_id) => require_pin(ctx, supplied(pin)),
+
+        // Stopping limits on an account loosens enforcement.
+        Request::SetAccountSupervised {
+            supervised: false,
+            pin,
+            ..
         } => require_pin(ctx, supplied(pin)),
 
         Request::SetSetting { key, value, pin } => {

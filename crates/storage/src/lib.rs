@@ -14,10 +14,12 @@
 //! * [`taxonomy`] — categories and apps (classification of what is running).
 //! * [`usage`] — raw foreground intervals and the daily rollup they fold into.
 //! * [`limits`] — limits plus the anti-impulse `pending_limits` queue.
+//! * [`accounts`] — Windows accounts; usage and blocks belong to one.
 //! * [`enforcement`] — block state and PIN-approved override extensions.
 //! * [`settings`] — key/value settings, the PIN hash, and the audit log.
 //! * [`reporting`] — dashboard summaries and limits-engine day snapshots.
 
+mod accounts;
 mod enforcement;
 mod limits;
 mod migrations;
@@ -29,6 +31,8 @@ mod taxonomy;
 mod usage;
 mod web;
 
+pub use crate::accounts::AccountRow;
+pub use crate::enforcement::BlockRow;
 pub use crate::limits::{LimitRow, PendingLimitRow};
 pub use crate::reporting::{
     CategoryRow, DailyTotal, DaySnapshot, DaySummary, UsageRow, WeeklySummary,
@@ -164,7 +168,7 @@ pub(crate) mod testutil {
 
     use chrono::{DateTime, Utc};
     use st_core::daykey::DayKey;
-    use st_core::model::{SubjectRef, UsageInterval};
+    use st_core::model::{AccountId, SubjectRef, UsageInterval};
 
     pub(crate) fn now() -> DateTime<Utc> {
         DateTime::parse_from_rfc3339("2026-08-20T12:00:00Z")
@@ -172,10 +176,13 @@ pub(crate) mod testutil {
             .with_timezone(&Utc)
     }
 
+    /// The account test fixtures record under.
+    pub(crate) const ACCT: AccountId = AccountId(1);
+
     pub(crate) fn interval(app_id: i64, secs: i64, day: DayKey) -> UsageInterval {
         UsageInterval {
             subject: SubjectRef::App(app_id),
-            session_id: "s1".into(),
+            account: ACCT,
             start: now(),
             end: now() + chrono::Duration::seconds(secs),
             day_key: day,

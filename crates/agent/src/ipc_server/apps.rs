@@ -4,7 +4,7 @@ use super::*;
 
 /// "Close" on the block screen: end the app's process tree. Only ever a
 /// deliberate choice by the person; `auth` decides whether it needs the PIN.
-pub(super) fn close_apps(ctx: &Ctx, app_id: i64) -> Response {
+pub(super) fn close_apps(ctx: &Ctx, account: AccountId, app_id: i64) -> Response {
     let db = lock_db(&ctx.db);
     let Some(record) = db.app_record(app_id).ok().flatten() else {
         return Response::Error {
@@ -28,7 +28,7 @@ pub(super) fn close_apps(ctx: &Ctx, app_id: i64) -> Response {
     drop(processes);
 
     let db = lock_db(&ctx.db);
-    let _ = db.clear_block(SubjectRef::App(app_id));
+    let _ = db.clear_block(account, SubjectRef::App(app_id));
     accepted(ctx.clock.now_utc())
 }
 

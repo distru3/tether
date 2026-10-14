@@ -4,12 +4,26 @@ import type { DiscoveredAppDto } from "./DiscoveredAppDto";
 import type { LimitTargetDto } from "./LimitTargetDto";
 import type { ReportUsageDto } from "./ReportUsageDto";
 
-export type Request = { "type": "ping" } | { "type": "day_summary", day: DayKey, } | { "type": "weekly_summary", end_day: DayKey, } | { "type": "status" } | { "type": "categorize", app_id: number, primary: number | null, tags: Array<number>, 
+export type Request = { "type": "ping" } | { "type": "day_summary", day: DayKey, 
+/**
+ * The account to show; `None` is the caller's own. Another account's
+ * data needs the PIN (docs/adr/0005-per-account-usage.md).
+ */
+account_id: number | null, pin?: string, } | { "type": "weekly_summary", end_day: DayKey, 
+/**
+ * The account to show; `None` is the caller's own. Another account's
+ * data needs the PIN (docs/adr/0005-per-account-usage.md).
+ */
+account_id: number | null, pin?: string, } | { "type": "status" } | { "type": "categorize", app_id: number, primary: number | null, tags: Array<number>, 
 /**
  * Required (once a PIN is configured) when the change loosens
  * enforcement; see `st_core::settings` and the agent's `auth` module.
  */
-pin?: string, } | { "type": "catalog" } | { "type": "blocked_apps" } | { "type": "close_apps", app_id: number, pin: string, } | { "type": "set_limit", target: LimitTargetDto, default_minutes: number, weekday_minutes: [number | null, number | null, number | null, number | null, number | null, number | null, number | null], enabled: boolean, pin: string, } | { "type": "delete_limit", target: LimitTargetDto, pin: string, } | { "type": "cancel_pending_limit", target: LimitTargetDto, pin: string, } | { "type": "grant_override", target: LimitTargetDto, seconds: number, pin: string, } | { "type": "set_pin", new_pin: string, current_pin: string | null, } | { "type": "recover_pin", recovery_code: string, new_pin: string, } | { "type": "remove_pin", credential: string, } | { "type": "set_setting", key: string, value: string, 
+pin?: string, } | { "type": "catalog" } | { "type": "blocked_apps" } | { "type": "close_apps", app_id: number, pin: string, } | { "type": "set_limit", target: LimitTargetDto, default_minutes: number, weekday_minutes: [number | null, number | null, number | null, number | null, number | null, number | null, number | null], enabled: boolean, pin: string, } | { "type": "delete_limit", target: LimitTargetDto, pin: string, } | { "type": "cancel_pending_limit", target: LimitTargetDto, pin: string, } | { "type": "grant_override", target: LimitTargetDto, seconds: number, pin: string, 
+/**
+ * The account the extra time is for; `None` is the caller's own.
+ */
+account_id: number | null, } | { "type": "set_pin", new_pin: string, current_pin: string | null, } | { "type": "recover_pin", recovery_code: string, new_pin: string, } | { "type": "remove_pin", credential: string, } | { "type": "set_setting", key: string, value: string, 
 /**
  * Required (once a PIN is configured) when the change loosens
  * enforcement; see `st_core::settings` and the agent's `auth` module.
@@ -34,4 +48,9 @@ pin?: string, } | { "type": "list_manual_blocks" } | { "type": "add_manual_block
  * Required (once a PIN is configured) when the change loosens
  * enforcement; see `st_core::settings` and the agent's `auth` module.
  */
-pin?: string, } | { "type": "verify_pin", pin: string, } | { "type": "register_discovered_apps", apps: Array<DiscoveredAppDto>, } | { "type": "record_block_reason", app_id: number, reason: string, } | { "type": "block_reasons", from_day: DayKey, to_day: DayKey, };
+pin?: string, } | { "type": "verify_pin", pin: string, } | { "type": "register_discovered_apps", apps: Array<DiscoveredAppDto>, } | { "type": "record_block_reason", app_id: number, reason: string, } | { "type": "block_reasons", from_day: DayKey, to_day: DayKey, 
+/**
+ * The account to show; `None` is the caller's own. Another account's
+ * data needs the PIN (docs/adr/0005-per-account-usage.md).
+ */
+account_id: number | null, pin?: string, } | { "type": "list_accounts" } | { "type": "set_account_supervised", account_id: number, supervised: boolean, pin?: string, };

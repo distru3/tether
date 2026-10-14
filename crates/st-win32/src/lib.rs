@@ -9,6 +9,7 @@
 //! implementation: fixes and audits land in one place. Existing crates adopt
 //! it later; nothing here depends on them.
 
+pub mod account;
 pub mod audio;
 pub mod session_launch;
 

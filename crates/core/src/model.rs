@@ -141,6 +141,22 @@ pub enum SubjectRef {
     Site(SiteId),
 }
 
+/// A Windows account in the agent's database (docs/adr/0005-per-account-usage.md).
+/// Usage, blocks and extra time belong to one.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
+pub struct AccountId(pub i64);
+
+impl AccountId {
+    /// Rows recorded before accounts existed, until an account adopts them.
+    pub const NOBODY: AccountId = AccountId(0);
+}
+
+impl std::fmt::Display for AccountId {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "account {}", self.0)
+    }
+}
+
 /// A contiguous span of foreground usage.
 ///
 /// The sampler polls at ~1 Hz but collapses identical consecutive samples into
@@ -148,9 +164,8 @@ pub enum SubjectRef {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct UsageInterval {
     pub subject: SubjectRef,
-    /// Identifies the login session, so two logged-in users are accounted
-    /// separately.
-    pub session_id: String,
+    /// The Windows account the usage happened on.
+    pub account: AccountId,
     pub start: DateTime<Utc>,
     pub end: DateTime<Utc>,
     pub day_key: DayKey,

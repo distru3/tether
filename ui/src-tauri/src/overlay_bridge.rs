@@ -236,6 +236,7 @@ pub fn overlay_extend(
         target: LimitTargetDto::App { id: app_id },
         seconds: 15 * 60,
         pin,
+        account_id: None,
     };
     match ipc_client::request(req) {
         Ok(Response::Accepted { .. }) => {

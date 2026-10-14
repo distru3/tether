@@ -188,7 +188,7 @@ fn seed_game_app(db: &mut Db, path: &str) -> i64 {
 fn record_usage(db: &mut Db, app: i64, secs: i64, day: DayKey) {
     db.record_interval(&st_core::model::UsageInterval {
         subject: SubjectRef::App(app),
-        session_id: "test".into(),
+        account: TEST_ACCOUNT,
         start: at("2026-08-20T10:00:00Z"),
         end: at("2026-08-20T10:00:00Z") + Duration::seconds(secs),
         day_key: day,
@@ -219,7 +219,7 @@ fn used_secs_for_key(db: &mut Db, key: &str, day: DayKey) -> i64 {
         .app_id_for_key(&AppKey::windows_exe(key))
         .expect("lookup")
         .expect("ingested app exists");
-    db.day_snapshot(day)
+    db.day_snapshot(TEST_ACCOUNT, day)
         .expect("snapshot")
         .seconds_used(&LimitTarget::App(app))
 }
@@ -598,6 +598,7 @@ fn grant_override_lands_on_the_local_day_not_the_utc_day() {
     let response = handle(
         &ctx,
         Request::GrantOverride {
+            account_id: None,
             target: LimitTargetDto::Total,
             seconds: 900,
             pin: String::new(),
@@ -606,7 +607,9 @@ fn grant_override_lands_on_the_local_day_not_the_utc_day() {
     expect_accepted(response, at("2026-08-21T02:00:00Z"));
 
     let db_guard = lock_db(&ctx.db);
-    let today = db_guard.day_snapshot(DayKey(20260820)).expect("snap");
+    let today = db_guard
+        .day_snapshot(TEST_ACCOUNT, DayKey(20260820))
+        .expect("snap");
     let expires = today
         .active_timer_expires_utc(&LimitTarget::Total)
         .expect("timer expires");
@@ -617,7 +620,9 @@ fn grant_override_lands_on_the_local_day_not_the_utc_day() {
         900,
         "override credited to the local day"
     );
-    let utc_day = db_guard.day_snapshot(DayKey(20260821)).expect("snap");
+    let utc_day = db_guard
+        .day_snapshot(TEST_ACCOUNT, DayKey(20260821))
+        .expect("snap");
     assert!(
         utc_day
             .active_timer_expires_utc(&LimitTarget::Total)
@@ -636,6 +641,7 @@ fn grant_override_refused_outright_in_strict_mode() {
     let response = handle(
         &ctx,
         Request::GrantOverride {
+            account_id: None,
             target: LimitTargetDto::Total,
             seconds: 900,
             pin: String::new(),
@@ -649,6 +655,7 @@ fn close_apps_terminates_the_process_tree_and_clears_the_block() {
     let mut db = Db::open_in_memory().expect("db");
     let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
     db.set_block(
+        TEST_ACCOUNT,
         SubjectRef::App(app),
         "limit",
         at("2026-08-20T12:00:00Z"),
@@ -674,7 +681,7 @@ fn close_apps_terminates_the_process_tree_and_clears_the_block() {
     );
     expect_accepted(response, at("2026-08-20T12:00:00Z"));
     assert!(!lock_db(&ctx.db)
-        .is_blocked(SubjectRef::App(app))
+        .is_blocked(TEST_ACCOUNT, SubjectRef::App(app))
         .expect("check"));
 
     assert_eq!(
@@ -707,6 +714,7 @@ fn blocked_apps_reports_label_and_key_for_the_overlay_owner() {
     let mut db = Db::open_in_memory().expect("db");
     let app = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
     db.set_block(
+        TEST_ACCOUNT,
         SubjectRef::App(app),
         "limit",
         at("2026-08-20T12:00:00Z"),
@@ -778,6 +786,7 @@ fn day_summary_maps_rows_limit_seconds_and_blocked_flags() {
     )
     .expect("limit");
     db.set_block(
+        TEST_ACCOUNT,
         SubjectRef::App(app),
         "limit",
         at("2026-08-20T12:00:00Z"),
@@ -789,6 +798,8 @@ fn day_summary_maps_rows_limit_seconds_and_blocked_flags() {
     let Response::DaySummary(dto) = handle(
         &ctx,
         Request::DaySummary {
+            account_id: None,
+            pin: None,
             day: DayKey(20260820),
         },
     ) else {
@@ -822,6 +833,8 @@ fn weekly_summary_maps_seven_zero_filled_days_oldest_first_with_previous_week_to
     let Response::WeeklySummary(dto) = handle(
         &ctx,
         Request::WeeklySummary {
+            account_id: None,
+            pin: None,
             end_day: DayKey(20260903),
         },
     ) else {
@@ -850,6 +863,8 @@ fn weekly_summary_with_an_invalid_day_key_is_an_internal_error() {
     let response = handle(
         &ctx,
         Request::WeeklySummary {
+            account_id: None,
+            pin: None,
             end_day: DayKey(20260230), // February 30th does not exist.
         },
     );
@@ -938,7 +953,7 @@ fn report_usage_skips_wildly_future_timestamps_but_still_accepts() {
     let db_guard = lock_db(&ctx.db);
     assert_eq!(
         db_guard
-            .day_summary(DayKey(20260825))
+            .day_summary(TEST_ACCOUNT, DayKey(20260825))
             .expect("summary")
             .total_seconds,
         0,
@@ -1635,6 +1650,7 @@ fn overrides_in_strict_mode_are_refused_before_the_pin_is_spent() {
             error_code(&handle(
                 &ctx,
                 Request::GrantOverride {
+                    account_id: None,
                     target: LimitTargetDto::Total,
                     seconds: 900,
                     pin: "0000".into(),
@@ -1725,6 +1741,8 @@ fn day_summary_budgets_honour_weekday_overrides_disabled_limits_and_categories()
         let Response::DaySummary(dto) = handle(
             ctx,
             Request::DaySummary {
+                account_id: None,
+                pin: None,
                 day: DayKey(20260822),
             },
         ) else {
@@ -1761,6 +1779,7 @@ fn quitting_a_blocked_app_needs_no_pin() {
     db.set_pin_hash(&hash_pin("9999").expect("hash"))
         .expect("set pin");
     db.set_block(
+        TEST_ACCOUNT,
         SubjectRef::App(app),
         "limit",
         at("2026-08-20T11:00:00Z"),
@@ -1789,18 +1808,35 @@ fn usage_reports_from_other_programs_are_refused() {
     );
     let report = report_of(vec![obs("C:\\x\\a.exe", "2026-08-20T11:59:58Z", 0)]);
     assert_eq!(
-        error_code(&handle_from(&ctx, auth::Peer::Other, report.clone())),
+        error_code(&handle_from(
+            &ctx,
+            Caller {
+                peer: auth::Peer::Other,
+                account: Some(TEST_ACCOUNT)
+            },
+            report.clone()
+        )),
         Some(ErrorCode::BadRequest)
     );
     // Uninspectable peers are let through so tracking never silently stops.
     assert!(matches!(
-        handle_from(&ctx, auth::Peer::Unknown, report),
+        handle_from(
+            &ctx,
+            Caller {
+                peer: auth::Peer::Unknown,
+                account: Some(TEST_ACCOUNT)
+            },
+            report
+        ),
         Response::Accepted { .. }
     ));
     assert_eq!(
         error_code(&handle_from(
             &ctx,
-            auth::Peer::Other,
+            Caller {
+                peer: auth::Peer::Other,
+                account: Some(TEST_ACCOUNT)
+            },
             Request::RegisterDiscoveredApps { apps: vec![] }
         )),
         Some(ErrorCode::BadRequest)
@@ -1813,6 +1849,7 @@ fn block_reasons_are_recorded_for_blocked_apps_without_a_pin_and_counted_by_day(
     let blocked = seed_game_app(&mut db, "C:\\games\\steam\\steam.exe");
     let free = seed_game_app(&mut db, "C:\\games\\other\\other.exe");
     db.set_block(
+        TEST_ACCOUNT,
         SubjectRef::App(blocked),
         "limit",
         at("2026-08-20T12:00:00Z"),
@@ -1856,6 +1893,8 @@ fn block_reasons_are_recorded_for_blocked_apps_without_a_pin_and_counted_by_day(
     match handle(
         &ctx,
         Request::BlockReasons {
+            account_id: None,
+            pin: None,
             from_day: day,
             to_day: day,
         },
@@ -1871,11 +1910,184 @@ fn block_reasons_are_recorded_for_blocked_apps_without_a_pin_and_counted_by_day(
     match handle(
         &ctx,
         Request::BlockReasons {
+            account_id: None,
+            pin: None,
             from_day: day,
             to_day: DayKey(20260801),
         },
     ) {
         Response::Error { code, .. } => assert_eq!(code, ErrorCode::BadRequest),
         other => panic!("expected bad_request, got {other:?}"),
+    }
+}
+
+// -- Accounts (docs/adr/0005-per-account-usage.md). ------------------------
+
+fn as_account(id: i64) -> Caller {
+    Caller {
+        peer: auth::Peer::SessionHelper,
+        account: Some(AccountId(id)),
+    }
+}
+
+#[test]
+fn reports_from_two_accounts_are_counted_and_chained_separately() {
+    let ctx = test_ctx(
+        Db::open_in_memory().expect("db"),
+        TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+    );
+    let key = "C:\\x\\a.exe";
+    handle_from(
+        &ctx,
+        as_account(1),
+        report_of(vec![
+            obs(key, "2026-08-20T11:59:40Z", 0),
+            obs(key, "2026-08-20T11:59:50Z", 0),
+        ]),
+    );
+    // One observation alone credits nothing, even right after account 1's.
+    handle_from(
+        &ctx,
+        as_account(2),
+        report_of(vec![obs(key, "2026-08-20T11:59:55Z", 0)]),
+    );
+    let db = lock_db(&ctx.db);
+    let app = db
+        .app_id_for_key(&AppKey::windows_exe(key))
+        .expect("lookup")
+        .expect("app");
+    let used = |id: i64| {
+        db.day_snapshot(AccountId(id), DayKey(20260820))
+            .expect("snapshot")
+            .seconds_used(&LimitTarget::App(app))
+    };
+    assert_eq!(used(1), 10);
+    assert_eq!(used(2), 0);
+}
+
+#[test]
+fn a_report_whose_account_is_unknown_is_refused() {
+    let ctx = test_ctx(
+        Db::open_in_memory().expect("db"),
+        TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+    );
+    let caller = Caller {
+        peer: auth::Peer::SessionHelper,
+        account: None,
+    };
+    let report = report_of(vec![obs("C:\\x\\a.exe", "2026-08-20T11:59:58Z", 0)]);
+    assert_eq!(
+        error_code(&handle_from(&ctx, caller, report)),
+        Some(ErrorCode::BadRequest)
+    );
+}
+
+#[test]
+fn another_accounts_day_needs_the_pin_but_ones_own_does_not() {
+    let ctx = test_ctx(
+        Db::open_in_memory().expect("db"),
+        TestClock::new(at("2026-08-20T12:00:00Z"), 0),
+    );
+    expect_vault(handle(
+        &ctx,
+        Request::SetPin {
+            new_pin: "1234".into(),
+            current_pin: None,
+        },
+    ));
+    let day = |account_id: Option<i64>, pin: Option<&str>| Request::DaySummary {
+        day: DayKey(20260820),
+        account_id,
+        pin: pin.map(str::to_string),
+    };
+    assert!(matches!(
+        handle_from(&ctx, as_account(1), day(None, None)),
+        Response::DaySummary(_)
+    ));
+    assert!(matches!(
+        handle_from(&ctx, as_account(1), day(Some(1), None)),
+        Response::DaySummary(_)
+    ));
+    assert_eq!(
+        error_code(&handle_from(&ctx, as_account(1), day(Some(2), None))),
+        Some(ErrorCode::BadPin)
+    );
+    assert!(matches!(
+        handle_from(&ctx, as_account(1), day(Some(2), Some("1234"))),
+        Response::DaySummary(_)
+    ));
+    let week = Request::WeeklySummary {
+        end_day: DayKey(20260820),
+        account_id: Some(2),
+        pin: None,
+    };
+    assert_eq!(
+        error_code(&handle_from(&ctx, as_account(1), week)),
+        Some(ErrorCode::BadPin)
+    );
+}
+
+#[test]
+fn unwatching_an_account_needs_the_pin_and_lifts_its_blocks() {
+    let mut db = Db::open_in_memory().expect("db");
+    let sam = db
+        .ensure_account("S-1-5-21-1", "Sam", at("2026-08-20T09:00:00Z"))
+        .expect("sam");
+    let kim = db
+        .ensure_account("S-1-5-21-2", "Kim", at("2026-08-20T09:00:00Z"))
+        .expect("kim");
+    db.set_block(
+        kim,
+        SubjectRef::App(5),
+        "limit",
+        at("2026-08-20T11:00:00Z"),
+        None,
+    )
+    .expect("block");
+    let ctx = test_ctx(db, TestClock::new(at("2026-08-20T12:00:00Z"), 0));
+    expect_vault(handle(
+        &ctx,
+        Request::SetPin {
+            new_pin: "1234".into(),
+            current_pin: None,
+        },
+    ));
+    let set = |supervised: bool, pin: Option<&str>| Request::SetAccountSupervised {
+        account_id: kim.0,
+        supervised,
+        pin: pin.map(str::to_string),
+    };
+
+    assert_eq!(
+        error_code(&handle_from(&ctx, as_account(sam.0), set(false, None))),
+        Some(ErrorCode::BadPin)
+    );
+    assert!(matches!(
+        handle_from(&ctx, as_account(sam.0), set(false, Some("1234"))),
+        Response::Accepted { .. }
+    ));
+    {
+        let db = lock_db(&ctx.db);
+        assert!(!db.is_supervised(kim).expect("read"));
+        assert!(!db.is_blocked(kim, SubjectRef::App(5)).expect("lifted"));
+    }
+    // Watching again only tightens: no PIN.
+    assert!(matches!(
+        handle_from(&ctx, as_account(sam.0), set(true, None)),
+        Response::Accepted { .. }
+    ));
+
+    match handle_from(&ctx, as_account(sam.0), Request::ListAccounts) {
+        Response::Accounts(dto) => {
+            assert_eq!(dto.accounts.len(), 2);
+            let me = dto
+                .accounts
+                .iter()
+                .find(|a| a.is_caller)
+                .expect("caller marked");
+            assert_eq!(me.name, "Sam");
+            assert!(dto.accounts.iter().all(|a| a.supervised));
+        }
+        other => panic!("expected Accounts, got {other:?}"),
     }
 }

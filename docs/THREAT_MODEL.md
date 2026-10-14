@@ -26,7 +26,7 @@ code; plans belong in an ADR.
   of every request. With a PIN set, anything that loosens enforcement needs
   it: raising or removing limits, extra time, closing an unblocked app,
   unblocking sites, recategorising apps, editing, disabling or deleting
-  schedules, allowlisting, and loosening settings. `SetSetting` accepts only
+  schedules, allowlisting, loosening settings, and unwatching an account. `SetSetting` accepts only
   known keys, so the PIN hash cannot be overwritten through it. Changing the
   PIN needs the old PIN or the recovery code.
 - **Brute-force throttle**: after 5 wrong PINs or recovery codes in a row,
@@ -48,8 +48,12 @@ code; plans belong in an ADR.
   jump is logged, audited and not credited.
 - **Hosts writes** stay between Tether's markers, so the person's own entries
   survive, and are written atomically.
+- **Per-account counting** (ADR 0005): the agent reads each connection's
+  Windows account from the process token, so a report cannot claim another
+  account. Usage and blocks are per account; stopping limits on an account
+  needs the PIN, and so does reading another account's history.
 - **Audit log**: PIN set and removed, rejected credentials, overrides, backward
-  clock jumps.
+  clock jumps, accounts watched or unwatched.
 
 ## Known bypasses
 
@@ -58,8 +62,6 @@ Listed so the UI stays honest and regressions are visible.
 - **An administrator** can stop the service, edit the hosts file, delete the
   database or uninstall Tether. Nothing restarts a stopped service. This is
   expected: for a child, use a standard account.
-- **Usage is per PC, not per person**: every Windows account on the machine
-  feeds the same budgets (to be fixed; see the current plan).
 - **Ending the session helper** stops tracking and blocking until the service
   relaunches it (about 15 s).
 - **Store apps** all report as one host process, so per-app limits on them

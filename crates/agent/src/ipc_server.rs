@@ -46,7 +46,7 @@ use st_core::category::CategoryKind;
 use st_core::clock::Clock;
 use st_core::daykey::DayKey;
 use st_core::limits::{LimitTarget, UsageSnapshot};
-use st_core::model::{AppKey, SubjectRef};
+use st_core::model::{AccountId, AppKey, SubjectRef};
 use st_core::pin::{generate_recovery_code, hash_pin, normalize_recovery_code, PinThrottle};
 use st_core::platform::ProcessController;
 use st_core::settings::SettingKey;
@@ -60,6 +60,7 @@ use crate::family_dns::{self, DnsBackend};
 use crate::locks::{lock_db, lock_recover, read_recover, write_recover};
 pub use crate::policy::Policy;
 
+mod accounts;
 mod apps;
 mod auth;
 mod dashboard;
@@ -75,6 +76,7 @@ mod web;
 
 use crate::persist;
 use crate::sampler::PendingInterval;
+use accounts::*;
 use apps::*;
 use dashboard::*;
 use downtime::*;
@@ -150,9 +152,10 @@ pub struct StatusInfo {
 /// a time, and nested locking is a deadlock waiting to happen.
 pub struct Live {
     last_report: Mutex<Option<DateTime<Utc>>>,
-    focus: Mutex<Option<(AppKey, DateTime<Utc>)>>,
-    seen_observations: Mutex<Vec<(String, i64)>>,
-    open_chains: Mutex<HashMap<String, ChainState>>,
+    /// Each account's most recently focused app.
+    focus: Mutex<HashMap<AccountId, (AppKey, DateTime<Utc>)>>,
+    seen_observations: Mutex<Vec<(AccountId, String, i64)>>,
+    open_chains: Mutex<HashMap<(AccountId, String), ChainState>>,
     /// Brute-force throttle shared by every credential check; see `auth`.
     pin_throttle: Mutex<PinThrottle>,
 }
@@ -161,7 +164,7 @@ impl Default for Live {
     fn default() -> Self {
         Self {
             last_report: Mutex::new(None),
-            focus: Mutex::new(None),
+            focus: Mutex::new(HashMap::new()),
             seen_observations: Mutex::new(Vec::new()),
             open_chains: Mutex::new(HashMap::new()),
             pin_throttle: Mutex::new(PinThrottle::default()),
@@ -191,20 +194,30 @@ impl Live {
         self.reported_within(secs, now)
     }
 
-    fn note_focus(&self, key: AppKey, at: DateTime<Utc>) {
+    fn note_focus(&self, account: AccountId, key: AppKey, at: DateTime<Utc>) {
         let mut focus = lock_recover(&self.focus, "focus");
-        if focus.as_ref().is_none_or(|(_, t)| at >= *t) {
-            *focus = Some((key, at));
+        if focus.get(&account).is_none_or(|(_, t)| at >= *t) {
+            focus.insert(account, (key, at));
         }
     }
 
-    /// The most recently observed focused app, if the observation is fresh
-    /// enough to act on for enforcement.
-    pub(crate) fn focus_key(&self, now: DateTime<Utc>) -> Option<AppKey> {
+    /// One account's most recently focused app, if the observation is fresh
+    /// enough to act on.
+    pub(crate) fn focus_key(&self, account: AccountId, now: DateTime<Utc>) -> Option<AppKey> {
         lock_recover(&self.focus, "focus")
-            .clone()
+            .get(&account)
             .filter(|(_, t)| (now - *t).num_seconds() <= FOCUS_MAX_AGE_SECS)
-            .map(|(k, _)| k)
+            .map(|(k, _)| k.clone())
+    }
+
+    /// Every account with a fresh focus report and its focused app, for the
+    /// enforcer. Stale entries are dropped on the way.
+    pub(crate) fn focused(&self, now: DateTime<Utc>) -> Vec<(AccountId, AppKey)> {
+        let mut focus = lock_recover(&self.focus, "focus");
+        focus.retain(|_, (_, t)| (now - *t).num_seconds() <= FOCUS_MAX_AGE_SECS);
+        let mut out: Vec<_> = focus.iter().map(|(a, (k, _))| (*a, k.clone())).collect();
+        out.sort_by_key(|(a, _)| *a);
+        out
     }
 }
 
@@ -393,10 +406,14 @@ fn serve_connection(stream: OwnedStream, ctx: Ctx) {
     if peer == auth::Peer::Unknown {
         tracing::debug!("IPC peer process could not be inspected");
     }
+    let caller = Caller {
+        peer,
+        account: resolve_account(&ctx, stream.peer_process_id()),
+    };
     loop {
         match st_ipc::read_message::<_, Request>(&mut stream) {
             Ok(request) => {
-                let response = handle_from(&ctx, peer, request);
+                let response = handle_from(&ctx, caller, request);
                 if let Err(e) = st_ipc::write_message(&mut stream, &response) {
                     tracing::warn!(error = %e, "failed to write IPC response; closing connection");
                     break;
@@ -412,25 +429,87 @@ fn serve_connection(stream: OwnedStream, ctx: Ctx) {
     }
 }
 
+/// Who is on the other end of a connection: which program, and which
+/// Windows account it runs as (from its token, docs/adr/0005).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Caller {
+    pub(crate) peer: auth::Peer,
+    pub(crate) account: Option<AccountId>,
+}
+
+impl Caller {
+    /// The account a request is about: the one it names, else the caller's.
+    /// Data recorded for nobody yet answers an unidentified caller.
+    fn subject(&self, requested: Option<i64>) -> AccountId {
+        requested
+            .map(AccountId)
+            .or(self.account)
+            .unwrap_or(AccountId::NOBODY)
+    }
+}
+
+/// The account behind a pipe peer, added to the database the first time.
+fn resolve_account(ctx: &Ctx, pid: Option<u32>) -> Option<AccountId> {
+    #[cfg(windows)]
+    {
+        let user = match st_win32::account::process_user(pid?) {
+            Ok(user) => user,
+            Err(e) => {
+                tracing::warn!(error = %e, "could not read the account of an IPC peer");
+                return None;
+            }
+        };
+        match lock_db(&ctx.db).ensure_account(&user.sid, &user.name, ctx.clock.now_utc()) {
+            Ok(id) => Some(id),
+            Err(e) => {
+                tracing::error!(error = %e, "could not record an account");
+                None
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (ctx, pid);
+        None
+    }
+}
+
+/// The account tests act as.
+#[cfg(test)]
+const TEST_ACCOUNT: AccountId = AccountId(1);
+
 /// Dispatch a request from a trusted in-process caller (tests).
 #[cfg(test)]
 fn handle(ctx: &Ctx, request: Request) -> Response {
-    handle_from(ctx, auth::Peer::SessionHelper, request)
+    handle_from(
+        ctx,
+        Caller {
+            peer: auth::Peer::SessionHelper,
+            account: Some(TEST_ACCOUNT),
+        },
+        request,
+    )
 }
 
-fn handle_from(ctx: &Ctx, peer: auth::Peer, request: Request) -> Response {
-    if let Err(denied) = auth::authorize(ctx, peer, &request) {
+fn handle_from(ctx: &Ctx, caller: Caller, request: Request) -> Response {
+    if let Err(denied) = auth::authorize(ctx, caller, &request) {
         return denied.into();
     }
     let now = ctx.clock.now_utc();
     match request {
         Request::Ping => Response::Pong,
-        Request::Status => status_response(ctx),
-        Request::DaySummary { day } => day_summary(ctx, day),
-        Request::WeeklySummary { end_day } => weekly_summary(ctx, end_day),
-        Request::Catalog => catalog(ctx),
-        Request::BlockedApps => blocked_apps(ctx),
-        Request::CloseApps { app_id, .. } => close_apps(ctx, app_id),
+        Request::Status => status_response(ctx, caller),
+        Request::DaySummary {
+            day, account_id, ..
+        } => day_summary(ctx, caller.subject(account_id), day),
+        Request::WeeklySummary {
+            end_day,
+            account_id,
+            ..
+        } => weekly_summary(ctx, caller.subject(account_id), end_day),
+        Request::Catalog => catalog(ctx, caller.subject(None)),
+        Request::BlockedApps => blocked_apps(ctx, caller.subject(None)),
+        Request::CloseApps { app_id, .. } => close_apps(ctx, caller.subject(None), app_id),
         Request::SetPin {
             new_pin,
             current_pin,
@@ -460,8 +539,11 @@ fn handle_from(ctx: &Ctx, peer: auth::Peer, request: Request) -> Response {
         Request::DeleteLimit { target, .. } => delete_limit(ctx, target, now),
         Request::CancelPendingLimit { target, .. } => cancel_pending_limit(ctx, target),
         Request::GrantOverride {
-            target, seconds, ..
-        } => grant_override(ctx, target, seconds, now),
+            target,
+            seconds,
+            account_id,
+            ..
+        } => grant_override(ctx, caller.subject(account_id), target, seconds, now),
         Request::Categorize {
             app_id,
             primary,
@@ -469,7 +551,10 @@ fn handle_from(ctx: &Ctx, peer: auth::Peer, request: Request) -> Response {
             ..
         } => categorize(ctx, app_id, primary, &tags),
         Request::RegisterDiscoveredApps { apps } => register_discovered_apps(ctx, apps, now),
-        Request::ReportUsage { report } => report_usage(ctx, report),
+        Request::ReportUsage { report } => match caller.account {
+            Some(account) => report_usage(ctx, account, report),
+            None => bad_request("the reporting account could not be identified".into()),
+        },
         // `auth` already verified the PIN; reaching here means it matched.
         Request::VerifyPin { .. } => accepted(now),
         Request::ListManualBlocks => list_manual_blocks(ctx),
@@ -500,9 +585,20 @@ fn handle_from(ctx: &Ctx, peer: auth::Peer, request: Request) -> Response {
             ..
         } => set_allowlist(ctx, &subject_type, subject_id, allowed),
         Request::RecordBlockReason { app_id, reason } => {
-            reasons::record_block_reason(ctx, app_id, &reason, now)
+            reasons::record_block_reason(ctx, caller.subject(None), app_id, &reason, now)
         }
-        Request::BlockReasons { from_day, to_day } => reasons::block_reasons(ctx, from_day, to_day),
+        Request::BlockReasons {
+            from_day,
+            to_day,
+            account_id,
+            ..
+        } => reasons::block_reasons(ctx, caller.subject(account_id), from_day, to_day),
+        Request::ListAccounts => list_accounts(ctx, caller),
+        Request::SetAccountSupervised {
+            account_id,
+            supervised,
+            ..
+        } => set_account_supervised(ctx, AccountId(account_id), supervised, now),
     }
 }
 

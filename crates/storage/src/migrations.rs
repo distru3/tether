@@ -18,6 +18,7 @@ pub(crate) const MIGRATIONS: &[(i64, &str)] = &[
     ),
     (4, include_str!("../migrations/0004_wall_clock_timers.sql")),
     (5, include_str!("../migrations/0005_block_reasons.sql")),
+    (6, include_str!("../migrations/0006_accounts.sql")),
 ];
 
 impl Db {

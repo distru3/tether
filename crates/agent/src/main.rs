@@ -329,6 +329,12 @@ fn run_main_loop(
     // Only the development fallback owns a sampler; report ingestion replaces
     // it otherwise. It keeps the startup day boundary (dev-only path).
     let mut sampler = self_sampling.then(|| Sampler::new(day_start_minutes));
+    // The dev fallback records under the agent's own account.
+    let own_account = if self_sampling {
+        own_account(&db, clock.now_utc())
+    } else {
+        st_core::model::AccountId::NOBODY
+    };
     let mut guard = ClockGuard::new(&*clock, Duration::seconds(CLOCK_TOLERANCE_SECS));
     let mut enforcer = Enforcer::new();
     let mut tracker_error_logged = false;
@@ -401,7 +407,7 @@ fn run_main_loop(
                 }
             };
             for pending in sampler.observe(now, tz_offset, window.as_ref(), idle, verdict) {
-                persist_pending(&db, &pending, uncategorized, now);
+                persist_pending(&db, own_account, &pending, uncategorized, now);
             }
         }
 
@@ -439,9 +445,23 @@ fn run_main_loop(
                 seconds = pending.duration_secs(),
                 "flushing final interval on shutdown"
             );
-            persist_pending(&db, &pending, uncategorized, clock.now_utc());
+            persist_pending(&db, own_account, &pending, uncategorized, clock.now_utc());
         }
     }
+}
+
+/// The account this agent process runs as, for the dev self-sampling path.
+fn own_account(db: &Arc<Mutex<Db>>, now: DateTime<Utc>) -> st_core::model::AccountId {
+    #[cfg(windows)]
+    {
+        if let Ok(user) = st_win32::account::process_user(std::process::id()) {
+            if let Ok(id) = lock_db(db).ensure_account(&user.sid, &user.name, now) {
+                return id;
+            }
+        }
+    }
+    let _ = (db, now);
+    st_core::model::AccountId::NOBODY
 }
 
 /// Start the session helper in the console user's session. Called by the
@@ -509,11 +529,11 @@ fn evaluate_limits(
 
     // With sampling moved to the session helper, the focused app arrives via
     // reported observations; nothing to evaluate when reports went quiet.
-    let focus = ipc.live.focus_key(clock.now_utc());
+    let focused = ipc.live.focused(clock.now_utc());
     let result = enforcer.tick(
         &mut lock_db(db),
         &engine,
-        focus.as_ref(),
+        &focused,
         now,
         tz_offset,
         day_start_minutes,
@@ -530,6 +550,7 @@ fn evaluate_limits(
 /// produce identical rows.
 fn persist(
     db: &mut Db,
+    account: st_core::model::AccountId,
     pending: &PendingInterval,
     default_category: i64,
     now: DateTime<Utc>,
@@ -566,7 +587,7 @@ fn persist(
 
     db.record_interval(&st_core::model::UsageInterval {
         subject: SubjectRef::App(app_id),
-        session_id: "default".into(),
+        account,
         start: pending.start,
         end: pending.end,
         day_key: pending.day,
@@ -583,11 +604,12 @@ fn persist(
 
 fn persist_pending(
     db: &Arc<Mutex<Db>>,
+    account: st_core::model::AccountId,
     pending: &PendingInterval,
     default_category: i64,
     now: DateTime<Utc>,
 ) {
-    if let Err(e) = persist(&mut lock_db(db), pending, default_category, now) {
+    if let Err(e) = persist(&mut lock_db(db), account, pending, default_category, now) {
         tracing::error!(error = %e, app = %pending.key, "failed to persist interval");
     }
 }

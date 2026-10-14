@@ -77,7 +77,14 @@ Every SQL statement lives in `st-storage`; every enforcement decision in
    (a backward jump is logged, audited and not credited), deduplicates,
    writes `usage_intervals` and the `usage_daily` rollup, and answers with the
    HUD state for the focused app.
-5. Days are local `YYYYMMDD` keys shifted by `day_start_minutes`
+5. **Per account** (ADR 0005): every connection's Windows account is read
+   from the peer process's token (`st_win32::account::process_user`) and
+   kept in `accounts`. Usage, blocks, extra time and block-screen answers
+   belong to that account; budgets, schedules, websites and settings are
+   shared. An account is *watched* (limits apply) unless someone with the
+   PIN turned that off; new accounts are watched. The first account met
+   adopted the usage recorded before accounts existed.
+6. Days are local `YYYYMMDD` keys shifted by `day_start_minutes`
    (`DayKey`). The UI mirrors the same setting so "today" matches.
 
 App discovery runs once per helper start: Start menu shortcuts, the uninstall
@@ -94,10 +101,11 @@ blocked.
 
 - **Limits** target an app, a category or total screen time, with a daily
   minute value and optional per-weekday values.
-- **The enforcer** (`crates/agent/src/enforcer.rs`) runs every second on the
-  focused app only (focus reports older than 30 s are ignored): it lifts
-  expired blocks, clears all blocks on a day change it observed itself, then
-  asks the limits engine. Order of checks: a downtime schedule in force
+- **The enforcer** (`crates/agent/src/enforcer.rs`) runs every second on
+  each account's focused app (focus reports older than 30 s are ignored): it
+  lifts expired blocks, clears all blocks on a day change it observed itself,
+  then asks the limits engine about every watched account, against that
+  account's own usage. An unwatched account is never blocked. Order of checks: a downtime schedule in force
   (unless the app is always allowed), the app's budget, its categories, total
   screen time. Overlapping limits: the most restrictive wins.
 - **A block** is a `block_state` row with an expiry (end of the local day, or
@@ -165,9 +173,10 @@ shipped migration, add a new one.
 | 0003 | One total-screen-time limit at most |
 | 0004 | Wall-clock expiry on overrides |
 | 0005 | `block_reasons` (answers on the block screen) |
+| 0006 | `accounts`; `account_id` on usage, blocks, overrides and block reasons |
 
-The audit log records PIN set/removed, rejected credentials, overrides and
-backward clock jumps.
+The audit log records PIN set/removed, rejected credentials, overrides,
+backward clock jumps and accounts being watched or unwatched.
 
 Logs: agent in `{data_dir}\logs`, helper in `%LOCALAPPDATA%\screentime\logs`.
 The helper never logs routine per-second work at INFO.

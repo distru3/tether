@@ -33,7 +33,7 @@ use super::*;
 /// instant unless something failed *before* anything was persisted (unknown
 /// taxonomy, poisoned storage); the helper compares `effective_utc` with its
 /// own send clock to measure skew.
-pub(super) fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
+pub(super) fn report_usage(ctx: &Ctx, account: AccountId, report: ReportUsageDto) -> Response {
     let now = ctx.clock.now_utc();
     let tz_offset = ctx.clock.local_offset_seconds();
     let day_start = read_recover(&ctx.policy, "policy").day_start_minutes;
@@ -81,9 +81,9 @@ pub(super) fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
     {
         let mut seen = lock_recover(&ctx.live.seen_observations, "observation dedupe ring");
         let cutoff = (now - Duration::seconds(DEDUPE_TTL_SECS)).timestamp();
-        seen.retain(|(_, ts)| *ts >= cutoff);
+        seen.retain(|(_, _, ts)| *ts >= cutoff);
         parsed.retain(|(t, obs)| {
-            let entry = (obs.app_key.to_db_string(), t.timestamp());
+            let entry = (account, obs.app_key.to_db_string(), t.timestamp());
             if seen.contains(&entry) {
                 false
             } else {
@@ -103,8 +103,8 @@ pub(super) fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
     {
         let mut chains = lock_recover(&ctx.live.open_chains, "open usage chains");
         for (t, obs) in parsed.clone() {
-            let key_string = obs.app_key.to_db_string();
-            ctx.live.note_focus(obs.app_key.clone(), t);
+            let key_string = (account, obs.app_key.to_db_string());
+            ctx.live.note_focus(account, obs.app_key.clone(), t);
             if i64::from(obs.idle_seconds) >= idle_threshold {
                 chains.remove(&key_string);
                 continue;
@@ -137,7 +137,7 @@ pub(super) fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
                 day: DayKey(0),
             };
             for piece in split_by_day(&span, tz_offset, day_start) {
-                if let Err(e) = persist(&mut db, &piece, default_category, now) {
+                if let Err(e) = persist(&mut db, account, &piece, default_category, now) {
                     tracing::error!(
                         error = %e,
                         app = %piece.key,
@@ -149,7 +149,7 @@ pub(super) fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
     }
 
     if let Some(ref fk) = report.focused_key {
-        ctx.live.note_focus(fk.clone(), now);
+        ctx.live.note_focus(account, fk.clone(), now);
     }
 
     ctx.live.note_report(now);
@@ -162,12 +162,14 @@ pub(super) fn report_usage(ctx: &Ctx, report: ReportUsageDto) -> Response {
         parsed
             .last()
             .map(|(_, obs)| obs.app_key.clone())
-            .or_else(|| ctx.live.focus_key(now))
+            .or_else(|| ctx.live.focus_key(account, now))
     });
-    if let Some(app_key) = focused_key {
+    let watched = lock_db(&ctx.db).is_supervised(account).unwrap_or(true);
+    // No timer on an account limits don't apply to.
+    if let Some(app_key) = focused_key.filter(|_| watched) {
         let db_guard = lock_db(&ctx.db);
         let today = DayKey::from_utc(now, tz_offset, day_start);
-        if let Ok(snap) = db_guard.day_snapshot(today) {
+        if let Ok(snap) = db_guard.day_snapshot(account, today) {
             if let Ok(Some(app_id)) = db_guard.app_id_for_key(&app_key) {
                 if let Ok(Some(record)) = db_guard.app_record(app_id) {
                     let all_categories = record.all_categories();

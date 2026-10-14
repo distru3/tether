@@ -5,8 +5,11 @@
 //! 1. Lifts blocks whose `expires_utc` has passed.
 //! 2. On a *genuine* day change observed across two ticks, clears whatever
 //!    survived (every budget resets at the boundary).
-//! 3. Looks up the focused app's record (category + tags).
-//! 4. Asks the limits engine what to do (`Allow`/`Warn`/`Block`).
+//! 3. For each watched account with a fresh focus report, looks up the
+//!    focused app's record (category + tags). Accounts nobody watches are
+//!    never blocked (docs/adr/0005-per-account-usage.md).
+//! 4. Asks the limits engine what to do (`Allow`/`Warn`/`Block`), against
+//!    that account's own usage.
 //! 5. On `Block`: records the block in `block_state` **with an expiry** -- the
 //!    end of the local day, computed via [`DayKey::end_utc`] -- so the block
 //!    dies on its own even if this process never ticks again. On
@@ -31,7 +34,7 @@ use chrono::{DateTime, Duration, Utc};
 use st_core::category::CategoryKind;
 use st_core::daykey::DayKey;
 use st_core::limits::{Decision, LimitEngine};
-use st_core::model::{AppKey, SubjectRef};
+use st_core::model::{AccountId, AppKey, SubjectRef};
 use st_storage::Db;
 
 /// Fallback expiry when a [`DayKey`] cannot be resolved to an instant. A day
@@ -51,11 +54,11 @@ impl Enforcer {
         Self { last_day: None }
     }
 
-    /// Evaluate and act on the focused app. Returns the verdict for logging.
+    /// Evaluate and act on each account's focused app.
     ///
-    /// `window_key` is the focused app (from local sampling or from session-
-    /// helper reports). If it is `None` nothing is evaluated but expired blocks are still lifted
-    /// and day rollover still happen.
+    /// `focused` holds every account with a fresh focus report and its focused
+    /// app. Empty means nothing is evaluated, but expired blocks are still
+    /// lifted and day rollover still happens.
     ///
     /// `now`, `tz_offset_secs` and `day_start_minutes` come from the caller's
     /// injected [`Clock`](st_core::clock::Clock) so tamper semantics stay
@@ -65,7 +68,7 @@ impl Enforcer {
         &mut self,
         db: &mut Db,
         engine: &LimitEngine,
-        window_key: Option<&AppKey>,
+        focused: &[(AccountId, AppKey)],
         now: DateTime<Utc>,
         tz_offset_secs: i32,
         day_start_minutes: i64,
@@ -88,9 +91,39 @@ impl Enforcer {
         }
         self.last_day = Some(today);
 
-        let Some(window_key) = window_key else {
+        for (account, key) in focused {
+            self.evaluate(
+                db,
+                engine,
+                *account,
+                key,
+                now,
+                today,
+                tz_offset_secs,
+                day_start_minutes,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Act on one account's focused app.
+    #[allow(clippy::too_many_arguments)]
+    fn evaluate(
+        &self,
+        db: &mut Db,
+        engine: &LimitEngine,
+        account: AccountId,
+        window_key: &AppKey,
+        now: DateTime<Utc>,
+        today: DayKey,
+        tz_offset_secs: i32,
+        day_start_minutes: i64,
+    ) -> anyhow::Result<()> {
+        if !db.is_supervised(account)? {
+            // Limits don't apply here; make sure nothing lingers either.
+            db.clear_account_blocks(account)?;
             return Ok(());
-        };
+        }
 
         // Not every focused window is a tracked app (e.g. the lock screen is
         // filtered upstream); resolve it via storage, then evaluate.
@@ -129,12 +162,12 @@ impl Enforcer {
             let expires = today
                 .end_utc(tz_offset_secs, day_start_minutes)
                 .unwrap_or_else(|| now + FALLBACK_EXPIRY);
-            tracing::info!(app = %record.key, "blocking app due to downtime schedule");
-            db.set_block(subject, "downtime", now, Some(expires))?;
+            tracing::info!(app = %record.key, %account, "blocking app due to downtime schedule");
+            db.set_block(account, subject, "downtime", now, Some(expires))?;
             return Ok(());
         }
 
-        let snapshot = db.day_snapshot(today)?;
+        let snapshot = db.day_snapshot(account, today)?;
         let decision = engine.evaluate(
             record.id,
             &record.all_categories(),
@@ -149,11 +182,11 @@ impl Enforcer {
                 let expires = today
                     .end_utc(tz_offset_secs, day_start_minutes)
                     .unwrap_or_else(|| now + FALLBACK_EXPIRY);
-                tracing::info!(app = %record.key, ?binding, expires = %expires, "blocking app");
-                db.set_block(subject, "limit", now, Some(expires))?;
+                tracing::info!(app = %record.key, %account, ?binding, expires = %expires, "blocking app");
+                db.set_block(account, subject, "limit", now, Some(expires))?;
             }
             Decision::Allow { .. } | Decision::Warn { .. } => {
-                db.clear_block(subject)?;
+                db.clear_block(account, subject)?;
             }
         }
         Ok(())
@@ -167,40 +200,21 @@ impl Enforcer {
     /// are treated as expired on purpose -- they can only come from a pre-expiry
     /// writer or tampering, and both should lift, not haunt the user forever.
     fn lift_expired_blocks(&self, db: &mut Db, now: DateTime<Utc>) -> anyhow::Result<()> {
-        let mut stmt = db
-            .conn()
-            .prepare("SELECT subject_type, subject_id, expires_utc FROM block_state")?;
-        let rows = stmt.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, Option<String>>(2)?,
-            ))
-        })?;
-
-        let mut expired: Vec<SubjectRef> = Vec::new();
-        for row in rows {
-            let (kind, id, expires_utc) = row?;
-            let dead = match expires_utc.as_deref().map(DateTime::parse_from_rfc3339) {
+        for block in db.all_blocks()? {
+            let dead = match block
+                .expires_utc
+                .as_deref()
+                .map(DateTime::parse_from_rfc3339)
+            {
                 Some(Ok(expires)) => expires.with_timezone(&Utc) <= now,
                 // Missing or malformed timestamp: fail safe by lifting it. See
                 // the doc comment above for why silence would be worse.
                 _ => true,
             };
             if dead {
-                match subject_from_row(&kind, id) {
-                    Some(subject) => expired.push(subject),
-                    None => tracing::warn!(
-                        subject_type = %kind,
-                        "skipping block_state row with unknown subject type"
-                    ),
-                }
+                db.clear_block(block.account, block.subject)?;
+                tracing::info!(subject = ?block.subject, account = %block.account, "block expired; lifting it");
             }
-        }
-
-        for subject in expired {
-            db.clear_block(subject)?;
-            tracing::info!(subject = ?subject, "block expired; lifting it");
         }
         Ok(())
     }
@@ -209,9 +223,8 @@ impl Enforcer {
     /// observed itself, where expiry alone might leave a block alive across
     /// the boundary (e.g. a clock jump that lands us in tomorrow).
     fn clear_all_blocks(&self, db: &mut Db) -> anyhow::Result<()> {
-        let blocked = db.blocked_subjects()?;
-        for (subject, _reason) in blocked {
-            let _ = db.clear_block(subject);
+        for block in db.all_blocks()? {
+            let _ = db.clear_block(block.account, block.subject);
         }
         Ok(())
     }
@@ -225,20 +238,6 @@ impl Enforcer {
     }
 }
 
-/// Decode a `(subject_type, subject_id)` column pair.
-///
-/// Mirrors the private codec in `st-storage`; the agent only ever reads rows
-/// that storage wrote, but storage does not export the inverse, so the two
-/// encodings must be kept in step by hand. Unknown kinds are skipped with a
-/// warning, same as storage does.
-fn subject_from_row(kind: &str, id: i64) -> Option<SubjectRef> {
-    match kind {
-        "app" => Some(SubjectRef::App(id)),
-        "site" => Some(SubjectRef::Site(id)),
-        _ => None,
-    }
-}
-
 impl Default for Enforcer {
     fn default() -> Self {
         Self::new()
@@ -248,6 +247,8 @@ impl Default for Enforcer {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const ACCT: AccountId = AccountId(1);
     use rusqlite::params;
     use st_core::limits::Limit;
 
@@ -267,7 +268,7 @@ mod tests {
         let day = DayKey(20260820);
         db.record_interval(&st_core::model::UsageInterval {
             subject: SubjectRef::App(app),
-            session_id: "s".into(),
+            account: ACCT,
             start: chrono::Utc::now(),
             end: chrono::Utc::now() + chrono::Duration::seconds(secs),
             day_key: day,
@@ -292,7 +293,7 @@ mod tests {
     ) {
         let engine = engine_for(target);
         enforcer
-            .tick(db, &engine, Some(key), now, 0, 0)
+            .tick(db, &engine, &[(ACCT, key.clone())], now, 0, 0)
             .expect("tick");
     }
 
@@ -313,7 +314,7 @@ mod tests {
             at("2026-08-20T12:00:00Z"),
         );
 
-        assert!(db.is_blocked(SubjectRef::App(app)).expect("blocked"));
+        assert!(db.is_blocked(ACCT, SubjectRef::App(app)).expect("blocked"));
     }
 
     #[test]
@@ -332,10 +333,11 @@ mod tests {
             st_core::limits::LimitTarget::Category(games),
             at("2026-08-20T12:00:00Z"),
         );
-        assert!(db.is_blocked(SubjectRef::App(app)).expect("blocked"));
+        assert!(db.is_blocked(ACCT, SubjectRef::App(app)).expect("blocked"));
 
         // A +15 override lifts the budget -> next tick must clear the block.
         db.grant_override(
+            ACCT,
             &st_core::limits::LimitTarget::Category(games),
             DayKey(20260820),
             15 * 60,
@@ -350,7 +352,9 @@ mod tests {
             st_core::limits::LimitTarget::Category(games),
             at("2026-08-20T12:02:00Z"),
         );
-        assert!(!db.is_blocked(SubjectRef::App(app)).expect("unblocked"));
+        assert!(!db
+            .is_blocked(ACCT, SubjectRef::App(app))
+            .expect("unblocked"));
     }
 
     /// Regression: with a non-midnight day start, the overnight window's
@@ -373,28 +377,30 @@ mod tests {
             .tick(
                 &mut db,
                 &no_limits,
-                Some(&steam_key()),
+                &[(ACCT, steam_key())],
                 at("2026-08-18T02:00:00Z"),
                 0,
                 4 * 60,
             )
             .expect("tick");
-        assert!(db.is_blocked(SubjectRef::App(app)).expect("blocked"));
+        assert!(db.is_blocked(ACCT, SubjectRef::App(app)).expect("blocked"));
 
         // The allowlist exempts an app from downtime.
         db.set_allowlist_subject("app", app, true).expect("allow");
-        db.clear_block(SubjectRef::App(app)).expect("clear");
+        db.clear_block(ACCT, SubjectRef::App(app)).expect("clear");
         enforcer
             .tick(
                 &mut db,
                 &no_limits,
-                Some(&steam_key()),
+                &[(ACCT, steam_key())],
                 at("2026-08-18T02:01:00Z"),
                 0,
                 4 * 60,
             )
             .expect("tick");
-        assert!(!db.is_blocked(SubjectRef::App(app)).expect("not blocked"));
+        assert!(!db
+            .is_blocked(ACCT, SubjectRef::App(app))
+            .expect("not blocked"));
     }
 
     #[test]
@@ -414,7 +420,9 @@ mod tests {
             at("2026-08-20T12:00:00Z"),
         );
 
-        assert!(!db.is_blocked(SubjectRef::App(app)).expect("not blocked"));
+        assert!(!db
+            .is_blocked(ACCT, SubjectRef::App(app))
+            .expect("not blocked"));
     }
 
     #[test]
@@ -433,14 +441,14 @@ mod tests {
             st_core::limits::LimitTarget::Category(games),
             at("2026-08-20T22:00:00Z"),
         );
-        assert!(db.is_blocked(SubjectRef::App(app)).expect("blocked"));
+        assert!(db.is_blocked(ACCT, SubjectRef::App(app)).expect("blocked"));
 
         // Next day: everything is unblocked.
         let engine = engine_for(st_core::limits::LimitTarget::Category(games));
         enforcer
-            .tick(&mut db, &engine, None, at("2026-08-21T06:00:00Z"), 0, 0)
+            .tick(&mut db, &engine, &[], at("2026-08-21T06:00:00Z"), 0, 0)
             .expect("tick");
-        assert!(!db.is_blocked(SubjectRef::App(app)).expect("cleared"));
+        assert!(!db.is_blocked(ACCT, SubjectRef::App(app)).expect("cleared"));
     }
 
     #[test]
@@ -458,7 +466,7 @@ mod tests {
             at("2026-08-20T12:00:00Z"),
         );
 
-        let blocked = db.blocked_subjects().expect("list");
+        let blocked = db.blocked_subjects(ACCT).expect("list");
         assert_eq!(blocked.len(), 1);
     }
 
@@ -495,14 +503,14 @@ mod tests {
             .tick(
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
-                None,
+                &[],
                 at("2026-08-20T12:05:00Z"),
                 0,
                 0,
             )
             .expect("first tick after restart");
         assert!(
-            db.is_blocked(SubjectRef::App(app)).expect("check"),
+            db.is_blocked(ACCT, SubjectRef::App(app)).expect("check"),
             "restarting the agent must not lift a live block"
         );
     }
@@ -517,6 +525,7 @@ mod tests {
 
         // Hand-set a short block so expiry falls inside one day.
         db.set_block(
+            ACCT,
             SubjectRef::App(app),
             "limit",
             at("2026-08-20T12:00:00Z"),
@@ -529,13 +538,13 @@ mod tests {
             .tick(
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
-                None,
+                &[],
                 at("2026-08-20T12:02:00Z"),
                 0,
                 0,
             )
             .expect("tick");
-        assert!(!db.is_blocked(SubjectRef::App(app)).expect("lifted"));
+        assert!(!db.is_blocked(ACCT, SubjectRef::App(app)).expect("lifted"));
     }
 
     /// Rows written before blocks carried expiries (or with a corrupt stamp)
@@ -546,6 +555,7 @@ mod tests {
         let games = db.category_id("games").expect("games");
         let app = seed_app(&mut db, "C:\\games\\steam\\steam.exe", "games");
         db.set_block(
+            ACCT,
             SubjectRef::App(app),
             "limit",
             at("2026-08-19T09:00:00Z"),
@@ -558,13 +568,13 @@ mod tests {
             .tick(
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
-                None,
+                &[],
                 at("2026-08-20T12:00:00Z"),
                 0,
                 0,
             )
             .expect("tick");
-        assert!(!db.is_blocked(SubjectRef::App(app)).expect("lifted"));
+        assert!(!db.is_blocked(ACCT, SubjectRef::App(app)).expect("lifted"));
     }
 
     /// The persisted expiry must be the end of the local day, computed with
@@ -585,13 +595,13 @@ mod tests {
             .tick(
                 &mut db,
                 &engine_for(st_core::limits::LimitTarget::Category(games)),
-                Some(&steam_key()),
+                &[(ACCT, steam_key())],
                 at("2026-08-20T23:30:00Z"),
                 tz,
                 0,
             )
             .expect("tick");
-        assert!(db.is_blocked(SubjectRef::App(app)).expect("blocked"));
+        assert!(db.is_blocked(ACCT, SubjectRef::App(app)).expect("blocked"));
 
         let end = DayKey(20260821).end_utc(tz, 0).expect("boundary");
         assert_eq!(end, at("2026-08-21T22:00:00Z"));
@@ -609,6 +619,74 @@ mod tests {
                 .expect("rfc3339")
                 .with_timezone(&Utc)),
             Some(end)
+        );
+    }
+
+    /// Limits apply per account: a watched account's own usage blocks it,
+    /// and an account nobody watches is never blocked.
+    #[test]
+    fn each_account_is_judged_on_its_own_usage_and_unwatched_ones_never_block() {
+        let mut db = Db::open_in_memory().expect("db");
+        let sam = db
+            .ensure_account("S-1-5-21-1", "Sam", at("2026-08-20T09:00:00Z"))
+            .expect("sam");
+        let alex = db
+            .ensure_account("S-1-5-21-2", "Alex", at("2026-08-20T09:00:00Z"))
+            .expect("alex");
+        let kim = db
+            .ensure_account("S-1-5-21-3", "Kim", at("2026-08-20T09:00:00Z"))
+            .expect("kim");
+        assert_eq!(sam, ACCT, "the fixtures record usage for the first account");
+        db.set_account_supervised(kim, false).expect("unwatch kim");
+        let games = db.category_id("games").expect("games");
+        let app = seed_app(&mut db, "C:\\games\\steam\\steam.exe", "games");
+        snapshot_usage(&mut db, app, 60 * 60);
+        db.record_interval(&st_core::model::UsageInterval {
+            subject: SubjectRef::App(app),
+            account: kim,
+            start: chrono::Utc::now(),
+            end: chrono::Utc::now() + chrono::Duration::seconds(3600),
+            day_key: DayKey(20260820),
+        })
+        .expect("kim's usage");
+        // A block left over from before Kim stopped being watched.
+        db.set_block(
+            kim,
+            SubjectRef::App(app),
+            "limit",
+            at("2026-08-20T11:00:00Z"),
+            None,
+        )
+        .expect("stale block");
+
+        let mut enforcer = Enforcer::new();
+        enforcer
+            .tick(
+                &mut db,
+                // 30 minutes: Sam's hour uses it up, Alex's nothing does not.
+                &LimitEngine::with_default_warnings(vec![Limit::new(
+                    1,
+                    st_core::limits::LimitTarget::Category(games),
+                    30,
+                )]),
+                &[(sam, steam_key()), (alex, steam_key()), (kim, steam_key())],
+                at("2026-08-20T12:00:00Z"),
+                0,
+                0,
+            )
+            .expect("tick");
+
+        assert!(
+            db.is_blocked(sam, SubjectRef::App(app)).expect("sam"),
+            "used it up"
+        );
+        assert!(
+            !db.is_blocked(alex, SubjectRef::App(app)).expect("alex"),
+            "no usage of their own"
+        );
+        assert!(
+            !db.is_blocked(kim, SubjectRef::App(app)).expect("kim"),
+            "not watched"
         );
     }
 }

@@ -15,6 +15,7 @@ Every request on the local named pipe (`\\.\pipe\screentime`) and the Tauri comm
 
 - **Authorization**: The pipe ACL admits every authenticated local user, so it proves nothing about *who* is asking. Every request passes the agent's central gate (`crates/agent/src/ipc_server/auth.rs`) before dispatch. Requests that loosen enforcement need the PIN once one is configured (see the **PIN** column below). The UI first sends such requests without a PIN and opens its PIN prompt only when the agent answers `bad_pin`, so the agent alone decides what counts as loosening.
 - **Peer identity**: per connection, the agent resolves the client's executable (`GetNamedPipeClientProcessId` → image path → `st_win32::peer_is_trusted`). `ReportUsage` and `RegisterDiscoveredApps` are refused (`bad_request`) from any program other than `screentime-session.exe` in the agent's own install. An uninspectable peer is allowed, so a lookup failure can never silently stop tracking. The overlay bridge pipe applies the same check in both directions. Both paths are expanded to their long form first (`st_win32::long_path`), because the service is registered under its 8.3 short path (`C:\PROGRA~1\Tether\bin`) while the helper runs from `C:\Program Files\Tether\bin`.
+- **Peer account**: the agent also reads the Windows account of every connection from the peer's process token (`st_win32::account::process_user`: SID and display name) and records it (`accounts` table, docs/adr/0005-per-account-usage.md). Usage, blocks, extra time and block-screen answers belong to that account. `ReportUsage` from a peer whose account cannot be read is refused (`bad_request`).
 - **Brute-force throttle**: After 5 consecutive wrong PINs or recovery codes, each further failure locks credential checks for 30 s, doubling to a 15 min ceiling (`st_core::pin::PinThrottle`). An empty PIN means "not supplied" and never counts. Rejected credentials are written to `audit_log` as `credential_rejected`.
 
 ---
@@ -26,11 +27,12 @@ Every request on the local named pipe (`\\.\pipe\screentime`) and the Tauri comm
 | Request Variant | Parameters | Response Variant | Description |
 | :--- | :--- | :--- | :--- |
 | `Ping` | None | `Pong` | Liveness probe. |
-| `Status` | None | `Status(StatusDto)` | Agent version, backends, tracking availability, PIN configuration, strict mode, `profile` (`self`/`guardian`; `#[serde(default)]`, so an older agent reads as `self`). |
-| `DaySummary` | `day: DayKey` | `DaySummary(DaySummaryDto)` | Per-app and per-category usage rollups and chronological intervals for one day. |
-| `WeeklySummary`| `end_day: DayKey` | `WeeklySummary(WeeklySummaryDto)` | 7-day usage array ending at `end_day`, plus previous week's total seconds. |
+| `Status` | None | `Status(StatusDto)` | Agent version, backends, tracking availability, PIN configuration, strict mode, `profile` (`self`/`guardian`; `#[serde(default)]`, so an older agent reads as `self`), and `account` (the caller's `AccountDto`, `None` when it could not be read). |
+| `DaySummary` | `day: DayKey`, `account_id?: i64`, `pin?: String` | `DaySummary(DaySummaryDto)` | Per-app and per-category usage rollups and chronological intervals for one day of one account (the caller's unless `account_id` names another; another account's needs the PIN). |
+| `WeeklySummary`| `end_day: DayKey`, `account_id?`, `pin?` | `WeeklySummary(WeeklySummaryDto)` | 7-day usage array ending at `end_day`, plus previous week's total seconds, for one account (same rule as `DaySummary`). |
+| `ListAccounts` | None | `Accounts(AccountsDto { accounts: [AccountDto { id, name, supervised, is_caller, last_seen_utc }] })` | Every Windows account Tether has met, by name. Free. |
 | `Catalog` | None | `Catalog(CatalogDto)` | Full list of apps, categories, current limits, and pending cooldown limits. |
-| `BlockedApps` | None | `BlockedApps(BlockedAppsDto)` | List of currently blocked applications, polled by session helper for overlay trigger. |
+| `BlockedApps` | None | `BlockedApps(BlockedAppsDto)` | The caller's account's currently blocked applications, polled by the session helper for the block screen. |
 
 ### Mutations & Controls
 
@@ -39,7 +41,8 @@ Every request on the local named pipe (`\\.\pipe\screentime`) and the Tauri comm
 | `SetLimit` | `target: LimitTargetDto`, `default_minutes: u32`, `weekday_minutes: [Option<u32>; 7]`, `enabled: bool`, `pin: String` | `Accepted { effective_utc, hud }` | Tightening applies immediately. Loosening queues into `pending_limits` (+24h). |
 | `DeleteLimit` | `target: LimitTargetDto`, `pin: String` | `Accepted { effective_utc, hud }` | Deleting is instant by owner decision. |
 | `CancelPendingLimit` | `target: LimitTargetDto`, `pin: String` | `Accepted { effective_utc, hud }` | Aborts a queued loosening change before it becomes active. |
-| `GrantOverride` | `target: LimitTargetDto`, `seconds: i64`, `pin: String` | `Accepted { effective_utc, hud }` | Grants +15m override. Rejected outright in strict mode or with invalid PIN. |
+| `GrantOverride` | `target: LimitTargetDto`, `seconds: i64`, `pin: String`, `account_id?: i64` | `Accepted { effective_utc, hud }` | Grants +15m override to an account (the caller's by default). Rejected outright in strict mode or with invalid PIN. |
+| `SetAccountSupervised` | `account_id: i64`, `supervised: bool`, `pin?: String` | `Accepted` | Watch an account (free) or stop watching it (PIN). Stopping lifts the account's blocks at once. Audited as `account_supervision`. |
 | `Categorize` | `app_id: i64`, `primary: Option<i64>`, `tags: Vec<i64>`, `pin?: String` | `Accepted { effective_utc, hud }` | Reclassifies app. Primary drives reporting; tags affect limit matching. **PIN always** (moving an app to an unlimited category is a bypass). |
 | `CloseApps` | `app_id: i64`, `pin: String` | `Accepted { ... }` | User-initiated app termination from the block overlay. **No PIN when the app is currently blocked** (quitting only tightens); closing any other app needs the PIN. |
 | `SetSetting` | `key: String`, `value: String`, `pin?: String` | `Accepted { ... }` | Only keys in `st_core::settings::SettingKey` are accepted (unknown keys, including `pin_hash`, are `bad_request`); values are range-checked and stored in canonical form, then applied to the live policy. **PIN when loosening**: `strict_mode`/`family_dns` → `false`, lowering `limit_cooldown_hours`, any change to `day_start_minutes`, `idle_threshold_secs` or `profile`. HUD, volume, hotkey and `capture_window_titles` never need it. Ranges: cooldown 0–168 h, day start 0–1439 min, idle 5–3600 s, volume 0–100, hotkey ≤ 32 chars, `profile` ∈ {`self`, `guardian`} (default `self`; who Tether is for, chosen in setup — it changes copy and whether the PIN step can be skipped, not enforcement). |
@@ -80,10 +83,10 @@ Every request on the local named pipe (`\\.\pipe\screentime`) and the Tauri comm
 
 | Request | Arguments | Response | Notes |
 |---|---|---|---|
-| `RecordBlockReason` | `app_id: i64`, `reason: "finish" \| "bored" \| "habit"` | `Accepted { ... }` | The block screen's "What were you about to do?". No PIN (never changes enforcement). Accepted only while the app is blocked (`not_found` otherwise); unknown reasons are `bad_request`. Filed under the agent's own current day; one answer per app per day, a second answer replaces the first (table `block_reasons`, migration 0005). |
-| `BlockReasons` | `from_day: DayKey`, `to_day: DayKey` | `BlockReasons(BlockReasonsDto { counts: [{ reason, count }] })` | Most common first; range 1-366 days, oldest first, else `bad_request`. Used by Activity's "When time ran out". |
+| `RecordBlockReason` | `app_id: i64`, `reason: "finish" \| "bored" \| "habit"` | `Accepted { ... }` | The block screen's "What were you about to do?". No PIN (never changes enforcement). Accepted only while the app is blocked (`not_found` otherwise); unknown reasons are `bad_request`. Filed under the agent's own current day; one answer per app per day and account, a second answer replaces the first (table `block_reasons`, migrations 0005 and 0006). |
+| `BlockReasons` | `from_day: DayKey`, `to_day: DayKey`, `account_id?`, `pin?` | `BlockReasons(BlockReasonsDto { counts: [{ reason, count }] })` | Most common first, for one account (same rule as `DaySummary`); range 1-366 days, oldest first, else `bad_request`. Used by Activity's "When time ran out". |
 
-Tauri commands: `record_block_reason(app_id, reason)` and `block_reasons(from_day, to_day)`.
+Tauri commands: `record_block_reason(app_id, reason)` and `block_reasons(from_day, to_day, account_id?, pin?)`. Accounts: `list_accounts()`, `set_account_supervised(account_id, supervised, pin?)`; `get_day_summary` and `get_weekly_summary` take `account_id?` and `pin?`, `grant_override` takes `account_id?`.
 
 ## 3. Error Codes (`ErrorCode`)
 

@@ -1,13 +1,21 @@
 //! Read-only queries: status, day/week summaries, catalog, blocked apps.
+//! Usage and blocks are per account (docs/adr/0005-per-account-usage.md).
 
 use super::*;
 
-pub(super) fn status_response(ctx: &Ctx) -> Response {
-    let (pin_configured, family_dns_enabled) = {
+pub(super) fn status_response(ctx: &Ctx, caller: Caller) -> Response {
+    let (pin_configured, family_dns_enabled, account) = {
         let db = lock_db(&ctx.db);
         let pin = db.pin_hash().ok().flatten().is_some();
         let family_dns = db.setting("family_dns_enabled").ok().flatten().as_deref() == Some("true");
-        (pin, family_dns)
+        let account = caller.account.and_then(|id| {
+            db.list_accounts()
+                .ok()?
+                .into_iter()
+                .find(|a| a.id == id)
+                .map(|row| account_dto(row, Some(id)))
+        });
+        (pin, family_dns, account)
     };
     // Truthful tracking: reports arriving recently mean the session helper is
     // alive; otherwise only the legacy self-sampling fallback counts.
@@ -37,12 +45,13 @@ pub(super) fn status_response(ctx: &Ctx) -> Response {
         wildcard_domains: false,
         family_dns_enabled,
         profile: policy.profile.clone(),
+        account,
     })
 }
 
-pub(super) fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
+pub(super) fn day_summary(ctx: &Ctx, account: AccountId, day: DayKey) -> Response {
     let db = lock_db(&ctx.db);
-    let summary = match db.day_summary(day) {
+    let summary = match db.day_summary(account, day) {
         Ok(summary) => summary,
         Err(e) => {
             return error_internal(format!("dashboard query failed: {e}"));
@@ -51,7 +60,7 @@ pub(super) fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
 
     // Which apps are currently blocked, for honest blocked flags.
     let blocked_apps: std::collections::HashSet<i64> = db
-        .blocked_subjects()
+        .blocked_subjects(account)
         .ok()
         .into_iter()
         .flatten()
@@ -62,7 +71,7 @@ pub(super) fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
         .collect();
 
     let now = ctx.clock.now_utc();
-    let snapshot = db.day_snapshot(summary.day).ok();
+    let snapshot = db.day_snapshot(account, summary.day).ok();
 
     // The row's budget, defined so that `limit_seconds - seconds` is exactly
     // the time left on that limit today: the weekday-resolved allowance minus
@@ -132,9 +141,9 @@ pub(super) fn day_summary(ctx: &Ctx, day: DayKey) -> Response {
 /// Seven-day trend plus the previous week's total. The storage layer already
 /// guarantees the shape the wire promises (seven zero-filled days, oldest
 /// first), so this handler is pure mapping.
-pub(super) fn weekly_summary(ctx: &Ctx, end_day: DayKey) -> Response {
+pub(super) fn weekly_summary(ctx: &Ctx, account: AccountId, end_day: DayKey) -> Response {
     let db = lock_db(&ctx.db);
-    let summary = match db.weekly_summary(end_day) {
+    let summary = match db.weekly_summary(account, end_day) {
         Ok(summary) => summary,
         Err(e) => return error_internal(format!("weekly summary query failed: {e}")),
     };
@@ -152,7 +161,7 @@ pub(super) fn weekly_summary(ctx: &Ctx, end_day: DayKey) -> Response {
     })
 }
 
-pub(super) fn catalog(ctx: &Ctx) -> Response {
+pub(super) fn catalog(ctx: &Ctx, account: AccountId) -> Response {
     let db = lock_db(&ctx.db);
     let now = ctx.clock.now_utc();
     let day = DayKey::from_utc(
@@ -160,7 +169,7 @@ pub(super) fn catalog(ctx: &Ctx) -> Response {
         ctx.clock.local_offset_seconds(),
         read_recover(&ctx.policy, "policy").day_start_minutes,
     );
-    let snapshot = db.day_snapshot(day).ok();
+    let snapshot = db.day_snapshot(account, day).ok();
     let (apps, categories, limits, pending_limits) = match (
         db.list_apps(),
         db.list_categories(),
@@ -215,9 +224,9 @@ pub(super) fn catalog(ctx: &Ctx) -> Response {
 
 /// Currently-blocked apps, for the overlay owner. Joins `block_state` with the
 /// app rows to hand back a label and key the session helper can match.
-pub(super) fn blocked_apps(ctx: &Ctx) -> Response {
+pub(super) fn blocked_apps(ctx: &Ctx, account: AccountId) -> Response {
     let db = lock_db(&ctx.db);
-    let blocked = match db.blocked_subjects() {
+    let blocked = match db.blocked_subjects(account) {
         Ok(b) => b,
         Err(e) => return error_internal(format!("list blocks: {e}")),
     };

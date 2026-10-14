@@ -118,6 +118,7 @@ pub(super) fn cancel_pending_limit(ctx: &Ctx, target: LimitTargetDto) -> Respons
 
 pub(super) fn grant_override(
     ctx: &Ctx,
+    account: AccountId,
     target: LimitTargetDto,
     seconds: i64,
     now: DateTime<Utc>,
@@ -136,7 +137,7 @@ pub(super) fn grant_override(
         ctx.clock.local_offset_seconds(),
         read_recover(&ctx.policy, "policy").day_start_minutes,
     );
-    match db.grant_override(&target, day, seconds, now, Some("user override")) {
+    match db.grant_override(account, &target, day, seconds, now, Some("user override")) {
         Ok(()) => accepted(now),
         Err(e) => error_internal(format!("grant override: {e}")),
     }

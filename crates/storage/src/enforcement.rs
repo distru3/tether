@@ -10,14 +10,25 @@ use chrono::{DateTime, Utc};
 use rusqlite::params;
 use st_core::daykey::DayKey;
 use st_core::limits::LimitTarget;
-use st_core::model::SubjectRef;
+use st_core::model::{AccountId, SubjectRef};
 
 use super::{subject_from_row, subject_to_row, target_to_row, Db, Result};
 
+/// One stored block, for the enforcer's sweeps across every account.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BlockRow {
+    pub account: AccountId,
+    pub subject: SubjectRef,
+    pub reason: String,
+    /// RFC 3339; `None` or unparsable means "lift it" to the enforcer.
+    pub expires_utc: Option<String>,
+}
+
 impl Db {
-    /// Record a PIN-approved extension, additive for the given day.
+    /// Record a PIN-approved extension, additive for the given account and day.
     pub fn grant_override(
         &self,
+        account: AccountId,
         target: &LimitTarget,
         day: DayKey,
         seconds: i64,
@@ -28,9 +39,10 @@ impl Db {
         // We write expires_utc = now + seconds.
         let expires_utc = now + chrono::Duration::seconds(seconds);
         self.conn.execute(
-            "INSERT INTO overrides (target_type, target_id, day_key, granted_secs, granted_utc, reason, expires_utc)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+            "INSERT INTO overrides (account_id, target_type, target_id, day_key, granted_secs, granted_utc, reason, expires_utc)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
             params![
+                account.0,
                 target_type,
                 target_id,
                 day.0,
@@ -43,10 +55,12 @@ impl Db {
         self.audit(now, "override_granted", reason)
     }
 
-    /// Block a subject until `expires_utc` (typically the day boundary). Replaces
-    /// any existing block so a re-block updates the deadline.
+    /// Block a subject for one account until `expires_utc` (typically the day
+    /// boundary). Replaces any existing block so a re-block updates the
+    /// deadline.
     pub fn set_block(
         &self,
+        account: AccountId,
         subject: SubjectRef,
         reason: &str,
         now: DateTime<Utc>,
@@ -54,13 +68,14 @@ impl Db {
     ) -> Result<()> {
         let (subject_type, subject_id) = subject_to_row(subject);
         self.conn.execute(
-            "INSERT INTO block_state (subject_type, subject_id, reason, blocked_since_utc, expires_utc)
-             VALUES (?1, ?2, ?3, ?4, ?5)
-             ON CONFLICT(subject_type, subject_id) DO UPDATE SET
+            "INSERT INTO block_state (account_id, subject_type, subject_id, reason, blocked_since_utc, expires_utc)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(account_id, subject_type, subject_id) DO UPDATE SET
                  reason            = excluded.reason,
                  blocked_since_utc = excluded.blocked_since_utc,
                  expires_utc       = excluded.expires_utc",
             params![
+                account.0,
                 subject_type,
                 subject_id,
                 reason,
@@ -71,36 +86,57 @@ impl Db {
         Ok(())
     }
 
-    pub fn clear_block(&self, subject: SubjectRef) -> Result<()> {
+    pub fn clear_block(&self, account: AccountId, subject: SubjectRef) -> Result<()> {
         let (subject_type, subject_id) = subject_to_row(subject);
         self.conn.execute(
-            "DELETE FROM block_state WHERE subject_type = ?1 AND subject_id = ?2",
-            params![subject_type, subject_id],
+            "DELETE FROM block_state WHERE account_id = ?1 AND subject_type = ?2 AND subject_id = ?3",
+            params![account.0, subject_type, subject_id],
         )?;
         Ok(())
     }
 
-    /// Which apps are currently blocked, for the dashboard's blocked flag and
-    /// for lifting blocks at the day rollover.
+    /// Lift every block an account has (it stopped being watched).
+    pub fn clear_account_blocks(&self, account: AccountId) -> Result<()> {
+        self.conn.execute(
+            "DELETE FROM block_state WHERE account_id = ?1",
+            params![account.0],
+        )?;
+        Ok(())
+    }
+
+    /// Which subjects are blocked for one account, for the dashboard's blocked
+    /// flag and the session helper's block screen.
+    pub fn blocked_subjects(&self, account: AccountId) -> Result<Vec<(SubjectRef, String)>> {
+        Ok(self
+            .all_blocks()?
+            .into_iter()
+            .filter(|b| b.account == account)
+            .map(|b| (b.subject, b.reason))
+            .collect())
+    }
+
+    /// Every block of every account.
     ///
     /// A row whose `subject_type` no code in this workspace writes cannot be
     /// interpreted; it is skipped with a warning instead of failing the whole
     /// listing (which would strand every other block).
-    pub fn blocked_subjects(&self) -> Result<Vec<(SubjectRef, String)>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT subject_type, subject_id, reason FROM block_state")?;
+    pub fn all_blocks(&self) -> Result<Vec<BlockRow>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT account_id, subject_type, subject_id, reason, expires_utc FROM block_state",
+        )?;
         let rows = stmt.query_map([], |row| {
             Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, i64>(1)?,
-                row.get::<_, String>(2)?,
+                row.get::<_, i64>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, i64>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, Option<String>>(4)?,
             ))
         })?;
 
         let mut out = Vec::new();
         for row in rows {
-            let (kind, id, reason) = row?;
+            let (account, kind, id, reason, expires_utc) = row?;
             let Some(subject) = subject_from_row(&kind, id) else {
                 tracing::warn!(
                     subject_type = %kind,
@@ -108,17 +144,22 @@ impl Db {
                 );
                 continue;
             };
-            out.push((subject, reason));
+            out.push(BlockRow {
+                account: AccountId(account),
+                subject,
+                reason,
+                expires_utc,
+            });
         }
         Ok(out)
     }
 
-    /// Whether an app is currently blocked.
-    pub fn is_blocked(&self, subject: SubjectRef) -> Result<bool> {
+    /// Whether an app is currently blocked for an account.
+    pub fn is_blocked(&self, account: AccountId, subject: SubjectRef) -> Result<bool> {
         let (subject_type, subject_id) = subject_to_row(subject);
         let n: i64 = self.conn.query_row(
-            "SELECT COUNT(*) FROM block_state WHERE subject_type = ?1 AND subject_id = ?2",
-            params![subject_type, subject_id],
+            "SELECT COUNT(*) FROM block_state WHERE account_id = ?1 AND subject_type = ?2 AND subject_id = ?3",
+            params![account.0, subject_type, subject_id],
             |row| row.get(0),
         )?;
         Ok(n > 0)
@@ -131,7 +172,7 @@ mod tests {
     use st_core::model::SubjectRef;
 
     use super::*;
-    use crate::testutil::now;
+    use crate::testutil::{now, ACCT};
 
     #[test]
     fn block_state_set_clear_and_list_round_trip() {
@@ -140,18 +181,18 @@ mod tests {
         let subject = SubjectRef::App(app);
         let expires = now() + chrono::Duration::hours(4);
 
-        assert!(!db.is_blocked(subject).expect("not blocked"));
-        db.set_block(subject, "limit", now(), Some(expires))
+        assert!(!db.is_blocked(ACCT, subject).expect("not blocked"));
+        db.set_block(ACCT, subject, "limit", now(), Some(expires))
             .expect("set");
-        assert!(db.is_blocked(subject).expect("blocked"));
+        assert!(db.is_blocked(ACCT, subject).expect("blocked"));
 
-        let blocked = db.blocked_subjects().expect("list");
+        let blocked = db.blocked_subjects(ACCT).expect("list");
         assert_eq!(blocked.len(), 1);
         assert_eq!(blocked[0].0, subject);
         assert_eq!(blocked[0].1, "limit");
 
-        db.clear_block(subject).expect("clear");
-        assert!(!db.is_blocked(subject).expect("cleared"));
+        db.clear_block(ACCT, subject).expect("clear");
+        assert!(!db.is_blocked(ACCT, subject).expect("cleared"));
     }
 
     #[test]
@@ -161,9 +202,9 @@ mod tests {
         let target = LimitTarget::Category(social);
         let day = DayKey(20260820);
 
-        db.grant_override(&target, day, 15 * 60, now(), Some("test"))
+        db.grant_override(ACCT, &target, day, 15 * 60, now(), Some("test"))
             .expect("grant");
-        let snap = db.day_snapshot(day).expect("snapshot");
+        let snap = db.day_snapshot(ACCT, day).expect("snapshot");
         let expires = snap
             .active_timer_expires_utc(&target)
             .expect("timer expires");
@@ -180,33 +221,35 @@ mod tests {
             .execute_batch(
                 "DROP TABLE block_state;
                  CREATE TABLE block_state (
+                   account_id        INTEGER NOT NULL DEFAULT 0,
                    subject_type      TEXT NOT NULL,
                    subject_id        INTEGER NOT NULL,
                    reason            TEXT NOT NULL,
                    blocked_since_utc TEXT NOT NULL,
                    expires_utc       TEXT,
-                   PRIMARY KEY (subject_type, subject_id)
+                   PRIMARY KEY (account_id, subject_type, subject_id)
                  ) WITHOUT ROWID;",
             )
             .expect("recreate without CHECK");
 
         let good = SubjectRef::App(7);
-        db.set_block(good, "limit", now(), None).expect("good row");
+        db.set_block(ACCT, good, "limit", now(), None)
+            .expect("good row");
         db.conn()
             .execute(
                 "INSERT INTO block_state
-                     (subject_type, subject_id, reason, blocked_since_utc, expires_utc)
-                 VALUES ('device', 3, 'why', '2026-08-20T00:00:00Z', NULL)",
+                     (account_id, subject_type, subject_id, reason, blocked_since_utc, expires_utc)
+                 VALUES (1, 'device', 3, 'why', '2026-08-20T00:00:00Z', NULL)",
                 [],
             )
             .expect("row no writer could have produced");
 
-        let blocked = db.blocked_subjects().expect("skips, does not fail");
+        let blocked = db.blocked_subjects(ACCT).expect("skips, does not fail");
         assert_eq!(blocked.len(), 1, "only the interpretable row survives");
         assert_eq!(blocked[0].0, good);
         assert_eq!(blocked[0].1, "limit");
 
         // is_blocked is unaffected by the unknown row.
-        assert!(db.is_blocked(good).expect("good still blocked"));
+        assert!(db.is_blocked(ACCT, good).expect("good still blocked"));
     }
 }

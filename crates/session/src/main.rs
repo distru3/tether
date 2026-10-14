@@ -848,6 +848,7 @@ fn extend_app(app_id: i64, pin: &str) -> bool {
         target: st_ipc::LimitTargetDto::App { id: app_id },
         seconds: 15 * 60,
         pin: pin.to_string(),
+        account_id: None,
     }) {
         Ok(Response::Accepted { .. }) => true,
         Ok(Response::Error {

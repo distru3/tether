@@ -466,7 +466,7 @@ mod tests {
     use st_core::model::AppKey;
 
     use super::*;
-    use crate::testutil::{interval, now};
+    use crate::testutil::{interval, now, ACCT};
 
     #[test]
     fn limits_round_trip_including_weekday_overrides() {
@@ -568,7 +568,7 @@ mod tests {
             .expect("limit");
 
         let engine = LimitEngine::with_default_warnings(db.load_limits().expect("limits"));
-        let snap = db.day_snapshot(day).expect("snapshot");
+        let snap = db.day_snapshot(ACCT, day).expect("snapshot");
         let weekday = day.weekday_index().expect("weekday");
 
         assert!(engine

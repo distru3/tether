@@ -112,9 +112,15 @@ fn get_status() -> CmdResult<st_ipc::StatusDto> {
 
 /// Dashboard payload for one local day, fetched from the agent.
 #[tauri::command]
-fn get_day_summary(day: i32) -> CmdResult<st_ipc::DaySummaryDto> {
+fn get_day_summary(
+    day: i32,
+    account_id: Option<i64>,
+    pin: Option<String>,
+) -> CmdResult<st_ipc::DaySummaryDto> {
     match ipc_client::request(st_ipc::Request::DaySummary {
         day: st_core::daykey::DayKey(day),
+        account_id,
+        pin,
     }) {
         Ok(Response::DaySummary(dto)) => Ok(dto),
         Ok(Response::Error { code, message }) => Err(error_from(code, message)),
@@ -126,9 +132,15 @@ fn get_day_summary(day: i32) -> CmdResult<st_ipc::DaySummaryDto> {
 /// Weekly dashboard payload: the 7 local days ending at `endDay` (inclusive)
 /// plus the previous week's total, fetched from the agent.
 #[tauri::command]
-fn get_weekly_summary(end_day: i32) -> CmdResult<st_ipc::WeeklySummaryDto> {
+fn get_weekly_summary(
+    end_day: i32,
+    account_id: Option<i64>,
+    pin: Option<String>,
+) -> CmdResult<st_ipc::WeeklySummaryDto> {
     match ipc_client::request(st_ipc::Request::WeeklySummary {
         end_day: st_core::daykey::DayKey(end_day),
+        account_id,
+        pin,
     }) {
         Ok(Response::WeeklySummary(dto)) => Ok(dto),
         Ok(Response::Error { code, message }) => Err(error_from(code, message)),
@@ -268,11 +280,17 @@ fn delete_limit(target: st_ipc::LimitTargetDto, pin: String) -> CmdResult<String
 }
 
 #[tauri::command]
-fn grant_override(target: st_ipc::LimitTargetDto, seconds: i64, pin: String) -> CmdResult<()> {
+fn grant_override(
+    target: st_ipc::LimitTargetDto,
+    seconds: i64,
+    pin: String,
+    account_id: Option<i64>,
+) -> CmdResult<()> {
     match ipc_client::request(st_ipc::Request::GrantOverride {
         target,
         seconds,
         pin,
+        account_id,
     }) {
         Ok(Response::Accepted { .. }) => Ok(()),
         Ok(Response::Error { code, message }) => Err(error_from(code, message)),
@@ -372,11 +390,44 @@ fn record_block_reason(app_id: i64, reason: String) -> CmdResult<()> {
 }
 
 /// Counts of block-screen reasons between two day keys (inclusive).
+/// Every Windows account Tether has met (docs/adr/0005-per-account-usage.md).
 #[tauri::command]
-fn block_reasons(from_day: i32, to_day: i32) -> CmdResult<st_ipc::BlockReasonsDto> {
+fn list_accounts() -> CmdResult<st_ipc::AccountsDto> {
+    match ipc_client::request(st_ipc::Request::ListAccounts) {
+        Ok(Response::Accounts(dto)) => Ok(dto),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
+/// Watch an account or stop watching it; stopping needs the PIN.
+#[tauri::command]
+fn set_account_supervised(account_id: i64, supervised: bool, pin: Option<String>) -> CmdResult<()> {
+    match ipc_client::request(st_ipc::Request::SetAccountSupervised {
+        account_id,
+        supervised,
+        pin,
+    }) {
+        Ok(Response::Accepted { .. }) => Ok(()),
+        Ok(Response::Error { code, message }) => Err(error_from(code, message)),
+        Ok(_) => Err(CommandError::unexpected()),
+        Err(e) => Err(CommandError::unreachable(e)),
+    }
+}
+
+#[tauri::command]
+fn block_reasons(
+    from_day: i32,
+    to_day: i32,
+    account_id: Option<i64>,
+    pin: Option<String>,
+) -> CmdResult<st_ipc::BlockReasonsDto> {
     let request = st_ipc::Request::BlockReasons {
         from_day: st_core::daykey::DayKey(from_day),
         to_day: st_core::daykey::DayKey(to_day),
+        account_id,
+        pin,
     };
     match ipc_client::request(request) {
         Ok(Response::BlockReasons(dto)) => Ok(dto),
@@ -571,6 +622,8 @@ pub fn run() {
         }))
         .invoke_handler(tauri::generate_handler![
             get_status,
+            list_accounts,
+            set_account_supervised,
             get_day_summary,
             get_weekly_summary,
             get_catalog,

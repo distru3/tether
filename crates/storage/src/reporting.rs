@@ -19,6 +19,7 @@ use rusqlite::params;
 use st_core::category::CategoryKind;
 use st_core::daykey::DayKey;
 use st_core::limits::{LimitTarget, UsageSnapshot};
+use st_core::model::AccountId;
 
 use super::{row_to_target, Db, Result, StorageError};
 use crate::taxonomy::kind_to_str;
@@ -93,15 +94,15 @@ impl UsageSnapshot for DaySnapshot {
 
 impl Db {
     /// Everything the limits engine needs for one day, in three queries.
-    pub fn day_snapshot(&self, day: DayKey) -> Result<DaySnapshot> {
+    pub fn day_snapshot(&self, account: AccountId, day: DayKey) -> Result<DaySnapshot> {
         let mut used: HashMap<LimitTarget, i64> = HashMap::new();
 
         // Per app.
         let mut stmt = self.conn.prepare(
             "SELECT subject_id, seconds FROM usage_daily
-             WHERE day_key = ?1 AND subject_type = 'app'",
+             WHERE account_id = ?2 AND day_key = ?1 AND subject_type = 'app'",
         )?;
-        for row in stmt.query_map(params![day.0], |r| {
+        for row in stmt.query_map(params![day.0, account.0], |r| {
             Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
         })? {
             let (app_id, secs) = row?;
@@ -114,10 +115,10 @@ impl Db {
             "SELECT ac.category_id, COALESCE(SUM(ud.seconds), 0)
              FROM usage_daily ud
              JOIN app_categories ac ON ac.app_id = ud.subject_id
-             WHERE ud.subject_type = 'app' AND ud.day_key = ?1
+             WHERE ud.subject_type = 'app' AND ud.day_key = ?1 AND ud.account_id = ?2
              GROUP BY ac.category_id",
         )?;
-        for row in stmt.query_map(params![day.0], |r| {
+        for row in stmt.query_map(params![day.0, account.0], |r| {
             Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
         })? {
             let (category_id, secs) = row?;
@@ -134,8 +135,9 @@ impl Db {
              JOIN categories c ON c.id = a.primary_category_id
              WHERE ud.subject_type = 'app'
                AND ud.day_key = ?1
-               AND c.kind != ?2",
-            params![day.0, kind_to_str(CategoryKind::NeverBlock)],
+               AND c.kind != ?2
+               AND ud.account_id = ?3",
+            params![day.0, kind_to_str(CategoryKind::NeverBlock), account.0],
             |row| row.get(0),
         )?;
         used.insert(LimitTarget::Total, total);
@@ -144,10 +146,10 @@ impl Db {
         let mut timer_expires_utc: HashMap<LimitTarget, DateTime<Utc>> = HashMap::new();
         let mut stmt = self.conn.prepare(
             "SELECT target_type, target_id, MAX(expires_utc)
-             FROM overrides WHERE day_key = ?1
+             FROM overrides WHERE day_key = ?1 AND account_id = ?2
              GROUP BY target_type, target_id",
         )?;
-        for row in stmt.query_map(params![day.0], |r| {
+        for row in stmt.query_map(params![day.0, account.0], |r| {
             Ok((
                 r.get::<_, String>(0)?,
                 r.get::<_, Option<i64>>(1)?,
@@ -174,13 +176,13 @@ impl Db {
     /// Dashboard rows for one day: per-app and per-primary-category usage,
     /// already sorted descending. Tags are excluded from the category rows so
     /// they sum to `total_seconds` and the chart cannot exceed 100%.
-    pub fn day_summary(&self, day: DayKey) -> Result<DaySummary> {
+    pub fn day_summary(&self, account: AccountId, day: DayKey) -> Result<DaySummary> {
         let total_seconds: i64 = self.conn.query_row(
             "SELECT COALESCE(SUM(ud.seconds), 0)
              FROM usage_daily ud
              JOIN apps a ON a.id = ud.subject_id
-             WHERE ud.subject_type = 'app' AND ud.day_key = ?1",
-            params![day.0],
+             WHERE ud.subject_type = 'app' AND ud.day_key = ?1 AND ud.account_id = ?2",
+            params![day.0, account.0],
             |row| row.get(0),
         )?;
 
@@ -189,11 +191,11 @@ impl Db {
              FROM usage_daily ud
              JOIN apps a ON a.id = ud.subject_id
              JOIN categories c ON c.id = a.primary_category_id
-             WHERE ud.subject_type = 'app' AND ud.day_key = ?1
+             WHERE ud.subject_type = 'app' AND ud.day_key = ?1 AND ud.account_id = ?2
              ORDER BY ud.seconds DESC, a.display_name",
         )?;
         let apps = stmt
-            .query_map(params![day.0], |row| {
+            .query_map(params![day.0, account.0], |row| {
                 Ok(UsageRow {
                     id: row.get(0)?,
                     label: row.get(1)?,
@@ -210,12 +212,12 @@ impl Db {
              FROM usage_daily ud
              JOIN apps a ON a.id = ud.subject_id
              JOIN categories c ON c.id = a.primary_category_id
-             WHERE ud.subject_type = 'app' AND ud.day_key = ?1
+             WHERE ud.subject_type = 'app' AND ud.day_key = ?1 AND ud.account_id = ?2
              GROUP BY c.id, c.name, c.color
              ORDER BY SUM(ud.seconds) DESC, c.name",
         )?;
         let categories = stmt
-            .query_map(params![day.0], |row| {
+            .query_map(params![day.0, account.0], |row| {
                 Ok(CategoryRow {
                     id: row.get(0)?,
                     name: row.get(1)?,
@@ -228,11 +230,11 @@ impl Db {
         let mut stmt = self.conn.prepare(
             "SELECT start_utc, duration_secs, subject_id
              FROM usage_intervals
-             WHERE subject_type = 'app' AND day_key = ?1
+             WHERE subject_type = 'app' AND day_key = ?1 AND account_id = ?2
              ORDER BY start_utc",
         )?;
         let intervals = stmt
-            .query_map(params![day.0], |row| {
+            .query_map(params![day.0, account.0], |row| {
                 Ok(IntervalRow {
                     start_utc: row.get(0)?,
                     duration_seconds: row.get(1)?,
@@ -258,7 +260,7 @@ impl Db {
     /// every month boundary. All chrono math is checked: a wire-supplied
     /// `DayKey` near the edges of the representable calendar must degrade
     /// to [`StorageError::InvalidDay`], never panic an agent worker.
-    pub fn weekly_summary(&self, end_day: DayKey) -> Result<WeeklySummary> {
+    pub fn weekly_summary(&self, account: AccountId, end_day: DayKey) -> Result<WeeklySummary> {
         let invalid = || StorageError::InvalidDay(end_day.0);
         let end_date = end_day.to_date().ok_or_else(invalid)?;
         let start_date = end_date
@@ -280,12 +282,13 @@ impl Db {
         let mut present: HashMap<DayKey, i64> = HashMap::new();
         let mut stmt = self.conn.prepare(
             "SELECT day_key, COALESCE(SUM(seconds), 0) FROM usage_daily
-             WHERE subject_type = 'app' AND day_key BETWEEN ?1 AND ?2
+             WHERE subject_type = 'app' AND day_key BETWEEN ?1 AND ?2 AND account_id = ?3
              GROUP BY day_key",
         )?;
-        for row in stmt.query_map(params![DayKey::from_date(start_date).0, end_day.0], |r| {
-            Ok((DayKey(r.get::<_, i32>(0)?), r.get::<_, i64>(1)?))
-        })? {
+        for row in stmt.query_map(
+            params![DayKey::from_date(start_date).0, end_day.0, account.0],
+            |r| Ok((DayKey(r.get::<_, i32>(0)?), r.get::<_, i64>(1)?)),
+        )? {
             let (day, secs) = row?;
             present.insert(day, secs);
         }
@@ -305,8 +308,8 @@ impl Db {
 
         let previous_week_total: i64 = self.conn.query_row(
             "SELECT COALESCE(SUM(seconds), 0) FROM usage_daily
-             WHERE subject_type = 'app' AND day_key BETWEEN ?1 AND ?2",
-            params![prev_start_day.0, prev_end_day.0],
+             WHERE subject_type = 'app' AND day_key BETWEEN ?1 AND ?2 AND account_id = ?3",
+            params![prev_start_day.0, prev_end_day.0, account.0],
             |row| row.get(0),
         )?;
 
@@ -323,7 +326,7 @@ mod tests {
     use st_core::model::AppKey;
 
     use super::*;
-    use crate::testutil::{interval, now};
+    use crate::testutil::{interval, now, ACCT};
 
     #[test]
     fn day_summary_sums_apps_and_primary_categories_only() {
@@ -359,7 +362,7 @@ mod tests {
         db.record_interval(&interval(tiktok, 600, day)).expect("i1");
         db.record_interval(&interval(games, 1200, day)).expect("i2");
 
-        let summary = db.day_summary(day).expect("summary");
+        let summary = db.day_summary(ACCT, day).expect("summary");
         assert_eq!(summary.total_seconds, 1800);
         assert_eq!(summary.apps.len(), 2);
         assert_eq!(summary.apps[0].label, "Steam", "sorted by seconds desc");
@@ -375,7 +378,7 @@ mod tests {
     #[test]
     fn day_summary_with_no_usage_is_empty_not_error() {
         let db = Db::open_in_memory().expect("open");
-        let summary = db.day_summary(DayKey(20260820)).expect("summary");
+        let summary = db.day_summary(ACCT, DayKey(20260820)).expect("summary");
         assert_eq!(summary.total_seconds, 0);
         assert!(summary.apps.is_empty());
         assert!(summary.categories.is_empty());
@@ -411,7 +414,7 @@ mod tests {
         db.record_interval(&interval(app, 1500, DayKey(20260903)))
             .expect("end day");
 
-        let summary = db.weekly_summary(DayKey(20260903)).expect("summary");
+        let summary = db.weekly_summary(ACCT, DayKey(20260903)).expect("summary");
 
         assert_eq!(summary.days.len(), 7, "always exactly seven days");
         let totals: Vec<(DayKey, i64)> = summary
@@ -438,7 +441,7 @@ mod tests {
     #[test]
     fn weekly_summary_with_no_usage_zero_fills_every_day() {
         let db = Db::open_in_memory().expect("open");
-        let summary = db.weekly_summary(DayKey(20260820)).expect("summary");
+        let summary = db.weekly_summary(ACCT, DayKey(20260820)).expect("summary");
         assert_eq!(summary.days.len(), 7);
         assert!(
             summary.days.iter().all(|d| d.total_seconds == 0),
@@ -461,7 +464,7 @@ mod tests {
         let db = Db::open_in_memory().expect("open");
         // February 30th is not a day; the range cannot be computed honestly.
         assert!(matches!(
-            db.weekly_summary(DayKey(20260230)),
+            db.weekly_summary(ACCT, DayKey(20260230)),
             Err(StorageError::InvalidDay(20260230))
         ));
     }
